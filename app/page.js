@@ -304,67 +304,99 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, currentMemo
 
 function TempPhDB({ tempLogs, setTempLogs }) {
   const items = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
+  const [searchTerm, setSearchTerm] = useState("");
+  const [expandedProduct, setExpandedProduct] = useState(null);
 
-  // 데이터 그룹화 로직 (제품명 기준)
   const groupedLogs = useMemo(() => {
     const groups = {};
-    tempLogs.forEach(log => {
-      if (!groups[log.productName]) {
-        groups[log.productName] = [];
-      }
+    const filtered = tempLogs.filter(log => 
+      log.productName.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    
+    filtered.forEach(log => {
+      if (!groups[log.productName]) groups[log.productName] = [];
       groups[log.productName].push(log);
     });
-    // 그룹 내에서 최신순 정렬
+
     Object.keys(groups).forEach(name => {
       groups[name].sort((a, b) => b.id - a.id);
     });
     return groups;
-  }, [tempLogs]);
+  }, [tempLogs, searchTerm]);
 
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
-      <div className="border-b-2 border-black pb-4 mb-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-8 gap-4">
         <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter uppercase">History</h1>
+        <div className="w-full md:w-64">
+          <input 
+            type="text" 
+            placeholder="제품명 검색..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-white border border-gray-200 rounded-full px-4 py-2 text-sm outline-none shadow-inner"
+          />
+        </div>
       </div>
       
-      <div className="space-y-12">
+      <div className="space-y-4">
         {Object.entries(groupedLogs).length > 0 ? (
-          Object.entries(groupedLogs).map(([productName, logs]) => (
-            <div key={productName} className="space-y-4">
-              {/* 제품명 헤더 스타일 유지 */}
-              <h2 className="text-2xl font-black italic border-l-4 border-black pl-4 uppercase tracking-tighter">
-                {productName}
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {logs.map(log => (
-                  <div key={log.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative group">
-                    <div className="mb-4">
-                      <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-black text-gray-400 uppercase">{log.type}</span>
-                        <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 transition-colors">✕</button>
-                      </div>
-                      <div className="font-bold text-sm italic mt-1">
-                        {log.displayTime?.split(',')[0] || log.timestamp}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      {items.map(item => log.data[item] && (log.data[item].t || log.data[item].p) ? (
-                        <div key={item} className="flex justify-between text-xs border-b border-gray-50 pb-1">
-                          <span className="font-bold text-gray-400">{item}</span>
-                          <span className="font-mono text-black">
-                            {log.data[item].t && `${log.data[item].t}${item !== "날짜" ? "°C" : ""}`} {log.data[item].p && `/ ${log.data[item].p}pH`}
-                          </span>
-                        </div>
-                      ) : null)}
-                    </div>
-                    {log.memo && <div className="mt-4 pt-3 border-t border-dashed text-[11px] italic text-gray-500 whitespace-pre-wrap">{log.memo}</div>}
+          Object.entries(groupedLogs).map(([productName, logs]) => {
+            const isExpanded = expandedProduct === productName;
+            const latestLog = logs[0];
+
+            return (
+              <div key={productName} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm transition-all">
+                {/* 제품 헤더 - 클릭 시 토글 */}
+                <div 
+                  onClick={() => setExpandedProduct(isExpanded ? null : productName)}
+                  className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors"
+                >
+                  <div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product</div>
+                    <div className="text-xl font-black italic tracking-tighter uppercase">{productName}</div>
                   </div>
-                ))}
+                  <div className="text-right">
+                    <div className="text-[10px] font-black text-gray-400 uppercase">Recent Log</div>
+                    <div className="text-xs font-bold italic">{latestLog.timestamp}</div>
+                    <div className="text-[10px] text-gray-300 mt-1">{isExpanded ? "Click to Close ▲" : "Click to View All ▼"}</div>
+                  </div>
+                </div>
+
+                {/* 상세 기록 리스트 (아코디언) */}
+                {isExpanded && (
+                  <div className="p-5 pt-0 border-t border-gray-50 bg-[#fcfcfb]">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
+                      {logs.map(log => (
+                        <div key={log.id} className="bg-white p-5 rounded-xl border border-gray-100 relative shadow-sm">
+                          <div className="mb-4 flex justify-between items-start">
+                            <div>
+                                <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
+                                <div className="font-bold text-xs italic mt-1">{log.displayTime?.split(',')[0] || log.timestamp}</div>
+                            </div>
+                            <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 transition-colors text-xs">✕</button>
+                          </div>
+                          <div className="space-y-1">
+                            {items.map(item => log.data[item] && (log.data[item].t || log.data[item].p) ? (
+                              <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
+                                <span className="font-bold text-gray-400">{item}</span>
+                                <span className="font-mono text-black">
+                                  {log.data[item].t && `${log.data[item].t}${item !== "날짜" ? "°" : ""}`} {log.data[item].p && `/ ${log.data[item].p}p`}
+                                </span>
+                              </div>
+                            ) : null)}
+                          </div>
+                          {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] italic text-gray-500 whitespace-pre-wrap leading-relaxed">{log.memo}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))
+            );
+          })
         ) : (
-          <div className="py-20 text-center text-gray-400 italic">저장된 히스토리가 없습니다.</div>
+          <div className="py-20 text-center text-gray-400 italic">검색 결과가 없거나 저장된 히스토리가 없습니다.</div>
         )}
       </div>
     </main>
