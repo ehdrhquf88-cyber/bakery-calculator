@@ -287,7 +287,6 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, currentMemo
                 <span>{latestLog.timestamp}</span>
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                {/* 9개 제한을 없애고 모든 데이터 출력 */}
                 {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p) ? (
                   <div key={item} className="flex justify-between border-b border-gray-50/50">
                     <span className="text-gray-400 font-bold">{item}</span>
@@ -305,38 +304,68 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, currentMemo
 
 function TempPhDB({ tempLogs, setTempLogs }) {
   const items = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
-  const sortedLogs = [...tempLogs].sort((a, b) => b.id - a.id);
+
+  // 데이터 그룹화 로직 (제품명 기준)
+  const groupedLogs = useMemo(() => {
+    const groups = {};
+    tempLogs.forEach(log => {
+      if (!groups[log.productName]) {
+        groups[log.productName] = [];
+      }
+      groups[log.productName].push(log);
+    });
+    // 그룹 내에서 최신순 정렬
+    Object.keys(groups).forEach(name => {
+      groups[name].sort((a, b) => b.id - a.id);
+    });
+    return groups;
+  }, [tempLogs]);
 
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="border-b-2 border-black pb-4 mb-8">
         <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter uppercase">History</h1>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sortedLogs.map(log => (
-          <div key={log.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative group">
-            <div className="mb-4">
-              <div className="flex justify-between items-start">
-                <h3 className="font-black italic text-xl tracking-tighter truncate pr-6">{log.productName}</h3>
-                <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 absolute top-5 right-5">✕</button>
-              </div>
-              <div className="flex justify-between text-[10px] font-bold text-gray-400 mt-1 uppercase">
-                <span>{log.type}</span><span>{log.displayTime?.split(',')[0] || log.timestamp}</span>
+      
+      <div className="space-y-12">
+        {Object.entries(groupedLogs).length > 0 ? (
+          Object.entries(groupedLogs).map(([productName, logs]) => (
+            <div key={productName} className="space-y-4">
+              {/* 제품명 헤더 스타일 유지 */}
+              <h2 className="text-2xl font-black italic border-l-4 border-black pl-4 uppercase tracking-tighter">
+                {productName}
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {logs.map(log => (
+                  <div key={log.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative group">
+                    <div className="mb-4">
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] font-black text-gray-400 uppercase">{log.type}</span>
+                        <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 transition-colors">✕</button>
+                      </div>
+                      <div className="font-bold text-sm italic mt-1">
+                        {log.displayTime?.split(',')[0] || log.timestamp}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {items.map(item => log.data[item] && (log.data[item].t || log.data[item].p) ? (
+                        <div key={item} className="flex justify-between text-xs border-b border-gray-50 pb-1">
+                          <span className="font-bold text-gray-400">{item}</span>
+                          <span className="font-mono text-black">
+                            {log.data[item].t && `${log.data[item].t}${item !== "날짜" ? "°C" : ""}`} {log.data[item].p && `/ ${log.data[item].p}pH`}
+                          </span>
+                        </div>
+                      ) : null)}
+                    </div>
+                    {log.memo && <div className="mt-4 pt-3 border-t border-dashed text-[11px] italic text-gray-500 whitespace-pre-wrap">{log.memo}</div>}
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="space-y-1">
-              {items.map(item => log.data[item] && (log.data[item].t || log.data[item].p) ? (
-                <div key={item} className="flex justify-between text-xs border-b border-gray-50 pb-1">
-                  <span className="font-bold text-gray-400">{item}</span>
-                  <span className="font-mono text-black">
-                    {log.data[item].t && `${log.data[item].t}${item !== "날짜" ? "°C" : ""}`} {log.data[item].p && `/ ${log.data[item].p}pH`}
-                  </span>
-                </div>
-              ) : null)}
-            </div>
-            {log.memo && <div className="mt-4 pt-3 border-t border-dashed text-[11px] italic text-gray-500 whitespace-pre-wrap">{log.memo}</div>}
-          </div>
-        ))}
+          ))
+        ) : (
+          <div className="py-20 text-center text-gray-400 italic">저장된 히스토리가 없습니다.</div>
+        )}
       </div>
     </main>
   );
