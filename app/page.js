@@ -226,7 +226,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, currentMemo
       productName: currentProductName,
       type: logType, 
       displayTime: now.toLocaleString(),
-      timestamp: now.toLocaleDateString(), 
+      timestamp: currentEntry["날짜"]?.t || now.toLocaleDateString(), 
       data: currentEntry,
       memo: currentMemo
     };
@@ -257,12 +257,22 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, currentMemo
             <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1">
               <span className="text-[11px] font-bold">{item}</span>
               <div className="grid grid-cols-2 gap-1">
-                <input placeholder="°C" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                  onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value } })} />
-                {item !== "밀" && item !== "날짜" ? (
-                  <input placeholder="pH" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                    onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value } })} />
-                ) : <div />}
+                {item === "날짜" ? (
+                  <input 
+                    type="date" 
+                    className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100 outline-none"
+                    onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value } })} 
+                  />
+                ) : (
+                  <>
+                    <input placeholder="°C" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value } })} />
+                    {item !== "밀" ? (
+                      <input placeholder="pH" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value } })} />
+                    ) : <div />}
+                  </>
+                )}
               </div>
             </div>
           ))}
@@ -277,10 +287,10 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, currentMemo
                 <span>{latestLog.timestamp}</span>
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                {items.slice(1, 9).map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p) ? (
+                {items.slice(0, 9).map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p) ? (
                   <div key={item} className="flex justify-between border-b border-gray-50/50">
                     <span className="text-gray-400 font-bold">{item}</span>
-                    <span className="font-mono">{latestLog.data[item].t}°{latestLog.data[item].p ? `/${latestLog.data[item].p}p` : ""}</span>
+                    <span className="font-mono">{latestLog.data[item].t}{item !== "날짜" ? "°" : ""}{latestLog.data[item].p ? `/${latestLog.data[item].p}p` : ""}</span>
                   </div>
                 ) : null)}
               </div>
@@ -318,7 +328,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                 <div key={item} className="flex justify-between text-xs border-b border-gray-50 pb-1">
                   <span className="font-bold text-gray-400">{item}</span>
                   <span className="font-mono text-black">
-                    {log.data[item].t && `${log.data[item].t}°C`} {log.data[item].p && `/ ${log.data[item].p}pH`}
+                    {log.data[item].t && `${log.data[item].t}${item !== "날짜" ? "°C" : ""}`} {log.data[item].p && `/ ${log.data[item].p}pH`}
                   </span>
                 </div>
               ) : null)}
