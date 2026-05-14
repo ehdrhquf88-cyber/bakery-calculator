@@ -287,10 +287,11 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, currentMemo
                 <span>{latestLog.timestamp}</span>
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                {items.slice(0, 9).map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p) ? (
+                {/* 9개 제한을 없애고 모든 데이터 출력 */}
+                {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p) ? (
                   <div key={item} className="flex justify-between border-b border-gray-50/50">
                     <span className="text-gray-400 font-bold">{item}</span>
-                    <span className="font-mono">{latestLog.data[item].t}{item !== "날짜" ? "°" : ""}{latestLog.data[item].p ? `/${latestLog.data[item].p}p` : ""}</span>
+                    <span className="font-mono">{latestLog.data[item].t}{latestLog.data[item].t && item !== "날짜" ? "°" : ""}{latestLog.data[item].p ? `/${latestLog.data[item].p}p` : ""}</span>
                   </div>
                 ) : null)}
               </div>
