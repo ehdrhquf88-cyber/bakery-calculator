@@ -191,7 +191,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
         </section>
 
         <div className="space-y-6 order-2">
-          {/* 사전반죽 타입이 아닐 때만 노출 */}
           {category !== "사전반죽" && (
             <>
               <SummaryCard title="SUMMARY">
@@ -244,10 +243,8 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
   const [logType, setLogType] = useState("1차 저온");
   const [currentEntry, setCurrentEntry] = useState({});
 
-  // 모드에 따른 항목 정의
   const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
-  
   const items = isPreFermentMode ? pfItems : normalItems;
 
   const latestLog = useMemo(() => {
@@ -299,20 +296,18 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
               <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1">
                 <span className="text-[11px] font-bold uppercase">{item}</span>
                 <div className="grid grid-cols-2 gap-1">
-                  {/* 항목별 동적 입력칸 로직 */}
                   {item === "날짜" ? (
                     <input type="date" className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100 outline-none"
                       onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { t: e.target.value } })} />
                   ) : isPreFermentMode && (item === "사용시점" || item === "정점") ? (
-                    <>
+                    <div className="col-span-2 grid grid-cols-3 gap-1">
                       <input placeholder="pH" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value.replace(',', '.') } })} />
-                      <input placeholder="H:M/V" type="text" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      <input placeholder="Time" type="text" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], h: e.target.value } })} />
+                      <input placeholder="Vol" type="text" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], v: e.target.value } })} />
-                    </>
-                  ) : item === "밀" ? (
-                    <input placeholder="°C" type="text" inputMode="decimal" className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                      onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { t: e.target.value.replace(',', '.') } })} />
+                    </div>
                   ) : isPreFermentMode && item === "결과" ? (
                     <div className="col-span-2 grid grid-cols-3 gap-1">
                       <input placeholder="°C" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
@@ -322,6 +317,9 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                       <input placeholder="Vol" type="text" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], v: e.target.value } })} />
                     </div>
+                  ) : item === "밀" ? (
+                    <input placeholder="°C" type="text" inputMode="decimal" className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { t: e.target.value.replace(',', '.') } })} />
                   ) : (
                     <>
                       <input placeholder="°C" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
@@ -350,13 +348,14 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                   <span>{latestLog.timestamp}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                  {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p || latestLog.data[item].v) ? (
+                  {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p || latestLog.data[item].h || latestLog.data[item].v) ? (
                     <div key={item} className="flex justify-between border-b border-gray-50/50">
                       <span className="text-gray-400 font-bold uppercase">{item}</span>
                       <span className="font-mono">
-                        {latestLog.data[item].t}{latestLog.data[item].t && item !== "날짜" ? "°" : ""}
-                        {latestLog.data[item].p ? ` / ${latestLog.data[item].p}p` : ""}
-                        {latestLog.data[item].v ? ` / ${latestLog.data[item].v}` : ""}
+                        {latestLog.data[item].t && `${latestLog.data[item].t}${item !== "날짜" ? "°" : ""}`}
+                        {latestLog.data[item].p && ` / ${latestLog.data[item].p}p`}
+                        {latestLog.data[item].h && ` / ${latestLog.data[item].h}`}
+                        {latestLog.data[item].v && ` / ${latestLog.data[item].v}`}
                       </span>
                     </div>
                   ) : null)}
@@ -379,16 +378,11 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
   );
 }
 
-// TempPhDB, RecipeDB, RecipeModal, InputField, SummaryCard, SummaryRow 컴포넌트들은 
-// 이전 코드와 동일하게 유지되므로 공간 절약을 위해 생략하거나 그대로 사용하시면 됩니다.
-// (로직 변경이 필요 없는 공통 UI 컴포넌트들입니다.)
-
 function TempPhDB({ tempLogs, setTempLogs }) {
   const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedProduct, setExpandedProduct] = useState(null);
-  const [expandedDate, setExpandedDate] = useState({});
 
   const groupedLogs = useMemo(() => {
     const groups = {};
@@ -432,14 +426,19 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                               <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
                             </div>
                             <div className="space-y-1">
-                              {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].v) ? (
+                              {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].h || log.data[item].v) ? (
                                 <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
                                   <span className="font-bold text-gray-400 uppercase">{item}</span>
-                                  <span className="font-mono text-black">{log.data[item].t}{log.data[item].t && item !== "날짜" ? "°" : ""}{log.data[item].p ? ` / ${log.data[item].p}p` : ""}{log.data[item].v ? ` / ${log.data[item].v}` : ""}</span>
+                                  <span className="font-mono text-black">
+                                    {log.data[item].t}{log.data[item].t && item !== "날짜" ? "°" : ""}
+                                    {log.data[item].p ? ` / ${log.data[item].p}p` : ""}
+                                    {log.data[item].h ? ` / ${log.data[item].h}` : ""}
+                                    {log.data[item].v ? ` / ${log.data[item].v}` : ""}
+                                  </span>
                                 </div>
                               ) : null)}
                             </div>
-                            {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] font-medium text-gray-500">{log.memo}</div>}
+                            {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] font-medium text-gray-500 whitespace-pre-wrap">{log.memo}</div>}
                           </div>
                         );
                       })}
