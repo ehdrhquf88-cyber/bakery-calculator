@@ -43,8 +43,9 @@ export default function Home() {
 }
 
 function NavButton({ active, onClick, children }) {
+  // italic 제거
   return (
-    <button onClick={onClick} className={`text-sm md:text-lg font-black italic tracking-tighter transition-all px-2 ${active ? 'text-black border-b-2 border-black' : 'text-gray-400 hover:text-gray-600'}`}>{children}</button>
+    <button onClick={onClick} className={`text-sm md:text-lg font-black tracking-tighter transition-all px-2 ${active ? 'text-black border-b-2 border-black' : 'text-gray-400 hover:text-gray-600'}`}>{children}</button>
   );
 }
 
@@ -144,8 +145,9 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 md:gap-8">
         <section className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 order-1">
           <div className="border-b-2 border-black pb-3 mb-6">
-            <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter truncate">
-              {currentRecipe ? currentRecipe.productName : "계산기"}
+            {/* italic 제거 */}
+            <h1 className="text-3xl md:text-4xl font-black tracking-tighter truncate uppercase">
+              {currentRecipe ? currentRecipe.productName : "CALCULATOR"}
             </h1>
           </div>
           
@@ -163,16 +165,18 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 {filteredRecipes.map(r => <option key={r.id} value={r.id}>{r.productName}</option>)}
               </select>
             </InputField>
+            {/* input에서 italic 제거 */}
             <InputField label="총 반죽량 (g)">
-              <input type="text" inputMode="decimal" value={totalDough} onChange={(e) => handleTotalDoughChange(e.target.value)} placeholder="0" className="bg-transparent border-b border-black font-bold italic w-full pb-1 outline-none" />
+              <input type="text" inputMode="decimal" value={totalDough} onChange={(e) => handleTotalDoughChange(e.target.value)} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none" />
             </InputField>
             <InputField label="밀가루량 (g)">
-              <input type="text" inputMode="decimal" value={flourWeight} onChange={(e) => handleFlourWeightChange(e.target.value)} placeholder="0" className="bg-transparent border-b border-black font-bold italic w-full pb-1 outline-none" />
+              <input type="text" inputMode="decimal" value={flourWeight} onChange={(e) => handleFlourWeightChange(e.target.value)} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none" />
             </InputField>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full mt-4 italic min-w-[300px]">
+            {/* table에서 italic 제거 */}
+            <table className="w-full mt-4 min-w-[300px]">
               <thead>
                 <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest">
                   <th className="p-2 text-left">재료</th><th className="p-2 text-right w-36">% (수정)</th><th className="p-2 text-right w-24">g</th>
@@ -195,7 +199,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                             inputMode="decimal"
                             value={ing.percent}
                             onChange={(e) => handlePercentChange(ing.name, e.target.value)}
-                            className="w-28 bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pr-4 pb-1 h-auto overflow-visible"
+                            className="w-24 bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pr-1 pb-1 h-auto"
                           />
                           <span className="font-mono text-xs font-bold text-gray-400">%</span>
                         </div>
@@ -205,14 +209,14 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                       </td>
                     </tr>
                   );
-                }) : <tr><td colSpan="3" className="p-12 text-center text-gray-400 text-xs italic">제품을 선택해 주세요.</td></tr>}
+                }) : <tr><td colSpan="3" className="p-12 text-center text-gray-400 text-xs tracking-widest uppercase">Select a recipe</td></tr>}
               </tbody>
             </table>
           </div>
         </section>
 
         <div className="space-y-6 order-2">
-          <SummaryCard title="요약">
+          <SummaryCard title="SUMMARY">
             <SummaryRow label="사전반죽 포함 수율" value={`${totals.finalYield.toFixed(1)}%`} />
             <SummaryRow label="사전반죽 포함 소금" value={`${totals.totalSaltPercent}%`} />
             <SummaryRow label="총 반죽량" value={`${Number(String(totalDough).replace(',', '.')).toLocaleString()}g`} />
@@ -220,11 +224,11 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
           </SummaryCard>
 
           {preFerments.length > 0 && (
-            <SummaryCard title="사전반죽 수율">
+            <SummaryCard title="PRE-FERMENT">
               <div className="space-y-3">
                 {preFerments.map(pf => (
                   <div key={pf.name} className="flex justify-between items-center border-b border-black/5 pb-2">
-                    <span className="text-sm font-bold italic">{pf.name}</span>
+                    <span className="text-sm font-bold">{pf.name}</span>
                     <div className="flex items-center gap-2">
                       <input 
                         type="text" inputMode="decimal"
@@ -284,18 +288,18 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
   };
 
   if (!currentProductName) return (
-    <SummaryCard title="온도 / pH / 메모">
-        <p className="text-center py-4 text-[10px] text-gray-400 italic">제품을 선택하면 활성화됩니다.</p>
+    <SummaryCard title="TEMP / pH / MEMO">
+        <p className="text-center py-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">Select a recipe first</p>
     </SummaryCard>
   );
 
   return (
-    <SummaryCard title="온도 / pH / 메모">
+    <SummaryCard title="TEMP / pH / MEMO">
       <div className="flex justify-between items-center mb-4">
         <select value={logType} onChange={(e) => setLogType(e.target.value)} className="bg-transparent font-black text-[10px] uppercase border-b border-black outline-none">
           <option>1차 저온</option><option>2차 저온</option>
         </select>
-        <button onClick={() => setIsEntryMode(!isEntryMode)} className="text-[10px] font-black underline uppercase">{isEntryMode ? "닫기" : "+ 입력"}</button>
+        <button onClick={() => setIsEntryMode(!isEntryMode)} className="text-[10px] font-black underline uppercase">{isEntryMode ? "Close" : "+ Add"}</button>
       </div>
 
       {isEntryMode ? (
@@ -303,7 +307,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
           <div className="space-y-2">
             {items.map(item => (
               <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1">
-                <span className="text-[11px] font-bold">{item}</span>
+                <span className="text-[11px] font-bold uppercase">{item}</span>
                 <div className="grid grid-cols-2 gap-1">
                   {item === "날짜" ? (
                     <input 
@@ -330,32 +334,32 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
             <textarea 
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
-              className="w-full bg-white/50 border border-black/5 rounded-lg p-3 text-xs italic leading-5 resize-none h-24 outline-none" 
-              placeholder="특이사항 입력..." 
+              className="w-full bg-white/50 border border-black/5 rounded-lg p-3 text-xs leading-5 resize-none h-24 outline-none font-medium" 
+              placeholder="Notes..." 
             />
           </div>
-          <button onClick={handleSave} className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs mt-2 uppercase italic shadow-lg">Save to DB</button>
+          <button onClick={handleSave} className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs mt-2 uppercase shadow-lg">Save to DB</button>
         </div>
       ) : (
         <div className="space-y-4">
           {latestLog ? (
             <>
               <div className="bg-white/50 p-2 rounded-lg border border-white text-[10px]">
-                <div className="flex justify-between mb-1 border-b border-black/5 font-bold italic text-gray-400 uppercase">
-                  <span className="text-black">최근 ({latestLog.type})</span>
+                <div className="flex justify-between mb-1 border-b border-black/5 font-bold text-gray-400 uppercase tracking-tighter">
+                  <span className="text-black">LATEST ({latestLog.type})</span>
                   <span>{latestLog.timestamp}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                   {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p) ? (
                     <div key={item} className="flex justify-between border-b border-gray-50/50">
-                      <span className="text-gray-400 font-bold">{item}</span>
+                      <span className="text-gray-400 font-bold uppercase">{item}</span>
                       <span className="font-mono">{latestLog.data[item].t}{latestLog.data[item].t && item !== "날짜" ? "°" : ""}{latestLog.data[item].p ? `/${latestLog.data[item].p}p` : ""}</span>
                     </div>
                   ) : null)}
                 </div>
               </div>
               {latestLog.memo && (
-                <div className="bg-white/30 p-3 rounded-lg border-l-2 border-black/10 text-[11px] italic text-gray-600 leading-relaxed">
+                <div className="bg-white/30 p-3 rounded-lg border-l-2 border-black/10 text-[11px] font-medium text-gray-600 leading-relaxed">
                   {latestLog.memo}
                 </div>
               )}
@@ -364,20 +368,20 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                    <textarea 
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
-                    className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-16 italic" 
-                    placeholder="새 메모 작성..." 
+                    className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-16 font-medium" 
+                    placeholder="Quick memo..." 
                   />
                 </div>
               )}
             </>
           ) : (
             <>
-              <p className="text-center py-2 text-[10px] text-gray-400 italic border-b border-dashed border-black/10 mb-2">기록 없음</p>
+              <p className="text-center py-2 text-[10px] text-gray-400 font-bold uppercase tracking-widest border-b border-dashed border-black/10 mb-2">No records</p>
               <textarea 
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
-                className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-24 italic" 
-                placeholder="특이사항 입력..." 
+                className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-24 font-medium" 
+                placeholder="Write notes here..." 
               />
             </>
           )}
@@ -418,10 +422,10 @@ function TempPhDB({ tempLogs, setTempLogs }) {
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-8 gap-4">
-        <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter uppercase">History</h1>
+        <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">History</h1>
         <div className="w-full md:w-64">
           <input 
-            type="text" placeholder="제품명 검색..." value={searchTerm}
+            type="text" placeholder="Search product..." value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-white border border-gray-200 rounded-full px-4 py-2 text-sm outline-none shadow-inner"
           />
@@ -443,7 +447,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                 >
                   <div>
                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product</div>
-                    <div className="text-xl font-black italic tracking-tighter uppercase">{productName}</div>
+                    <div className="text-xl font-black tracking-tighter uppercase">{productName}</div>
                   </div>
                   <div className="text-right text-gray-400">
                     <span className="text-[10px] font-black uppercase mr-2">{sortedDates.length} Days</span>
@@ -462,13 +466,13 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                             className="py-4 flex justify-between items-center cursor-pointer group"
                           >
                             <div className="flex items-center gap-3">
-                              <span className={`text-[11px] font-black italic uppercase tracking-tighter ${isDateExpanded ? 'text-black' : 'text-gray-400'}`}>
+                              <span className={`text-[11px] font-black uppercase tracking-tighter ${isDateExpanded ? 'text-black' : 'text-gray-400'}`}>
                                 📅 {date} {sortedDates[0][0] === date && " (LATEST)"}
                               </span>
                               {!isDateExpanded && <span className="text-[9px] text-gray-300 font-bold uppercase tracking-widest">[{logs.length} records]</span>}
                             </div>
-                            <span className="text-[10px] text-gray-300 group-hover:text-black transition-colors">
-                              {isDateExpanded ? "HIDE DETAILS" : "SHOW DETAILS"}
+                            <span className="text-[10px] text-gray-300 group-hover:text-black transition-colors uppercase font-black">
+                              {isDateExpanded ? "Hide" : "Details"}
                             </span>
                           </div>
 
@@ -480,21 +484,21 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                                     <div className="mb-4 flex justify-between items-start">
                                       <div>
                                           <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
-                                          <div className="font-bold text-[10px] italic mt-1 text-gray-400">{log.displayTime?.split(',')[1] || ""}</div>
+                                          <div className="font-bold text-[10px] mt-1 text-gray-400">{log.displayTime?.split(',')[1] || ""}</div>
                                       </div>
                                       <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 transition-colors text-xs">✕</button>
                                     </div>
                                     <div className="space-y-1">
                                       {items.map(item => log.data[item] && (log.data[item].t || log.data[item].p) ? (
                                         <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
-                                          <span className="font-bold text-gray-400">{item}</span>
+                                          <span className="font-bold text-gray-400 uppercase">{item}</span>
                                           <span className="font-mono text-black">
                                             {log.data[item].t && `${log.data[item].t}${item !== "날짜" ? "°" : ""}`} {log.data[item].p && `/ ${log.data[item].p}p`}
                                           </span>
                                         </div>
                                       ) : null)}
                                     </div>
-                                    {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] italic text-gray-500 whitespace-pre-wrap leading-relaxed">{log.memo}</div>}
+                                    {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] font-medium text-gray-500 whitespace-pre-wrap leading-relaxed">{log.memo}</div>}
                                   </div>
                                 ))}
                               </div>
@@ -509,7 +513,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
             );
           })
         ) : (
-          <div className="py-20 text-center text-gray-400 italic uppercase text-xs tracking-widest">No history found</div>
+          <div className="py-20 text-center text-gray-400 font-bold uppercase text-xs tracking-widest">No history found</div>
         )}
       </div>
     </main>
@@ -536,21 +540,21 @@ function RecipeDB({ recipes, setRecipes }) {
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-6 gap-4">
-        <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter uppercase">Recipe DB</h1>
+        <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">Recipe DB</h1>
         <div className="flex gap-2 w-full md:w-auto">
-          <input type="text" placeholder="검색..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-1 md:w-48 bg-white border border-gray-200 rounded-full px-4 py-2 text-sm outline-none shadow-inner" />
-          <button onClick={handleAdd} className="bg-black text-white px-6 py-2 rounded-full font-bold text-sm">+ 추가</button>
+          <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-1 md:w-48 bg-white border border-gray-200 rounded-full px-4 py-2 text-sm outline-none shadow-inner" />
+          <button onClick={handleAdd} className="bg-black text-white px-6 py-2 rounded-full font-bold text-sm uppercase tracking-tighter">+ Add</button>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-3">
         {displayedRecipes.map(recipe => (
           <div key={recipe.id} onClick={() => handleEdit(recipe)} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all cursor-pointer hover:border-black group relative">
             <div>
-              <div className="text-[10px] font-black text-gray-400 uppercase">{recipe.category}</div>
-              <div className="text-xl font-black italic tracking-tighter">{recipe.productName}</div>
+              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{recipe.category}</div>
+              <div className="text-xl font-black tracking-tighter uppercase">{recipe.productName}</div>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-gray-300 text-sm">Edit 〉</span>
+              <span className="text-gray-300 text-sm font-black tracking-tighter uppercase">Edit 〉</span>
               <button onClick={(e) => handleDelete(e, recipe.id)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
                 ✕
               </button>
@@ -584,7 +588,7 @@ function RecipeModal({ initialData, onSave, onClose }) {
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
       <div className="bg-[#f7f6f3] w-full max-w-4xl rounded-[2rem] p-6 md:p-12 shadow-2xl max-h-[90vh] overflow-y-auto relative">
         <button onClick={onClose} className="absolute top-6 right-6 text-xl">✕</button>
-        <h2 className="text-2xl md:text-3xl font-black italic tracking-tighter mb-8 uppercase">Recipe Editor</h2>
+        <h2 className="text-2xl md:text-3xl font-black tracking-tighter mb-8 uppercase">Recipe Editor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <InputField label="분류">
             <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold">
@@ -601,17 +605,17 @@ function RecipeModal({ initialData, onSave, onClose }) {
           {ingredients.map((ing, i) => (
             <div key={i} className="grid grid-cols-2 md:grid-cols-[120px_1fr_80px_100px_40px] gap-2 md:gap-4 items-center bg-white p-3 md:p-4 rounded-xl shadow-sm">
               <select value={ing.type} onChange={e => updateIng(i, "type", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold"><option>밀</option><option>수분</option><option>사전반죽</option><option>소금</option><option>기타</option></select>
-              <input value={ing.name} onChange={e => updateIng(i, "name", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs" placeholder="재료명" />
-              <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right" placeholder="%" type="text" inputMode="decimal" />
-              <input value={ing.cost} onChange={e => updateIng(i, "cost", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right" placeholder="단가" type="text" inputMode="decimal" />
+              <input value={ing.name} onChange={e => updateIng(i, "name", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold" placeholder="Ingredient Name" />
+              <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="%" type="text" inputMode="decimal" />
+              <input value={ing.cost} onChange={e => updateIng(i, "cost", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="Cost" type="text" inputMode="decimal" />
               <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))} className="text-red-300 font-bold">✕</button>
             </div>
           ))}
-          <button onClick={() => setIngredients([...ingredients, { type: "밀", name: "", percent: "", cost: "" }])} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 font-black">+ 재료 추가</button>
+          <button onClick={() => setIngredients([...ingredients, { type: "밀", name: "", percent: "", cost: "" }])} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 font-black uppercase tracking-widest">+ Add Ingredient</button>
         </div>
         <div className="mt-10 flex gap-3">
-          <button onClick={onClose} className="flex-1 bg-white border border-gray-200 py-4 rounded-xl font-bold">닫기</button>
-          <button onClick={() => onSave({ category, productName, ingredients })} className="flex-1 bg-black text-white py-4 rounded-xl font-bold">저장</button>
+          <button onClick={onClose} className="flex-1 bg-white border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-tighter">Close</button>
+          <button onClick={() => onSave({ category, productName, ingredients })} className="flex-1 bg-black text-white py-4 rounded-xl font-bold uppercase tracking-tighter">Save Recipe</button>
         </div>
       </div>
     </div>
@@ -630,7 +634,7 @@ function InputField({ label, children }) {
 function SummaryCard({ title, children }) {
   return (
     <div className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50">
-      <h2 className="text-xl md:text-2xl font-black italic tracking-tighter border-b-2 border-black pb-2 mb-4 uppercase">{title}</h2>
+      <h2 className="text-xl md:text-2xl font-black tracking-tighter border-b-2 border-black pb-2 mb-4 uppercase">{title}</h2>
       {children}
     </div>
   );
@@ -639,7 +643,8 @@ function SummaryCard({ title, children }) {
 function SummaryRow({ label, value }) {
   return (
     <div className="flex justify-between border-b border-dashed pb-2 text-xs md:text-sm mb-2">
-      <span className="text-gray-600">{label}</span><span className="font-mono font-bold">{value}</span>
+      <span className="text-gray-600 font-bold uppercase text-[10px] tracking-tight">{label}</span>
+      <span className="font-mono font-bold">{value}</span>
     </div>
   );
 }
