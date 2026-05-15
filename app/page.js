@@ -68,7 +68,6 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
     let totalFlourPct = 0; let totalWaterPct = 0; let totalSaltPct = 0; let rawTotalPercent = 0;
 
     currentRecipe.ingredients.forEach(ing => {
-      // 쉼표 변환 적용
       const pct = parseFloat(String(ing.percent).replace(',', '.')) || 0;
       rawTotalPercent += pct;
       if (ing.type === "밀") totalFlourPct += pct;
@@ -199,26 +198,16 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
             tempLogs={tempLogs} 
             setTempLogs={setTempLogs} 
             currentProductName={currentRecipe?.productName} 
-            currentMemo={memo}
+            memo={memo}
             setMemo={setMemo}
           />
-
-          <SummaryCard title="메모">
-            <textarea 
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              className="w-full bg-transparent border-none outline-none text-sm md:text-xs leading-6 resize-none h-32 md:h-24 italic" 
-              placeholder="특이사항 입력..." 
-            />
-            <div className="border-b border-dashed border-black/20" />
-          </SummaryCard>
         </div>
       </div>
     </main>
   );
 }
 
-function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, currentMemo, setMemo }) {
+function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMemo }) {
   const [isEntryMode, setIsEntryMode] = useState(false);
   const [logType, setLogType] = useState("1차 저온");
   const [currentEntry, setCurrentEntry] = useState({});
@@ -238,22 +227,23 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, currentMemo
       displayTime: now.toLocaleString(),
       timestamp: currentEntry["날짜"]?.t || now.toLocaleDateString(), 
       data: currentEntry,
-      memo: currentMemo
+      memo: memo // 메모를 로그 데이터에 포함
     };
     setTempLogs([newLog, ...tempLogs]);
     setIsEntryMode(false);
     setCurrentEntry({});
+    setMemo(""); // 저장 후 메모 비우기
     alert("데이터베이스에 저장되었습니다.");
   };
 
   if (!currentProductName) return (
-    <SummaryCard title="온도 / pH">
+    <SummaryCard title="온도 / pH / 메모">
         <p className="text-center py-4 text-[10px] text-gray-400 italic">제품을 선택하면 활성화됩니다.</p>
     </SummaryCard>
   );
 
   return (
-    <SummaryCard title="온도 / pH">
+    <SummaryCard title="온도 / pH / 메모">
       <div className="flex justify-between items-center mb-4">
         <select value={logType} onChange={(e) => setLogType(e.target.value)} className="bg-transparent font-black text-[10px] uppercase border-b border-black outline-none">
           <option>1차 저온</option><option>2차 저온</option>
@@ -262,50 +252,91 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, currentMemo
       </div>
 
       {isEntryMode ? (
-        <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
-          {items.map(item => (
-            <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1">
-              <span className="text-[11px] font-bold">{item}</span>
-              <div className="grid grid-cols-2 gap-1">
-                {item === "날짜" ? (
-                  <input 
-                    type="date" 
-                    className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100 outline-none"
-                    onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value } })} 
-                  />
-                ) : (
-                  <>
-                    <input placeholder="°C" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                      onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value.replace(',', '.') } })} />
-                    {item !== "밀" ? (
-                      <input placeholder="pH" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value.replace(',', '.') } })} />
-                    ) : <div />}
-                  </>
-                )}
+        <div className="space-y-4 max-h-[450px] overflow-y-auto pr-1">
+          <div className="space-y-2">
+            {items.map(item => (
+              <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1">
+                <span className="text-[11px] font-bold">{item}</span>
+                <div className="grid grid-cols-2 gap-1">
+                  {item === "날짜" ? (
+                    <input 
+                      type="date" 
+                      className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100 outline-none"
+                      onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value } })} 
+                    />
+                  ) : (
+                    <>
+                      <input placeholder="°C" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value.replace(',', '.') } })} />
+                      {item !== "밀" ? (
+                        <input placeholder="pH" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                          onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value.replace(',', '.') } })} />
+                      ) : <div />}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-          <button onClick={handleSave} className="w-full bg-black text-white py-2 rounded-xl font-bold text-xs mt-2 uppercase italic">Save to DB</button>
+            ))}
+          </div>
+
+          <div className="pt-2">
+            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block tracking-widest">Memo</label>
+            <textarea 
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              className="w-full bg-white/50 border border-black/5 rounded-lg p-3 text-xs italic leading-5 resize-none h-24 outline-none" 
+              placeholder="특이사항 입력..." 
+            />
+          </div>
+
+          <button onClick={handleSave} className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs mt-2 uppercase italic shadow-lg">Save to DB</button>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-4">
           {latestLog ? (
-            <div className="bg-white/50 p-2 rounded-lg border border-white text-[10px]">
-              <div className="flex justify-between mb-1 border-b border-black/5 font-bold italic text-gray-400 uppercase">
-                <span className="text-black">최근 ({latestLog.type})</span>
-                <span>{latestLog.timestamp}</span>
+            <>
+              <div className="bg-white/50 p-2 rounded-lg border border-white text-[10px]">
+                <div className="flex justify-between mb-1 border-b border-black/5 font-bold italic text-gray-400 uppercase">
+                  <span className="text-black">최근 ({latestLog.type})</span>
+                  <span>{latestLog.timestamp}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                  {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p) ? (
+                    <div key={item} className="flex justify-between border-b border-gray-50/50">
+                      <span className="text-gray-400 font-bold">{item}</span>
+                      <span className="font-mono">{latestLog.data[item].t}{latestLog.data[item].t && item !== "날짜" ? "°" : ""}{latestLog.data[item].p ? `/${latestLog.data[item].p}p` : ""}</span>
+                    </div>
+                  ) : null)}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p) ? (
-                  <div key={item} className="flex justify-between border-b border-gray-50/50">
-                    <span className="text-gray-400 font-bold">{item}</span>
-                    <span className="font-mono">{latestLog.data[item].t}{latestLog.data[item].t && item !== "날짜" ? "°" : ""}{latestLog.data[item].p ? `/${latestLog.data[item].p}p` : ""}</span>
-                  </div>
-                ) : null)}
-              </div>
-            </div>
-          ) : <p className="text-center py-2 text-[10px] text-gray-400 italic">기록 없음</p>}
+              {latestLog.memo && (
+                <div className="bg-white/30 p-3 rounded-lg border-l-2 border-black/10 text-[11px] italic text-gray-600 leading-relaxed">
+                  {latestLog.memo}
+                </div>
+              )}
+              {/* 입력 모드가 아닐 때도 메모 수정이 필요할 경우를 위한 텍스트 영역 */}
+              {!isEntryMode && (
+                <div className="pt-2 border-t border-dashed border-black/10">
+                   <textarea 
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-16 italic" 
+                    placeholder="새 메모 작성 (Save 시 로그와 함께 저장됨)..." 
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="text-center py-2 text-[10px] text-gray-400 italic border-b border-dashed border-black/10 mb-2">기록 없음</p>
+              <textarea 
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-24 italic" 
+                placeholder="특이사항 입력..." 
+              />
+            </>
+          )}
         </div>
       )}
     </SummaryCard>
@@ -469,7 +500,6 @@ function RecipeModal({ initialData, onSave, onClose }) {
 
   const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => {
     if (idx === i) {
-      // 퍼센트나 단가 입력 시 쉼표 변환
       const newVal = (f === "percent" || f === "cost") ? v.replace(',', '.') : v;
       return { ...ing, [f]: newVal };
     }
