@@ -65,30 +65,47 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
 
   const totals = useMemo(() => {
     if (!currentRecipe) return { totalPercent: 0, totalSaltPercent: 0, finalYield: 0, totalCost: 0 };
-    let totalFlourPct = 0; let totalWaterPct = 0; let totalSaltPct = 0; let rawTotalPercent = 0;
+    let totalFlourPct = 0; 
+    let totalWaterPct = 0; 
+    let totalSaltPct = 0; 
+    let rawTotalPercent = 0;
 
     currentRecipe.ingredients.forEach(ing => {
       const pct = parseFloat(String(ing.percent).replace(',', '.')) || 0;
       rawTotalPercent += pct;
-      if (ing.type === "밀") totalFlourPct += pct;
-      else if (ing.type === "수분") totalWaterPct += pct;
-      else if (ing.type === "소금") totalSaltPct += pct;
-      else if (ing.type === "사전반죽") {
+      
+      if (ing.type === "밀") {
+        totalFlourPct += pct;
+      } else if (ing.type === "수분") {
+        totalWaterPct += pct;
+      } else if (ing.type === "소금") {
+        totalSaltPct += pct;
+      } else if (ing.type === "사전반죽") {
         const yieldInput = parseFloat(String(pfYields[ing.name] || "100").replace(',', '.')) || 100;
-        const pfFlour = pct / (1 + yieldInput / 100);
-        const pfWater = pfFlour * (yieldInput / 100);
-        totalFlourPct += pfFlour; totalWaterPct += pfWater;
+        // 사전반죽 내의 밀가루 비율 계산 (예: 수율 100%면 밀가루는 전체의 1/2)
+        const pfFlourPart = pct / (1 + yieldInput / 100);
+        const pfWaterPart = pfFlourPart * (yieldInput / 100);
+        totalFlourPct += pfFlourPart; 
+        totalWaterPct += pfWaterPart;
       }
     });
 
+    // 실제 총 밀가루 대비 총 소금 비율 계산
+    const realSaltPercent = totalFlourPct > 0 ? (totalSaltPct / totalFlourPct) * 100 : 0;
     const finalYield = totalFlourPct > 0 ? (totalWaterPct / totalFlourPct) * 100 : 0;
+    
     const cost = currentRecipe.ingredients.reduce((sum, ing) => {
         const pctVal = parseFloat(String(ing.percent).replace(',', '.')) || 0;
         const weight = flourWeight ? (parseFloat(String(flourWeight).replace(',', '.')) * (pctVal / 100)) : 0;
         return sum + (weight * (parseFloat(String(ing.cost).replace(',', '.')) || 0));
     }, 0);
 
-    return { totalPercent: rawTotalPercent, totalSaltPercent: totalSaltPct, finalYield, totalCost: cost };
+    return { 
+      totalPercent: rawTotalPercent, 
+      totalSaltPercent: realSaltPercent.toFixed(2), // 수정된 부분
+      finalYield, 
+      totalCost: cost 
+    };
   }, [currentRecipe, pfYields, flourWeight]);
 
   const handleTotalDoughChange = (v) => { 
@@ -346,7 +363,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
   const items = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedProduct, setExpandedProduct] = useState(null);
-  const [expandedDate, setExpandedDate] = useState({}); // 제품별로 선택된 날짜 관리
+  const [expandedDate, setExpandedDate] = useState({});
 
   const groupedLogs = useMemo(() => {
     const groups = {};
@@ -410,10 +427,8 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                   <div className="px-5 pb-5 bg-[#fcfcfb]">
                     {sortedDates.map(([date, logs]) => {
                       const isDateExpanded = activeDate === date;
-                      
                       return (
                         <div key={date} className="border-t border-gray-100 last:border-b-0">
-                          {/* 날짜 선택 헤더 */}
                           <div 
                             onClick={() => toggleDate(productName, date)}
                             className="py-4 flex justify-between items-center cursor-pointer group"
@@ -429,7 +444,6 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                             </span>
                           </div>
 
-                          {/* 선택된 날짜만 상세 내용 표시 */}
                           {isDateExpanded && (
                             <div className="pb-6 animate-in fade-in slide-in-from-top-1 duration-200">
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
