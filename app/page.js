@@ -34,7 +34,7 @@ export default function Home() {
       </nav>
 
       <div className="py-4 md:py-8">
-        {view === "calc" && <RecipeCalculator recipes={recipes} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
+        {view === "calc" && <RecipeCalculator recipes={recipes} setRecipes={setRecipes} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
         {view === "db" && <RecipeDB recipes={recipes} setRecipes={setRecipes} />}
         {view === "temp_db" && <TempPhDB tempLogs={tempLogs} setTempLogs={setTempLogs} />}
       </div>
@@ -48,7 +48,7 @@ function NavButton({ active, onClick, children }) {
   );
 }
 
-function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
+function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   const [category, setCategory] = useState("하드계열");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const [totalDough, setTotalDough] = useState("");
@@ -62,6 +62,27 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
   const preFerments = useMemo(() => {
     return currentRecipe ? currentRecipe.ingredients.filter(ing => ing.type === "사전반죽") : [];
   }, [currentRecipe]);
+
+  // % 업데이트 로직: 버튼 클릭 시 원본 recipes 배열을 수정하여 실시간 저장
+  const updateIngredientPercent = (ingName, delta) => {
+    if (!currentRecipe) return;
+    
+    const updatedRecipes = recipes.map(recipe => {
+      if (recipe.id === currentRecipe.id) {
+        const updatedIngredients = recipe.ingredients.map(ing => {
+          if (ing.name === ingName) {
+            const currentPct = parseFloat(String(ing.percent).replace(',', '.')) || 0;
+            const newPct = Math.max(0, parseFloat((currentPct + delta).toFixed(2)));
+            return { ...ing, percent: newPct };
+          }
+          return ing;
+        });
+        return { ...recipe, ingredients: updatedIngredients };
+      }
+      return recipe;
+    });
+    setRecipes(updatedRecipes);
+  };
 
   const totals = useMemo(() => {
     if (!currentRecipe) return { totalPercent: 0, totalSaltPercent: 0, finalYield: 0, totalCost: 0 };
@@ -82,7 +103,6 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
         totalSaltPct += pct;
       } else if (ing.type === "사전반죽") {
         const yieldInput = parseFloat(String(pfYields[ing.name] || "100").replace(',', '.')) || 100;
-        // 사전반죽 내의 밀가루 비율 계산 (예: 수율 100%면 밀가루는 전체의 1/2)
         const pfFlourPart = pct / (1 + yieldInput / 100);
         const pfWaterPart = pfFlourPart * (yieldInput / 100);
         totalFlourPct += pfFlourPart; 
@@ -90,7 +110,6 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
       }
     });
 
-    // 실제 총 밀가루 대비 총 소금 비율 계산
     const realSaltPercent = totalFlourPct > 0 ? (totalSaltPct / totalFlourPct) * 100 : 0;
     const finalYield = totalFlourPct > 0 ? (totalWaterPct / totalFlourPct) * 100 : 0;
     
@@ -102,7 +121,7 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
 
     return { 
       totalPercent: rawTotalPercent, 
-      totalSaltPercent: realSaltPercent.toFixed(2), // 수정된 부분
+      totalSaltPercent: realSaltPercent.toFixed(2),
       finalYield, 
       totalCost: cost 
     };
@@ -158,7 +177,7 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
             <table className="w-full mt-4 italic min-w-[300px]">
               <thead>
                 <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest">
-                  <th className="p-2 text-left">재료</th><th className="p-2 text-right w-16">%</th><th className="p-2 text-right w-24">g</th>
+                  <th className="p-2 text-left">재료</th><th className="p-2 text-right w-24">%</th><th className="p-2 text-right w-24">g</th>
                 </tr>
               </thead>
               <tbody>
@@ -171,7 +190,15 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
                           <div className="text-[9px] text-gray-400 font-bold uppercase">{ing.type}</div>
                           <div className="font-black text-sm">{ing.name}</div>
                       </td>
-                      <td className="p-2 text-right font-mono text-sm">{ing.percent}%</td>
+                      <td className="p-2 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <div className="flex flex-col">
+                            <button onClick={() => updateIngredientPercent(ing.name, 0.1)} className="text-[8px] leading-none hover:text-black text-gray-300">▲</button>
+                            <button onClick={() => updateIngredientPercent(ing.name, -0.1)} className="text-[8px] leading-none hover:text-black text-gray-300">▼</button>
+                          </div>
+                          <span className="font-mono text-sm font-bold">{ing.percent}%</span>
+                        </div>
+                      </td>
                       <td className="p-2 text-right font-bold text-gray-400 text-sm">
                         {flourWeight ? Math.round(fWeight * (pctVal / 100)).toLocaleString() : 0}g
                       </td>
