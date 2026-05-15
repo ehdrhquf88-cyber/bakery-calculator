@@ -48,7 +48,7 @@ function NavButton({ active, onClick, children }) {
   );
 }
 
-// --- 레시피 계산기 컴포넌트 (기존 로직 유지) ---
+// --- 레시피 계산기 & DB (기본 로직 유지) ---
 function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
   const [category, setCategory] = useState("하드계열");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
@@ -255,7 +255,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
       </div>
 
       {isEntryMode ? (
-        <div className="space-y-4 max-h-[450px] overflow-y-auto pr-1">
+        <div className="space-y-4 max-h-[450px] overflow-y-auto pr-1 no-scrollbar">
           <div className="space-y-2">
             {items.map(item => (
               <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1">
@@ -322,7 +322,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
   );
 }
 
-// --- 온도/pH 히스토리 & 그래프 컴포넌트 ---
+// --- 온도/pH 히스토리 & 그래프 컴포넌트 (업데이트됨) ---
 function TempPhDB({ tempLogs, setTempLogs }) {
   const items = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const [searchTerm, setSearchTerm] = useState("");
@@ -345,7 +345,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-8 gap-4">
-        <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter uppercase">History & Charts</h1>
+        <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter uppercase">History & Trends</h1>
         <div className="w-full md:w-64">
           <input 
             type="text" 
@@ -371,127 +371,143 @@ function TempPhDB({ tempLogs, setTempLogs }) {
             onDelete={(id) => setTempLogs(tempLogs.filter(l => l.id !== id))}
           />
         ))}
-        {Object.entries(groupedLogs).length === 0 && (
-          <div className="py-20 text-center text-gray-400 italic">저장된 기록이 없습니다.</div>
-        )}
       </div>
     </main>
   );
 }
 
 function ProductLogGroup({ productName, logs, items, isExpanded, onToggle, selectedLogId, onSelectLog, onDelete }) {
-  // 그래프용 데이터 가공 (최근 10개)
+  const [activeMetric, setActiveMetric] = useState("결과");
+
+  // 그래프용 데이터 가공 (선택된 항목의 온도/pH 추이)
   const chartData = useMemo(() => {
-    return [...logs].reverse().slice(-10).map(log => ({
+    return [...logs].reverse().slice(-12).map(log => ({
       id: log.id,
-      date: log.timestamp.split('-').slice(1).join('/'), // MM/DD
-      temp: parseFloat(log.data["결과"]?.t) || 0,
-      ph: parseFloat(log.data["결과"]?.p) || 0,
+      date: log.timestamp.split('-').slice(1).join('/'),
+      temp: parseFloat(log.data[activeMetric]?.t) || 0,
+      ph: parseFloat(log.data[activeMetric]?.p) || 0,
     }));
-  }, [logs]);
+  }, [logs, activeMetric]);
 
   const selectedLog = logs.find(l => l.id === (selectedLogId || logs[0].id));
 
   return (
-    <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm transition-all">
-      <div onClick={onToggle} className="p-6 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors">
-        <div>
-          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product History</div>
-          <div className="text-2xl font-black italic tracking-tighter uppercase">{productName}</div>
+    <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm">
+      <div onClick={onToggle} className="p-6 flex justify-between items-center cursor-pointer hover:bg-gray-50">
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Recipe Stats</span>
+          <h2 className="text-2xl font-black italic tracking-tighter uppercase">{productName}</h2>
         </div>
-        <div className="flex items-center gap-6">
-            <div className="hidden md:block text-right">
-                <div className="text-[10px] font-black text-gray-400 uppercase">Total Logs</div>
+        <div className="flex items-center gap-4">
+            <div className="text-right hidden sm:block">
+                <span className="text-[10px] font-black text-gray-400 uppercase">Records</span>
                 <div className="text-sm font-bold italic">{logs.length} entries</div>
             </div>
-            <span className="text-xl">{isExpanded ? "▲" : "▼"}</span>
+            <span className="text-xl opacity-20">{isExpanded ? "▲" : "▼"}</span>
         </div>
       </div>
 
       {isExpanded && (
         <div className="p-6 pt-0 bg-[#fcfcfb] border-t border-gray-50">
-          {/* 차트 섹션 */}
-          <div className="mt-6 mb-8">
-            <div className="flex justify-between items-end mb-4 px-2">
-                <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest italic">Result Temperature (°C) / pH Trend</h3>
-                <div className="flex gap-4 text-[9px] font-bold uppercase">
-                    <div className="flex items-center gap-1"><div className="w-2 h-2 bg-black rounded-full" /> Temp</div>
-                    <div className="flex items-center gap-1"><div className="w-2 h-2 bg-gray-300 rounded-full" /> pH</div>
+          {/* 그래프 상단 컨트롤 */}
+          <div className="mt-8 mb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+            <div className="flex flex-col gap-2">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">측정 항목 선택</span>
+                <div className="flex flex-wrap gap-2">
+                    {items.filter(i => i !== "날짜").map(item => (
+                        <button 
+                            key={item}
+                            onClick={() => setActiveMetric(item)}
+                            className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all ${activeMetric === item ? 'bg-black text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                        >
+                            {item}
+                        </button>
+                    ))}
                 </div>
             </div>
-            <div className="h-40 flex items-end gap-2 px-2 border-b border-black/5">
-              {chartData.map((d, i) => (
-                <div 
-                  key={i} 
-                  className="flex-1 flex flex-col items-center group cursor-pointer"
-                  onClick={() => onSelectLog(d.id)}
-                >
-                  <div className="w-full flex items-end justify-center gap-0.5 h-32 relative">
-                    {/* 온도 바 */}
-                    <div 
-                      style={{ height: `${(d.temp / 40) * 100}%` }} 
-                      className={`w-full max-w-[12px] rounded-t-sm transition-all ${selectedLogId === d.id ? 'bg-black' : 'bg-black/20 group-hover:bg-black/40'}`}
-                    />
-                    {/* pH 바 */}
-                    <div 
-                      style={{ height: `${(d.ph / 7) * 100}%` }} 
-                      className={`w-full max-w-[12px] rounded-t-sm transition-all ${selectedLogId === d.id ? 'bg-gray-400' : 'bg-gray-200 group-hover:bg-gray-300'}`}
-                    />
-                    {/* 툴팁 */}
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-[8px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-10 transition-opacity">
-                        {d.temp}° / {d.ph}p
-                    </div>
-                  </div>
-                  <span className="text-[9px] font-mono mt-2 text-gray-400">{d.date}</span>
-                </div>
-              ))}
+            <div className="flex gap-4 text-[9px] font-black uppercase italic">
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-black rounded-full" /> {activeMetric} Temp</div>
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-amber-400 rounded-full" /> {activeMetric} pH</div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-8">
-            {/* 좌측: 로그 리스트 */}
-            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 no-scrollbar">
+          {/* 차트 시각화 영역 */}
+          <div className="h-48 flex items-end gap-1.5 px-2 border-b border-black/5 mb-10 relative">
+            {chartData.map((d, i) => (
+              <div 
+                key={i} 
+                className="flex-1 flex flex-col items-center group cursor-pointer relative"
+                onClick={() => onSelectLog(d.id)}
+              >
+                <div className="w-full flex items-end justify-center gap-0.5 h-36 relative">
+                  {/* 온도 바 */}
+                  <div 
+                    style={{ height: `${(d.temp / 45) * 100}%` }} 
+                    className={`w-full max-w-[14px] rounded-t-sm transition-all ${selectedLogId === d.id ? 'bg-black shadow-[0_-4px_10px_rgba(0,0,0,0.2)]' : 'bg-black/10 group-hover:bg-black/30'}`}
+                  />
+                  {/* pH 바 */}
+                  {d.ph > 0 && (
+                    <div 
+                      style={{ height: `${(d.ph / 8) * 100}%` }} 
+                      className={`w-full max-w-[14px] rounded-t-sm transition-all ${selectedLogId === d.id ? 'bg-amber-400' : 'bg-amber-100 group-hover:bg-amber-200'}`}
+                    />
+                  )}
+                  {/* 툴팁 데이터 */}
+                  <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black text-white text-[9px] py-1.5 px-2.5 rounded-lg opacity-0 group-hover:opacity-100 whitespace-nowrap z-20 pointer-events-none transition-all shadow-xl">
+                      {d.temp > 0 ? `${d.temp}°` : 'X'} / {d.ph > 0 ? `${d.ph}p` : 'X'}
+                  </div>
+                </div>
+                <span className={`text-[9px] font-mono mt-3 transition-colors ${selectedLogId === d.id ? 'text-black font-bold' : 'text-gray-300'}`}>{d.date}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* 로그 리스트 및 상세 창 */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8">
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-2 no-scrollbar">
               {logs.map(log => (
                 <div 
                   key={log.id} 
                   onClick={() => onSelectLog(log.id)}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer flex justify-between items-center ${selectedLogId === log.id || (!selectedLogId && log.id === logs[0].id) ? 'border-black bg-white shadow-md' : 'border-gray-100 bg-white/50 hover:border-gray-300'}`}
+                  className={`p-5 rounded-2xl border transition-all cursor-pointer flex justify-between items-center ${selectedLogId === log.id || (!selectedLogId && log.id === logs[0].id) ? 'border-black bg-white shadow-xl translate-x-1' : 'border-gray-100 bg-white/40 hover:bg-white'}`}
                 >
                   <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-black italic bg-gray-100 px-2 py-1 rounded uppercase">{log.type}</span>
-                    <span className="text-xs font-bold">{log.timestamp}</span>
+                    <div className={`w-2 h-2 rounded-full ${selectedLogId === log.id ? 'bg-black animate-pulse' : 'bg-gray-200'}`} />
+                    <span className="text-[10px] font-black italic bg-gray-100 px-2.5 py-1 rounded uppercase tracking-tighter">{log.type}</span>
+                    <span className="text-xs font-bold font-mono">{log.timestamp}</span>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="font-mono text-xs font-bold">{log.data["결과"]?.t || "--"}° / {log.data["결과"]?.p || "--"}p</span>
-                    <button onClick={(e) => { e.stopPropagation(); confirm("삭제하시겠습니까?") && onDelete(log.id); }} className="text-gray-300 hover:text-red-500 transition-colors">✕</button>
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                        <span className="text-[9px] text-gray-400 font-bold uppercase block">{activeMetric}</span>
+                        <span className="font-mono text-xs font-black">{log.data[activeMetric]?.t || "--"}° / {log.data[activeMetric]?.p || "--"}p</span>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); confirm("삭제하시겠습니까?") && onDelete(log.id); }} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* 우측: 상세 정보 */}
             {selectedLog && (
-              <div className="bg-white p-6 rounded-2xl border border-black shadow-xl sticky top-0">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Detail View</h4>
-                    <div className="text-lg font-black italic tracking-tighter">{selectedLog.timestamp} ({selectedLog.type})</div>
-                  </div>
+              <div className="bg-white p-7 rounded-[2.5rem] border border-black shadow-2xl h-fit sticky top-4">
+                <div className="mb-6">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Full Record</span>
+                    <h3 className="text-xl font-black italic tracking-tighter">{selectedLog.timestamp}</h3>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">Category: {selectedLog.type}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2 border-y border-gray-50 py-4 mb-4">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-gray-100 pt-5 mb-6">
                   {items.map(item => selectedLog.data[item] && (selectedLog.data[item].t || selectedLog.data[item].p) ? (
-                    <div key={item} className="flex justify-between items-center border-b border-gray-50 pb-1">
+                    <div key={item} className={`flex justify-between items-center py-1.5 border-b border-gray-50 ${activeMetric === item ? 'bg-black/5 -mx-2 px-2 rounded font-bold' : ''}`}>
                       <span className="text-[11px] font-bold text-gray-400">{item}</span>
-                      <span className="font-mono text-xs font-bold text-black">
-                        {selectedLog.data[item].t && `${selectedLog.data[item].t}${item !== "날짜" ? "°" : ""}`}
+                      <span className="font-mono text-xs font-black">
+                        {selectedLog.data[item].t && `${selectedLog.data[item].t}°`}
                         {selectedLog.data[item].p && ` / ${selectedLog.data[item].p}p`}
                       </span>
                     </div>
                   ) : null)}
                 </div>
                 {selectedLog.memo && (
-                  <div className="bg-[#f7f6f3] p-4 rounded-xl">
-                    <div className="text-[9px] font-black text-gray-400 uppercase mb-2">Internal Memo</div>
+                  <div className="bg-[#f7f6f3] p-4 rounded-2xl border border-white">
+                    <span className="text-[9px] font-black text-gray-400 uppercase mb-2 block">Special Notes</span>
                     <p className="text-xs italic leading-relaxed text-gray-600 whitespace-pre-wrap">{selectedLog.memo}</p>
                   </div>
                 )}
@@ -504,22 +520,17 @@ function ProductLogGroup({ productName, logs, items, isExpanded, onToggle, selec
   );
 }
 
-// --- 레시피 DB 컴포넌트 (기존 로직 유지) ---
+// --- 레시피 DB 및 모달 (기존 로직 유지) ---
 function RecipeDB({ recipes, setRecipes }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingRecipe, setEditingRecipe] = useState(null);
-
   const displayedRecipes = recipes.filter(r => r.productName.toLowerCase().includes(searchTerm.toLowerCase()));
-
   const handleEdit = (recipe) => { setEditingRecipe(recipe); setIsModalOpen(true); };
   const handleAdd = () => { setEditingRecipe(null); setIsModalOpen(true); };
-
   const handleDelete = (e, id) => {
     e.stopPropagation();
-    if (confirm("이 레시피를 영구적으로 삭제하시겠습니까?")) {
-      setRecipes(recipes.filter(r => r.id !== id));
-    }
+    if (confirm("삭제하시겠습니까?")) setRecipes(recipes.filter(r => r.id !== id));
   };
 
   return (
@@ -533,17 +544,9 @@ function RecipeDB({ recipes, setRecipes }) {
       </div>
       <div className="grid grid-cols-1 gap-3">
         {displayedRecipes.map(recipe => (
-          <div key={recipe.id} onClick={() => handleEdit(recipe)} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all cursor-pointer hover:border-black group relative">
-            <div>
-              <div className="text-[10px] font-black text-gray-400 uppercase">{recipe.category}</div>
-              <div className="text-xl font-black italic tracking-tighter">{recipe.productName}</div>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-gray-300 text-sm">Edit 〉</span>
-              <button onClick={(e) => handleDelete(e, recipe.id)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
-                ✕
-              </button>
-            </div>
+          <div key={recipe.id} onClick={() => handleEdit(recipe)} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all cursor-pointer hover:border-black">
+            <div><div className="text-[10px] font-black text-gray-400 uppercase">{recipe.category}</div><div className="text-xl font-black italic tracking-tighter">{recipe.productName}</div></div>
+            <div className="flex items-center gap-4"><span className="text-gray-300 text-sm">Edit 〉</span><button onClick={(e) => handleDelete(e, recipe.id)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:text-red-500">✕</button></div>
           </div>
         ))}
       </div>
@@ -560,31 +563,16 @@ function RecipeModal({ initialData, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
-
-  const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => {
-    if (idx === i) {
-      const newVal = (f === "percent" || f === "cost") ? v.replace(',', '.') : v;
-      return { ...ing, [f]: newVal };
-    }
-    return ing;
-  }));
+  const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => idx === i ? { ...ing, [f]: (f === "percent" || f === "cost") ? v.replace(',', '.') : v } : ing));
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
-      <div className="bg-[#f7f6f3] w-full max-w-4xl rounded-[2rem] p-6 md:p-12 shadow-2xl max-h-[90vh] overflow-y-auto relative">
+      <div className="bg-[#f7f6f3] w-full max-w-4xl rounded-[2rem] p-6 md:p-12 shadow-2xl max-h-[90vh] overflow-y-auto relative no-scrollbar">
         <button onClick={onClose} className="absolute top-6 right-6 text-xl">✕</button>
         <h2 className="text-2xl md:text-3xl font-black italic tracking-tighter mb-8 uppercase">Recipe Editor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <InputField label="분류">
-            <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold">
-              <option value="하드계열">하드계열</option>
-              <option value="소프트계열">소프트계열</option>
-              <option value="사전반죽">사전반죽</option>
-            </select>
-          </InputField>
-          <InputField label="제품명">
-            <input value={productName} onChange={e => setProductName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" />
-          </InputField>
+          <InputField label="분류"><select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold"><option value="하드계열">하드계열</option><option value="소프트계열">소프트계열</option><option value="사전반죽">사전반죽</option></select></InputField>
+          <InputField label="제품명"><input value={productName} onChange={e => setProductName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" /></InputField>
         </div>
         <div className="space-y-3">
           {ingredients.map((ing, i) => (
@@ -598,37 +586,12 @@ function RecipeModal({ initialData, onSave, onClose }) {
           ))}
           <button onClick={() => setIngredients([...ingredients, { type: "밀", name: "", percent: "", cost: "" }])} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 font-black">+ 재료 추가</button>
         </div>
-        <div className="mt-10 flex gap-3">
-          <button onClick={onClose} className="flex-1 bg-white border border-gray-200 py-4 rounded-xl font-bold">닫기</button>
-          <button onClick={() => onSave({ category, productName, ingredients })} className="flex-1 bg-black text-white py-4 rounded-xl font-bold">저장</button>
-        </div>
+        <div className="mt-10 flex gap-3"><button onClick={onClose} className="flex-1 bg-white border border-gray-200 py-4 rounded-xl font-bold">닫기</button><button onClick={() => onSave({ category, productName, ingredients })} className="flex-1 bg-black text-white py-4 rounded-xl font-bold">저장</button></div>
       </div>
     </div>
   );
 }
 
-function InputField({ label, children }) {
-    return (
-        <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">{label}</label>
-            {children}
-        </div>
-    );
-}
-
-function SummaryCard({ title, children }) {
-  return (
-    <div className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50">
-      <h2 className="text-xl md:text-2xl font-black italic tracking-tighter border-b-2 border-black pb-2 mb-4 uppercase">{title}</h2>
-      {children}
-    </div>
-  );
-}
-
-function SummaryRow({ label, value }) {
-  return (
-    <div className="flex justify-between border-b border-dashed pb-2 text-xs md:text-sm mb-2">
-      <span className="text-gray-600">{label}</span><span className="font-mono font-bold">{value}</span>
-    </div>
-  );
-}
+function InputField({ label, children }) { return (<div><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">{label}</label>{children}</div>); }
+function SummaryCard({ title, children }) { return (<div className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50"><h2 className="text-xl md:text-2xl font-black italic tracking-tighter border-b-2 border-black pb-2 mb-4 uppercase">{title}</h2>{children}</div>); }
+function SummaryRow({ label, value }) { return (<div className="flex justify-between border-b border-dashed pb-2 text-xs md:text-sm mb-2"><span className="text-gray-600">{label}</span><span className="font-mono font-bold">{value}</span></div>); }
