@@ -175,7 +175,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
             <table className="w-full mt-4 italic min-w-[300px]">
               <thead>
                 <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest">
-                  <th className="p-2 text-left">재료</th><th className="p-2 text-right w-32">% (수정)</th><th className="p-2 text-right w-24">g</th>
+                  <th className="p-2 text-left">재료</th><th className="p-2 text-right w-36">% (수정)</th><th className="p-2 text-right w-24">g</th>
                 </tr>
               </thead>
               <tbody>
@@ -195,7 +195,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                             inputMode="decimal"
                             value={ing.percent}
                             onChange={(e) => handlePercentChange(ing.name, e.target.value)}
-                            className="w-24 bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pr-3 pb-1 h-auto"
+                            className="w-28 bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pr-4 pb-1 h-auto overflow-visible"
                           />
                           <span className="font-mono text-xs font-bold text-gray-400">%</span>
                         </div>
