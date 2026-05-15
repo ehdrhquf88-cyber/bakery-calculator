@@ -231,7 +231,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                         type="text" inputMode="decimal"
                         value={pfYields[pf.name] || ""} 
                         onChange={(e) => setPfYields({ ...pfYields, [pf.name]: e.target.value.replace(',', '.') })}
-                        className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-right font-mono text-xs outline-none"
+                        className="w-20 bg-white border border-gray-200 rounded px-2 py-1 text-right font-mono text-xs outline-none"
                         placeholder="100"
                       />
                       <span className="text-[10px] font-bold text-gray-400">%</span>
