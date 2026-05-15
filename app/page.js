@@ -118,7 +118,9 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
           <div className="grid grid-cols-2 gap-4 mb-8 text-sm">
             <InputField label="제품 분류">
               <select value={category} onChange={(e) => { setCategory(e.target.value); setSelectedRecipeId(""); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1">
-                <option value="하드계열">하드계열</option><option value="소프트계열">소프트계열</option>
+                <option value="하드계열">하드계열</option>
+                <option value="소프트계열">소프트계열</option>
+                <option value="사전반죽">사전반죽</option>
               </select>
             </InputField>
             <InputField label="제품명 선택">
@@ -227,12 +229,12 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
       displayTime: now.toLocaleString(),
       timestamp: currentEntry["날짜"]?.t || now.toLocaleDateString(), 
       data: currentEntry,
-      memo: memo // 메모를 로그 데이터에 포함
+      memo: memo 
     };
     setTempLogs([newLog, ...tempLogs]);
     setIsEntryMode(false);
     setCurrentEntry({});
-    setMemo(""); // 저장 후 메모 비우기
+    setMemo(""); 
     alert("데이터베이스에 저장되었습니다.");
   };
 
@@ -278,7 +280,6 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
               </div>
             ))}
           </div>
-
           <div className="pt-2">
             <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block tracking-widest">Memo</label>
             <textarea 
@@ -288,7 +289,6 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
               placeholder="특이사항 입력..." 
             />
           </div>
-
           <button onClick={handleSave} className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs mt-2 uppercase italic shadow-lg">Save to DB</button>
         </div>
       ) : (
@@ -314,14 +314,13 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                   {latestLog.memo}
                 </div>
               )}
-              {/* 입력 모드가 아닐 때도 메모 수정이 필요할 경우를 위한 텍스트 영역 */}
               {!isEntryMode && (
                 <div className="pt-2 border-t border-dashed border-black/10">
                    <textarea 
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
                     className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-16 italic" 
-                    placeholder="새 메모 작성 (Save 시 로그와 함께 저장됨)..." 
+                    placeholder="새 메모 작성..." 
                   />
                 </div>
               )}
@@ -513,7 +512,11 @@ function RecipeModal({ initialData, onSave, onClose }) {
         <h2 className="text-2xl md:text-3xl font-black italic tracking-tighter mb-8 uppercase">Recipe Editor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <InputField label="분류">
-            <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold"><option>하드계열</option><option>소프트계열</option></select>
+            <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold">
+              <option value="하드계열">하드계열</option>
+              <option value="소프트계열">소프트계열</option>
+              <option value="사전반죽">사전반죽</option>
+            </select>
           </InputField>
           <InputField label="제품명">
             <input value={productName} onChange={e => setProductName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" />
