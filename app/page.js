@@ -196,7 +196,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                             inputMode="decimal"
                             value={ing.percent}
                             onChange={(e) => handlePercentChange(ing.name, e.target.value)}
-                            className="w-16 bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors"
+                            className="w-20 bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors"
                           />
                           <span className="font-mono text-xs font-bold ml-1">%</span>
                         </div>
