@@ -48,6 +48,7 @@ function NavButton({ active, onClick, children }) {
   );
 }
 
+// --- 레시피 계산기 컴포넌트 (기존 로직 유지) ---
 function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
   const [category, setCategory] = useState("하드계열");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
@@ -281,7 +282,6 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
             ))}
           </div>
           <div className="pt-2">
-            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block tracking-widest">Memo</label>
             <textarea 
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
@@ -314,60 +314,38 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                   {latestLog.memo}
                 </div>
               )}
-              {!isEntryMode && (
-                <div className="pt-2 border-t border-dashed border-black/10">
-                   <textarea 
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                    className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-16 italic" 
-                    placeholder="새 메모 작성..." 
-                  />
-                </div>
-              )}
             </>
-          ) : (
-            <>
-              <p className="text-center py-2 text-[10px] text-gray-400 italic border-b border-dashed border-black/10 mb-2">기록 없음</p>
-              <textarea 
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-                className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-24 italic" 
-                placeholder="특이사항 입력..." 
-              />
-            </>
-          )}
+          ) : <p className="text-center py-2 text-[10px] text-gray-400 italic">기록 없음</p>}
         </div>
       )}
     </SummaryCard>
   );
 }
 
+// --- 온도/pH 히스토리 & 그래프 컴포넌트 ---
 function TempPhDB({ tempLogs, setTempLogs }) {
   const items = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedProduct, setExpandedProduct] = useState(null);
+  const [selectedLogId, setSelectedLogId] = useState(null);
 
   const groupedLogs = useMemo(() => {
     const groups = {};
     const filtered = tempLogs.filter(log => 
       log.productName.toLowerCase().includes(searchTerm.toLowerCase())
     );
-    
     filtered.forEach(log => {
       if (!groups[log.productName]) groups[log.productName] = [];
       groups[log.productName].push(log);
     });
-
-    Object.keys(groups).forEach(name => {
-      groups[name].sort((a, b) => b.id - a.id);
-    });
+    Object.keys(groups).forEach(name => groups[name].sort((a, b) => b.id - a.id));
     return groups;
   }, [tempLogs, searchTerm]);
 
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-8 gap-4">
-        <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter uppercase">History</h1>
+        <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter uppercase">History & Charts</h1>
         <div className="w-full md:w-64">
           <input 
             type="text" 
@@ -379,68 +357,154 @@ function TempPhDB({ tempLogs, setTempLogs }) {
         </div>
       </div>
       
-      <div className="space-y-4">
-        {Object.entries(groupedLogs).length > 0 ? (
-          Object.entries(groupedLogs).map(([productName, logs]) => {
-            const isExpanded = expandedProduct === productName;
-            const latestLog = logs[0];
-
-            return (
-              <div key={productName} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm transition-all">
-                <div 
-                  onClick={() => setExpandedProduct(isExpanded ? null : productName)}
-                  className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors"
-                >
-                  <div>
-                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product</div>
-                    <div className="text-xl font-black italic tracking-tighter uppercase">{productName}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] font-black text-gray-400 uppercase">Recent Log</div>
-                    <div className="text-xs font-bold italic">{latestLog.timestamp}</div>
-                    <div className="text-[10px] text-gray-300 mt-1">{isExpanded ? "Click to Close ▲" : "Click to View All ▼"}</div>
-                  </div>
-                </div>
-
-                {isExpanded && (
-                  <div className="p-5 pt-0 border-t border-gray-50 bg-[#fcfcfb]">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
-                      {logs.map(log => (
-                        <div key={log.id} className="bg-white p-5 rounded-xl border border-gray-100 relative shadow-sm">
-                          <div className="mb-4 flex justify-between items-start">
-                            <div>
-                                <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
-                                <div className="font-bold text-xs italic mt-1">{log.displayTime?.split(',')[0] || log.timestamp}</div>
-                            </div>
-                            <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 transition-colors text-xs">✕</button>
-                          </div>
-                          <div className="space-y-1">
-                            {items.map(item => log.data[item] && (log.data[item].t || log.data[item].p) ? (
-                              <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
-                                <span className="font-bold text-gray-400">{item}</span>
-                                <span className="font-mono text-black">
-                                  {log.data[item].t && `${log.data[item].t}${item !== "날짜" ? "°" : ""}`} {log.data[item].p && `/ ${log.data[item].p}p`}
-                                </span>
-                              </div>
-                            ) : null)}
-                          </div>
-                          {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] italic text-gray-500 whitespace-pre-wrap leading-relaxed">{log.memo}</div>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        ) : (
-          <div className="py-20 text-center text-gray-400 italic">검색 결과가 없거나 저장된 히스토리가 없습니다.</div>
+      <div className="space-y-6">
+        {Object.entries(groupedLogs).map(([productName, logs]) => (
+          <ProductLogGroup 
+            key={productName}
+            productName={productName}
+            logs={logs}
+            items={items}
+            isExpanded={expandedProduct === productName}
+            onToggle={() => setExpandedProduct(expandedProduct === productName ? null : productName)}
+            selectedLogId={selectedLogId}
+            onSelectLog={setSelectedLogId}
+            onDelete={(id) => setTempLogs(tempLogs.filter(l => l.id !== id))}
+          />
+        ))}
+        {Object.entries(groupedLogs).length === 0 && (
+          <div className="py-20 text-center text-gray-400 italic">저장된 기록이 없습니다.</div>
         )}
       </div>
     </main>
   );
 }
 
+function ProductLogGroup({ productName, logs, items, isExpanded, onToggle, selectedLogId, onSelectLog, onDelete }) {
+  // 그래프용 데이터 가공 (최근 10개)
+  const chartData = useMemo(() => {
+    return [...logs].reverse().slice(-10).map(log => ({
+      id: log.id,
+      date: log.timestamp.split('-').slice(1).join('/'), // MM/DD
+      temp: parseFloat(log.data["결과"]?.t) || 0,
+      ph: parseFloat(log.data["결과"]?.p) || 0,
+    }));
+  }, [logs]);
+
+  const selectedLog = logs.find(l => l.id === (selectedLogId || logs[0].id));
+
+  return (
+    <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm transition-all">
+      <div onClick={onToggle} className="p-6 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors">
+        <div>
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product History</div>
+          <div className="text-2xl font-black italic tracking-tighter uppercase">{productName}</div>
+        </div>
+        <div className="flex items-center gap-6">
+            <div className="hidden md:block text-right">
+                <div className="text-[10px] font-black text-gray-400 uppercase">Total Logs</div>
+                <div className="text-sm font-bold italic">{logs.length} entries</div>
+            </div>
+            <span className="text-xl">{isExpanded ? "▲" : "▼"}</span>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="p-6 pt-0 bg-[#fcfcfb] border-t border-gray-50">
+          {/* 차트 섹션 */}
+          <div className="mt-6 mb-8">
+            <div className="flex justify-between items-end mb-4 px-2">
+                <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest italic">Result Temperature (°C) / pH Trend</h3>
+                <div className="flex gap-4 text-[9px] font-bold uppercase">
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 bg-black rounded-full" /> Temp</div>
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 bg-gray-300 rounded-full" /> pH</div>
+                </div>
+            </div>
+            <div className="h-40 flex items-end gap-2 px-2 border-b border-black/5">
+              {chartData.map((d, i) => (
+                <div 
+                  key={i} 
+                  className="flex-1 flex flex-col items-center group cursor-pointer"
+                  onClick={() => onSelectLog(d.id)}
+                >
+                  <div className="w-full flex items-end justify-center gap-0.5 h-32 relative">
+                    {/* 온도 바 */}
+                    <div 
+                      style={{ height: `${(d.temp / 40) * 100}%` }} 
+                      className={`w-full max-w-[12px] rounded-t-sm transition-all ${selectedLogId === d.id ? 'bg-black' : 'bg-black/20 group-hover:bg-black/40'}`}
+                    />
+                    {/* pH 바 */}
+                    <div 
+                      style={{ height: `${(d.ph / 7) * 100}%` }} 
+                      className={`w-full max-w-[12px] rounded-t-sm transition-all ${selectedLogId === d.id ? 'bg-gray-400' : 'bg-gray-200 group-hover:bg-gray-300'}`}
+                    />
+                    {/* 툴팁 */}
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-[8px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-10 transition-opacity">
+                        {d.temp}° / {d.ph}p
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-mono mt-2 text-gray-400">{d.date}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-8">
+            {/* 좌측: 로그 리스트 */}
+            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 no-scrollbar">
+              {logs.map(log => (
+                <div 
+                  key={log.id} 
+                  onClick={() => onSelectLog(log.id)}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer flex justify-between items-center ${selectedLogId === log.id || (!selectedLogId && log.id === logs[0].id) ? 'border-black bg-white shadow-md' : 'border-gray-100 bg-white/50 hover:border-gray-300'}`}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="text-[10px] font-black italic bg-gray-100 px-2 py-1 rounded uppercase">{log.type}</span>
+                    <span className="text-xs font-bold">{log.timestamp}</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="font-mono text-xs font-bold">{log.data["결과"]?.t || "--"}° / {log.data["결과"]?.p || "--"}p</span>
+                    <button onClick={(e) => { e.stopPropagation(); confirm("삭제하시겠습니까?") && onDelete(log.id); }} className="text-gray-300 hover:text-red-500 transition-colors">✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 우측: 상세 정보 */}
+            {selectedLog && (
+              <div className="bg-white p-6 rounded-2xl border border-black shadow-xl sticky top-0">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Detail View</h4>
+                    <div className="text-lg font-black italic tracking-tighter">{selectedLog.timestamp} ({selectedLog.type})</div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 border-y border-gray-50 py-4 mb-4">
+                  {items.map(item => selectedLog.data[item] && (selectedLog.data[item].t || selectedLog.data[item].p) ? (
+                    <div key={item} className="flex justify-between items-center border-b border-gray-50 pb-1">
+                      <span className="text-[11px] font-bold text-gray-400">{item}</span>
+                      <span className="font-mono text-xs font-bold text-black">
+                        {selectedLog.data[item].t && `${selectedLog.data[item].t}${item !== "날짜" ? "°" : ""}`}
+                        {selectedLog.data[item].p && ` / ${selectedLog.data[item].p}p`}
+                      </span>
+                    </div>
+                  ) : null)}
+                </div>
+                {selectedLog.memo && (
+                  <div className="bg-[#f7f6f3] p-4 rounded-xl">
+                    <div className="text-[9px] font-black text-gray-400 uppercase mb-2">Internal Memo</div>
+                    <p className="text-xs italic leading-relaxed text-gray-600 whitespace-pre-wrap">{selectedLog.memo}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- 레시피 DB 컴포넌트 (기존 로직 유지) ---
 function RecipeDB({ recipes, setRecipes }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
