@@ -63,7 +63,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     return currentRecipe ? currentRecipe.ingredients.filter(ing => ing.type === "사전반죽") : [];
   }, [currentRecipe]);
 
-  // % 직접 입력 로직: 입력 즉시 원본 recipes 배열을 수정하여 실시간 저장
   const handlePercentChange = (ingName, value) => {
     if (!currentRecipe) return;
     const cleanValue = value.replace(',', '.');
@@ -176,7 +175,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
             <table className="w-full mt-4 italic min-w-[300px]">
               <thead>
                 <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest">
-                  <th className="p-2 text-left">재료</th><th className="p-2 text-right w-24">% (수정가능)</th><th className="p-2 text-right w-24">g</th>
+                  <th className="p-2 text-left">재료</th><th className="p-2 text-right w-32">% (수정)</th><th className="p-2 text-right w-24">g</th>
                 </tr>
               </thead>
               <tbody>
@@ -196,9 +195,9 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                             inputMode="decimal"
                             value={ing.percent}
                             onChange={(e) => handlePercentChange(ing.name, e.target.value)}
-                            className="w-20 bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors"
+                            className="w-24 bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pr-3 pb-1 h-auto"
                           />
-                          <span className="font-mono text-xs font-bold ml-1">%</span>
+                          <span className="font-mono text-xs font-bold text-gray-400">%</span>
                         </div>
                       </td>
                       <td className="p-2 text-right font-bold text-gray-400 text-sm">
@@ -231,7 +230,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                         type="text" inputMode="decimal"
                         value={pfYields[pf.name] || ""} 
                         onChange={(e) => setPfYields({ ...pfYields, [pf.name]: e.target.value.replace(',', '.') })}
-                        className="w-20 bg-white border border-gray-200 rounded px-2 py-1 text-right font-mono text-xs outline-none"
+                        className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-right font-mono text-xs outline-none"
                         placeholder="100"
                       />
                       <span className="text-[10px] font-bold text-gray-400">%</span>
