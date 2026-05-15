@@ -68,36 +68,42 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
     let totalFlourPct = 0; let totalWaterPct = 0; let totalSaltPct = 0; let rawTotalPercent = 0;
 
     currentRecipe.ingredients.forEach(ing => {
-      const pct = parseFloat(ing.percent) || 0;
+      // 쉼표 변환 적용
+      const pct = parseFloat(String(ing.percent).replace(',', '.')) || 0;
       rawTotalPercent += pct;
       if (ing.type === "밀") totalFlourPct += pct;
       else if (ing.type === "수분") totalWaterPct += pct;
       else if (ing.type === "소금") totalSaltPct += pct;
       else if (ing.type === "사전반죽") {
-        const yieldInput = parseFloat(pfYields[ing.name]) || 100;
+        const yieldInput = parseFloat(String(pfYields[ing.name] || "100").replace(',', '.')) || 100;
         const pfFlour = pct / (1 + yieldInput / 100);
         const pfWater = pfFlour * (yieldInput / 100);
         totalFlourPct += pfFlour; totalWaterPct += pfWater;
       }
     });
+
     const finalYield = totalFlourPct > 0 ? (totalWaterPct / totalFlourPct) * 100 : 0;
     const cost = currentRecipe.ingredients.reduce((sum, ing) => {
-        const weight = flourWeight ? (parseFloat(flourWeight) * (parseFloat(ing.percent) / 100)) : 0;
-        return sum + (weight * (parseFloat(ing.cost) || 0));
+        const pctVal = parseFloat(String(ing.percent).replace(',', '.')) || 0;
+        const weight = flourWeight ? (parseFloat(String(flourWeight).replace(',', '.')) * (pctVal / 100)) : 0;
+        return sum + (weight * (parseFloat(String(ing.cost).replace(',', '.')) || 0));
     }, 0);
+
     return { totalPercent: rawTotalPercent, totalSaltPercent: totalSaltPct, finalYield, totalCost: cost };
   }, [currentRecipe, pfYields, flourWeight]);
 
   const handleTotalDoughChange = (v) => { 
-    setTotalDough(v); 
-    if (!v || totals.totalPercent === 0) { setFlourWeight(""); return; } 
-    setFlourWeight(Math.round(parseFloat(v) / (totals.totalPercent / 100))); 
+    const val = v.replace(',', '.');
+    setTotalDough(val); 
+    if (!val || totals.totalPercent === 0) { setFlourWeight(""); return; } 
+    setFlourWeight(Math.round(parseFloat(val) / (totals.totalPercent / 100))); 
   };
 
   const handleFlourWeightChange = (v) => { 
-    setFlourWeight(v); 
-    if (!v) { setTotalDough(""); return; } 
-    setTotalDough(Math.round(parseFloat(v) * (totals.totalPercent / 100))); 
+    const val = v.replace(',', '.');
+    setFlourWeight(val); 
+    if (!val) { setTotalDough(""); return; } 
+    setTotalDough(Math.round(parseFloat(val) * (totals.totalPercent / 100))); 
   };
 
   return (
@@ -123,10 +129,10 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
               </select>
             </InputField>
             <InputField label="총 반죽량 (g)">
-              <input type="number" inputMode="numeric" value={totalDough} onChange={(e) => handleTotalDoughChange(e.target.value)} placeholder="0" className="bg-transparent border-b border-black font-bold italic w-full pb-1 outline-none" />
+              <input type="text" inputMode="decimal" value={totalDough} onChange={(e) => handleTotalDoughChange(e.target.value)} placeholder="0" className="bg-transparent border-b border-black font-bold italic w-full pb-1 outline-none" />
             </InputField>
             <InputField label="밀가루량 (g)">
-              <input type="number" inputMode="numeric" value={flourWeight} onChange={(e) => handleFlourWeightChange(e.target.value)} placeholder="0" className="bg-transparent border-b border-black font-bold italic w-full pb-1 outline-none" />
+              <input type="text" inputMode="decimal" value={flourWeight} onChange={(e) => handleFlourWeightChange(e.target.value)} placeholder="0" className="bg-transparent border-b border-black font-bold italic w-full pb-1 outline-none" />
             </InputField>
           </div>
 
@@ -138,18 +144,22 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
                 </tr>
               </thead>
               <tbody>
-                {currentRecipe ? currentRecipe.ingredients.map((ing, idx) => (
-                  <tr key={idx} className="border-b border-gray-200">
-                    <td className="p-2">
-                        <div className="text-[9px] text-gray-400 font-bold uppercase">{ing.type}</div>
-                        <div className="font-black text-sm">{ing.name}</div>
-                    </td>
-                    <td className="p-2 text-right font-mono text-sm">{ing.percent}%</td>
-                    <td className="p-2 text-right font-bold text-gray-400 text-sm">
-                      {flourWeight ? Math.round(parseFloat(flourWeight) * (parseFloat(ing.percent) / 100)).toLocaleString() : 0}g
-                    </td>
-                  </tr>
-                )) : <tr><td colSpan="3" className="p-12 text-center text-gray-400 text-xs italic">제품을 선택해 주세요.</td></tr>}
+                {currentRecipe ? currentRecipe.ingredients.map((ing, idx) => {
+                  const pctVal = parseFloat(String(ing.percent).replace(',', '.')) || 0;
+                  const fWeight = parseFloat(String(flourWeight).replace(',', '.')) || 0;
+                  return (
+                    <tr key={idx} className="border-b border-gray-200">
+                      <td className="p-2">
+                          <div className="text-[9px] text-gray-400 font-bold uppercase">{ing.type}</div>
+                          <div className="font-black text-sm">{ing.name}</div>
+                      </td>
+                      <td className="p-2 text-right font-mono text-sm">{ing.percent}%</td>
+                      <td className="p-2 text-right font-bold text-gray-400 text-sm">
+                        {flourWeight ? Math.round(fWeight * (pctVal / 100)).toLocaleString() : 0}g
+                      </td>
+                    </tr>
+                  );
+                }) : <tr><td colSpan="3" className="p-12 text-center text-gray-400 text-xs italic">제품을 선택해 주세요.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -159,7 +169,7 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
           <SummaryCard title="요약">
             <SummaryRow label="사전반죽 포함 수율" value={`${totals.finalYield.toFixed(1)}%`} />
             <SummaryRow label="사전반죽 포함 소금" value={`${totals.totalSaltPercent}%`} />
-            <SummaryRow label="총 반죽량" value={`${Number(totalDough).toLocaleString()}g`} />
+            <SummaryRow label="총 반죽량" value={`${Number(String(totalDough).replace(',', '.')).toLocaleString()}g`} />
             <SummaryRow label="총 원가" value={`₩${Math.round(totals.totalCost).toLocaleString()}`} />
           </SummaryCard>
 
@@ -171,9 +181,9 @@ function RecipeCalculator({ recipes, tempLogs, setTempLogs }) {
                     <span className="text-sm font-bold italic">{pf.name}</span>
                     <div className="flex items-center gap-2">
                       <input 
-                        type="number" inputMode="decimal"
+                        type="text" inputMode="decimal"
                         value={pfYields[pf.name] || ""} 
-                        onChange={(e) => setPfYields({ ...pfYields, [pf.name]: e.target.value })}
+                        onChange={(e) => setPfYields({ ...pfYields, [pf.name]: e.target.value.replace(',', '.') })}
                         className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-right font-mono text-xs outline-none"
                         placeholder="100"
                       />
@@ -265,11 +275,11 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, currentMemo
                   />
                 ) : (
                   <>
-                    <input placeholder="°C" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                      onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value } })} />
+                    <input placeholder="°C" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value.replace(',', '.') } })} />
                     {item !== "밀" ? (
-                      <input placeholder="pH" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value } })} />
+                      <input placeholder="pH" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value.replace(',', '.') } })} />
                     ) : <div />}
                   </>
                 )}
@@ -347,7 +357,6 @@ function TempPhDB({ tempLogs, setTempLogs }) {
 
             return (
               <div key={productName} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm transition-all">
-                {/* 제품 헤더 - 클릭 시 토글 */}
                 <div 
                   onClick={() => setExpandedProduct(isExpanded ? null : productName)}
                   className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors"
@@ -363,7 +372,6 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                   </div>
                 </div>
 
-                {/* 상세 기록 리스트 (아코디언) */}
                 {isExpanded && (
                   <div className="p-5 pt-0 border-t border-gray-50 bg-[#fcfcfb]">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
@@ -459,7 +467,14 @@ function RecipeModal({ initialData, onSave, onClose }) {
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
 
-  const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => idx === i ? { ...ing, [f]: v } : ing));
+  const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => {
+    if (idx === i) {
+      // 퍼센트나 단가 입력 시 쉼표 변환
+      const newVal = (f === "percent" || f === "cost") ? v.replace(',', '.') : v;
+      return { ...ing, [f]: newVal };
+    }
+    return ing;
+  }));
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
@@ -479,8 +494,8 @@ function RecipeModal({ initialData, onSave, onClose }) {
             <div key={i} className="grid grid-cols-2 md:grid-cols-[120px_1fr_80px_100px_40px] gap-2 md:gap-4 items-center bg-white p-3 md:p-4 rounded-xl shadow-sm">
               <select value={ing.type} onChange={e => updateIng(i, "type", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold"><option>밀</option><option>수분</option><option>사전반죽</option><option>소금</option><option>기타</option></select>
               <input value={ing.name} onChange={e => updateIng(i, "name", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs" placeholder="재료명" />
-              <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right" placeholder="%" inputMode="decimal" />
-              <input value={ing.cost} onChange={e => updateIng(i, "cost", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right" placeholder="단가" inputMode="numeric" />
+              <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right" placeholder="%" type="text" inputMode="decimal" />
+              <input value={ing.cost} onChange={e => updateIng(i, "cost", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right" placeholder="단가" type="text" inputMode="decimal" />
               <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))} className="text-red-300 font-bold">✕</button>
             </div>
           ))}
