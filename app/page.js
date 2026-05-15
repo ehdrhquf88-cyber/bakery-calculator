@@ -43,7 +43,6 @@ export default function Home() {
 }
 
 function NavButton({ active, onClick, children }) {
-  // italic 제거
   return (
     <button onClick={onClick} className={`text-sm md:text-lg font-black tracking-tighter transition-all px-2 ${active ? 'text-black border-b-2 border-black' : 'text-gray-400 hover:text-gray-600'}`}>{children}</button>
   );
@@ -145,7 +144,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 md:gap-8">
         <section className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 order-1">
           <div className="border-b-2 border-black pb-3 mb-6">
-            {/* italic 제거 */}
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter truncate uppercase">
               {currentRecipe ? currentRecipe.productName : "CALCULATOR"}
             </h1>
@@ -165,7 +163,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 {filteredRecipes.map(r => <option key={r.id} value={r.id}>{r.productName}</option>)}
               </select>
             </InputField>
-            {/* input에서 italic 제거 */}
             <InputField label="총 반죽량 (g)">
               <input type="text" inputMode="decimal" value={totalDough} onChange={(e) => handleTotalDoughChange(e.target.value)} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none" />
             </InputField>
@@ -175,17 +172,20 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
           </div>
 
           <div className="overflow-x-auto">
-            {/* table에서 italic 제거 */}
             <table className="w-full mt-4 min-w-[300px]">
               <thead>
                 <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest">
-                  <th className="p-2 text-left">재료</th><th className="p-2 text-right w-36">% (수정)</th><th className="p-2 text-right w-24">g</th>
+                  <th className="p-2 text-left">재료</th><th className="p-2 text-right">% (수정)</th><th className="p-2 text-right w-24">g</th>
                 </tr>
               </thead>
               <tbody>
                 {currentRecipe ? currentRecipe.ingredients.map((ing, idx) => {
                   const pctVal = parseFloat(String(ing.percent).replace(',', '.')) || 0;
                   const fWeight = parseFloat(String(flourWeight).replace(',', '.')) || 0;
+                  
+                  // 글자 수에 따른 동적 너비 계산 (최소 1글자 대응)
+                  const inputSize = String(ing.percent).length || 1;
+
                   return (
                     <tr key={idx} className="border-b border-gray-200">
                       <td className="p-2">
@@ -193,13 +193,15 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                           <div className="font-black text-sm">{ing.name}</div>
                       </td>
                       <td className="p-2 text-right">
-                        <div className="flex items-center justify-end">
+                        <div className="flex items-center justify-end gap-0.5">
                           <input 
                             type="text"
                             inputMode="decimal"
                             value={ing.percent}
+                            size={inputSize}
                             onChange={(e) => handlePercentChange(ing.name, e.target.value)}
-                            className="w-24 bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pr-1 pb-1 h-auto"
+                            style={{ minWidth: '1.5rem' }} // 최소 너비
+                            className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto"
                           />
                           <span className="font-mono text-xs font-bold text-gray-400">%</span>
                         </div>
@@ -215,6 +217,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
           </div>
         </section>
 
+        {/* 나머지 컴포넌트(요약, 히스토리 등)는 동일하게 유지 */}
         <div className="space-y-6 order-2">
           <SummaryCard title="SUMMARY">
             <SummaryRow label="사전반죽 포함 수율" value={`${totals.finalYield.toFixed(1)}%`} />
@@ -258,6 +261,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   );
 }
 
+// 아래는 기존 컴포넌트들 (변경 없음)
 function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMemo }) {
   const [isEntryMode, setIsEntryMode] = useState(false);
   const [logType, setLogType] = useState("1차 저온");
