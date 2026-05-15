@@ -346,7 +346,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
   const items = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedProduct, setExpandedProduct] = useState(null);
-  const [showAllDates, setShowAllDates] = useState({});
+  const [expandedDate, setExpandedDate] = useState({}); // 제품별로 선택된 날짜 관리
 
   const groupedLogs = useMemo(() => {
     const groups = {};
@@ -363,8 +363,11 @@ function TempPhDB({ tempLogs, setTempLogs }) {
     return groups;
   }, [tempLogs, searchTerm]);
 
-  const toggleShowAll = (productName) => {
-    setShowAllDates(prev => ({ ...prev, [productName]: !prev[productName] }));
+  const toggleDate = (productName, date) => {
+    setExpandedDate(prev => ({
+      ...prev,
+      [productName]: prev[productName] === date ? null : date
+    }));
   };
 
   return (
@@ -385,76 +388,79 @@ function TempPhDB({ tempLogs, setTempLogs }) {
           Object.entries(groupedLogs).map(([productName, dateGroups]) => {
             const isExpanded = expandedProduct === productName;
             const sortedDates = Object.entries(dateGroups).sort(([a], [b]) => new Date(b) - new Date(a));
-            const isShowingAll = showAllDates[productName];
-            const datesToDisplay = isShowingAll ? sortedDates : sortedDates.slice(0, 1);
+            const activeDate = expandedDate[productName] || (sortedDates.length > 0 ? sortedDates[0][0] : null);
 
             return (
               <div key={productName} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm transition-all">
                 <div 
-                  onClick={() => {
-                    setExpandedProduct(isExpanded ? null : productName);
-                    if (isExpanded) setShowAllDates(prev => ({ ...prev, [productName]: false }));
-                  }}
+                  onClick={() => setExpandedProduct(isExpanded ? null : productName)}
                   className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors"
                 >
                   <div>
                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product</div>
                     <div className="text-xl font-black italic tracking-tighter uppercase">{productName}</div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-[10px] font-black text-gray-400 uppercase">Total Logs</div>
-                    <div className="text-xs font-bold italic">{sortedDates.length} Days</div>
-                    <div className="text-[10px] text-gray-300 mt-1">{isExpanded ? "Close ▲" : "View ▼"}</div>
+                  <div className="text-right text-gray-400">
+                    <span className="text-[10px] font-black uppercase mr-2">{sortedDates.length} Days</span>
+                    <span className="text-xs">{isExpanded ? "▲" : "▼"}</span>
                   </div>
                 </div>
 
                 {isExpanded && (
-                  <div className="p-5 pt-0 border-t border-gray-50 bg-[#fcfcfb]">
-                    {datesToDisplay.map(([date, logs]) => (
-                      <div key={date} className="mt-8 first:mt-5">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="h-[1px] flex-1 bg-black/10"></div>
-                          <span className="text-[10px] font-black italic text-black bg-white px-3 py-1 rounded-full border border-gray-100 shadow-sm uppercase">
-                            📅 {date} {sortedDates[0][0] === date && " (LATEST)"}
-                          </span>
-                          <div className="h-[1px] flex-1 bg-black/10"></div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {logs.sort((a, b) => b.id - a.id).map(log => (
-                            <div key={log.id} className="bg-white p-5 rounded-xl border border-gray-100 relative shadow-sm">
-                              <div className="mb-4 flex justify-between items-start">
-                                <div>
-                                    <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
-                                    <div className="font-bold text-[10px] italic mt-1 text-gray-400">{log.displayTime?.split(',')[1] || ""}</div>
-                                </div>
-                                <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 transition-colors text-xs">✕</button>
-                              </div>
-                              <div className="space-y-1">
-                                {items.map(item => log.data[item] && (log.data[item].t || log.data[item].p) ? (
-                                  <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
-                                    <span className="font-bold text-gray-400">{item}</span>
-                                    <span className="font-mono text-black">
-                                      {log.data[item].t && `${log.data[item].t}${item !== "날짜" ? "°" : ""}`} {log.data[item].p && `/ ${log.data[item].p}p`}
-                                    </span>
-                                  </div>
-                                ) : null)}
-                              </div>
-                              {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] italic text-gray-500 whitespace-pre-wrap leading-relaxed">{log.memo}</div>}
+                  <div className="px-5 pb-5 bg-[#fcfcfb]">
+                    {sortedDates.map(([date, logs]) => {
+                      const isDateExpanded = activeDate === date;
+                      
+                      return (
+                        <div key={date} className="border-t border-gray-100 last:border-b-0">
+                          {/* 날짜 선택 헤더 */}
+                          <div 
+                            onClick={() => toggleDate(productName, date)}
+                            className="py-4 flex justify-between items-center cursor-pointer group"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className={`text-[11px] font-black italic uppercase tracking-tighter ${isDateExpanded ? 'text-black' : 'text-gray-400'}`}>
+                                📅 {date} {sortedDates[0][0] === date && " (LATEST)"}
+                              </span>
+                              {!isDateExpanded && <span className="text-[9px] text-gray-300 font-bold uppercase tracking-widest">[{logs.length} records]</span>}
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                            <span className="text-[10px] text-gray-300 group-hover:text-black transition-colors">
+                              {isDateExpanded ? "HIDE DETAILS" : "SHOW DETAILS"}
+                            </span>
+                          </div>
 
-                    {sortedDates.length > 1 && (
-                      <button 
-                        onClick={() => toggleShowAll(productName)}
-                        className="w-full mt-8 py-3 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black hover:text-white transition-all shadow-sm"
-                      >
-                        {isShowingAll ? "Hide Previous Records ▲" : `View ${sortedDates.length - 1} Previous Days ▼`}
-                      </button>
-                    )}
+                          {/* 선택된 날짜만 상세 내용 표시 */}
+                          {isDateExpanded && (
+                            <div className="pb-6 animate-in fade-in slide-in-from-top-1 duration-200">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {logs.sort((a, b) => b.id - a.id).map(log => (
+                                  <div key={log.id} className="bg-white p-5 rounded-xl border border-gray-100 relative shadow-sm hover:border-black/10 transition-all">
+                                    <div className="mb-4 flex justify-between items-start">
+                                      <div>
+                                          <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
+                                          <div className="font-bold text-[10px] italic mt-1 text-gray-400">{log.displayTime?.split(',')[1] || ""}</div>
+                                      </div>
+                                      <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 transition-colors text-xs">✕</button>
+                                    </div>
+                                    <div className="space-y-1">
+                                      {items.map(item => log.data[item] && (log.data[item].t || log.data[item].p) ? (
+                                        <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
+                                          <span className="font-bold text-gray-400">{item}</span>
+                                          <span className="font-mono text-black">
+                                            {log.data[item].t && `${log.data[item].t}${item !== "날짜" ? "°" : ""}`} {log.data[item].p && `/ ${log.data[item].p}p`}
+                                          </span>
+                                        </div>
+                                      ) : null)}
+                                    </div>
+                                    {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] italic text-gray-500 whitespace-pre-wrap leading-relaxed">{log.memo}</div>}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
