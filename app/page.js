@@ -63,17 +63,16 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     return currentRecipe ? currentRecipe.ingredients.filter(ing => ing.type === "사전반죽") : [];
   }, [currentRecipe]);
 
-  // % 업데이트 로직: 버튼 클릭 시 원본 recipes 배열을 수정하여 실시간 저장
-  const updateIngredientPercent = (ingName, delta) => {
+  // % 직접 입력 로직: 입력 즉시 원본 recipes 배열을 수정하여 실시간 저장
+  const handlePercentChange = (ingName, value) => {
     if (!currentRecipe) return;
+    const cleanValue = value.replace(',', '.');
     
     const updatedRecipes = recipes.map(recipe => {
       if (recipe.id === currentRecipe.id) {
         const updatedIngredients = recipe.ingredients.map(ing => {
           if (ing.name === ingName) {
-            const currentPct = parseFloat(String(ing.percent).replace(',', '.')) || 0;
-            const newPct = Math.max(0, parseFloat((currentPct + delta).toFixed(2)));
-            return { ...ing, percent: newPct };
+            return { ...ing, percent: cleanValue };
           }
           return ing;
         });
@@ -177,7 +176,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
             <table className="w-full mt-4 italic min-w-[300px]">
               <thead>
                 <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest">
-                  <th className="p-2 text-left">재료</th><th className="p-2 text-right w-24">%</th><th className="p-2 text-right w-24">g</th>
+                  <th className="p-2 text-left">재료</th><th className="p-2 text-right w-24">% (수정가능)</th><th className="p-2 text-right w-24">g</th>
                 </tr>
               </thead>
               <tbody>
@@ -191,12 +190,15 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                           <div className="font-black text-sm">{ing.name}</div>
                       </td>
                       <td className="p-2 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <div className="flex flex-col">
-                            <button onClick={() => updateIngredientPercent(ing.name, 0.1)} className="text-[8px] leading-none hover:text-black text-gray-300">▲</button>
-                            <button onClick={() => updateIngredientPercent(ing.name, -0.1)} className="text-[8px] leading-none hover:text-black text-gray-300">▼</button>
-                          </div>
-                          <span className="font-mono text-sm font-bold">{ing.percent}%</span>
+                        <div className="flex items-center justify-end">
+                          <input 
+                            type="text"
+                            inputMode="decimal"
+                            value={ing.percent}
+                            onChange={(e) => handlePercentChange(ing.name, e.target.value)}
+                            className="w-16 bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors"
+                          />
+                          <span className="font-mono text-xs font-bold ml-1">%</span>
                         </div>
                       </td>
                       <td className="p-2 text-right font-bold text-gray-400 text-sm">
