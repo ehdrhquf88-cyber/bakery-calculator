@@ -303,7 +303,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                     <div className="col-span-2 grid grid-cols-3 gap-1">
                       <input placeholder="pH" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value.replace(',', '.') } })} />
-                      <input placeholder="Time" type="text" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      <input placeholder="Min" type="text" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], h: e.target.value } })} />
                       <input placeholder="Vol" type="text" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], v: e.target.value } })} />
@@ -353,8 +353,8 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                       <span className="text-gray-400 font-bold uppercase">{item}</span>
                       <span className="font-mono">
                         {latestLog.data[item].t && `${latestLog.data[item].t}${item !== "날짜" ? "°" : ""}`}
-                        {latestLog.data[item].p && ` / ${latestLog.data[item].p}p`}
-                        {latestLog.data[item].h && ` / ${latestLog.data[item].h}`}
+                        {latestLog.data[item].p && ` / ${latestLog.data[item].p}pH`}
+                        {latestLog.data[item].h && ` / ${latestLog.data[item].h}m`}
                         {latestLog.data[item].v && ` / ${latestLog.data[item].v}`}
                       </span>
                     </div>
@@ -431,8 +431,8 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                                   <span className="font-bold text-gray-400 uppercase">{item}</span>
                                   <span className="font-mono text-black">
                                     {log.data[item].t}{log.data[item].t && item !== "날짜" ? "°" : ""}
-                                    {log.data[item].p ? ` / ${log.data[item].p}p` : ""}
-                                    {log.data[item].h ? ` / ${log.data[item].h}` : ""}
+                                    {log.data[item].p ? ` / ${log.data[item].p}pH` : ""}
+                                    {log.data[item].h ? ` / ${log.data[item].h}m` : ""}
                                     {log.data[item].v ? ` / ${log.data[item].v}` : ""}
                                   </span>
                                 </div>
