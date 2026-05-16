@@ -27,7 +27,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
-      {/* 인쇄 시 네비게이션 바 숨김 (print:hidden) */}
       <nav className="sticky top-0 z-40 flex gap-4 md:gap-8 p-4 md:p-6 bg-white/80 backdrop-blur-md border-b border-gray-200 justify-start md:justify-center overflow-x-auto whitespace-nowrap shadow-sm no-scrollbar print:hidden">
         <NavButton active={view === "calc"} onClick={() => setView("calc")}>레시피 계산기</NavButton>
         <NavButton active={view === "db"} onClick={() => setView("db")}>레시피 DB</NavButton>
@@ -178,7 +177,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     }
   }, [selectedRecipeId]);
 
-  // 브라우저 프린트 실행 함수 (PDF 저장)
   const handlePrintPDF = () => {
     if (!currentRecipe) return;
     window.print();
@@ -186,7 +184,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
 
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black print:px-0 print:max-w-full">
-      {/* 인쇄 전용 스타일 태그 주입: 브라우저 기본 헤더/푸터(날짜, URL 등) 여백 정리 */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { size: auto; margin: 15mm; }
@@ -194,17 +191,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
         }
       `}} />
 
-      {/* 대형 그리드 구조 - 인쇄 시 세로로 순차 배치되도록 조정 */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 md:gap-8 print:block print:space-y-6">
-        
-        {/* 메인 레시피 보드 */}
         <section className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 order-1 print:bg-white print:shadow-none print:border-none print:p-0">
           <div className="border-b-2 border-black pb-3 mb-6 flex justify-between items-end">
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter truncate uppercase print:text-2xl">
               {currentRecipe ? currentRecipe.productName : "CALCULATOR"}
             </h1>
-            
-            {/* PDF 내보내기 버튼 - 인쇄할 때는 숨김 */}
             {currentRecipe && (
               <button 
                 onClick={handlePrintPDF}
@@ -215,28 +207,25 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
             )}
           </div>
           
-          {/* 분류 및 입력 데이터 영역 - 인쇄 시 셀렉트 박스 테두리 제거 및 배수 입력창 숨김 */}
           <div className="grid grid-cols-2 gap-4 mb-8 text-sm print:mb-4 print:gap-2">
-            <InputField label="제품 분류" isPrintHidden={false}>
-              <select value={category} onChange={(e) => { setCategory(e.target.value); setSelectedRecipeId(""); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 pointer-events-auto print:border-none print:pointer-events-none">
+            <InputField label="제품 분류">
+              <select value={category} onChange={(e) => { setCategory(e.target.value); setSelectedRecipeId(""); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
                 <option value="하드계열">하드계열</option>
                 <option value="소프트계열">소프트계열</option>
                 <option value="사전반죽">사전반죽</option>
               </select>
             </InputField>
-            
-            <InputField label="제품명 선택" isPrintHidden={false}>
-              <select value={selectedRecipeId} onChange={(e) => { setSelectedRecipeId(e.target.value); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 pointer-events-auto print:border-none print:pointer-events-none">
+            <InputField label="제품명 선택">
+              <select value={selectedRecipeId} onChange={(e) => { setSelectedRecipeId(e.target.value); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
                 <option value="">선택하세요</option>
                 {filteredRecipes.map(r => <option key={r.id} value={r.id}>{r.productName}</option>)}
               </select>
             </InputField>
             
-            {/* 총 반죽량 */}
             <div className="flex flex-col justify-between">
               <InputField label="총 반죽량 (g)">
-                <input type="text" inputMode="decimal" value={totalDough ? `${Number(totalDough).toLocaleString()} g` : ""} onChange={(e) => {
-                  const val = e.target.value.replace(/[^0-9.]/g, '').replace(',', '.');
+                <input type="text" inputMode="decimal" value={totalDough} onChange={(e) => {
+                  const val = e.target.value.replace(',', '.');
                   setTotalDough(val);
                   setDoughMultiplier(""); 
                   setFlourMultiplier(""); 
@@ -244,30 +233,21 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                   else setFlourWeight(Math.round(parseFloat(val) / (totals.totalPercent / 100)));
                 }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
               </InputField>
-              
               {currentRecipe && (
                 <div className="flex items-center gap-1.5 mt-2 print:hidden">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">총반죽 기준:</span>
                   <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
-                    <input 
-                      type="text" 
-                      inputMode="decimal" 
-                      value={doughMultiplier} 
-                      onChange={(e) => handleDoughMultiplierChange(e.target.value)}
-                      placeholder="1.0" 
-                      className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5"
-                    />
+                    <input type="text" inputMode="decimal" value={doughMultiplier} onChange={(e) => handleDoughMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5" />
                     <span className="text-[10px] font-bold text-gray-400 px-0.5">배</span>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* 밀가루량 */}
             <div className="flex flex-col justify-between">
               <InputField label="밀가루량 (g)">
-                <input type="text" inputMode="decimal" value={flourWeight ? `${Number(flourWeight).toLocaleString()} g` : ""} onChange={(e) => {
-                  const val = e.target.value.replace(/[^0-9.]/g, '').replace(',', '.');
+                <input type="text" inputMode="decimal" value={flourWeight} onChange={(e) => {
+                  const val = e.target.value.replace(',', '.');
                   setFlourWeight(val);
                   setDoughMultiplier(""); 
                   setFlourMultiplier(""); 
@@ -275,19 +255,11 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                   else setTotalDough(Math.round(parseFloat(val) * (totals.totalPercent / 100)));
                 }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
               </InputField>
-
               {currentRecipe && (
                 <div className="flex items-center gap-1.5 mt-2 print:hidden">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">밀가루 기준:</span>
                   <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
-                    <input 
-                      type="text" 
-                      inputMode="decimal" 
-                      value={flourMultiplier} 
-                      onChange={(e) => handleFlourMultiplierChange(e.target.value)}
-                      placeholder="1.0" 
-                      className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5"
-                    />
+                    <input type="text" inputMode="decimal" value={flourMultiplier} onChange={(e) => handleFlourMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5" />
                     <span className="text-[10px] font-bold text-gray-400 px-0.5">배</span>
                   </div>
                 </div>
@@ -295,22 +267,19 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
             </div>
           </div>
 
-          {/* 재료 리스트 테이블 */}
           <div className="overflow-x-auto">
             <table className="w-full mt-4 min-w-[300px] print:mt-2">
               <thead>
-                <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest print:border-black">
-                  <th className="p-2 text-left">재료</th>
-                  <th className="p-2 text-right">%</th>
-                  <th className="p-2 text-right w-24">g</th>
+                <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest">
+                  <th className="p-2 text-left">재료</th><th className="p-2 text-right">% (수정)</th><th className="p-2 text-right w-24">g</th>
                 </tr>
               </thead>
               <tbody>
                 {currentRecipe ? currentRecipe.ingredients.map((ing, idx) => (
-                  <tr key={idx} className="border-b border-gray-200 print:border-gray-300">
+                  <tr key={idx} className="border-b border-gray-200">
                     <td className="p-2">
                         <div className="text-[9px] text-gray-400 font-bold uppercase">{ing.type}</div>
-                        <div className="font-black text-sm print:text-xs">{ing.name}</div>
+                        <div className="font-black text-sm">{ing.name}</div>
                     </td>
                     <td className="p-2 text-right">
                       <div className="flex items-center justify-end gap-0.5">
@@ -319,12 +288,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                           size={String(ing.percent).length || 1}
                           onChange={(e) => handlePercentChange(ing.name, e.target.value)}
                           style={{ minWidth: '1.5rem' }}
-                          className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto print:border-none print:text-xs print:pb-0"
+                          className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto print:border-none"
                         />
-                        <span className="font-mono text-xs font-bold text-gray-400 print:text-xs">%</span>
+                        <span className="font-mono text-xs font-bold text-gray-400">%</span>
                       </div>
                     </td>
-                    <td className="p-2 text-right font-bold text-black text-sm print:text-xs">
+                    <td className="p-2 text-right font-bold text-gray-400 text-sm">
                       {flourWeight ? Math.round((parseFloat(String(flourWeight).replace(',','.')) || 0) * ((parseFloat(String(ing.percent).replace(',','.')) || 0) / 100)).toLocaleString() : 0}g
                     </td>
                   </tr>
@@ -334,7 +303,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
           </div>
         </section>
 
-        {/* 사이드 서머리 보드 */}
         <div className="space-y-6 order-2 print:block print:space-y-4">
           {category !== "사전반죽" && (
             <>
@@ -346,19 +314,13 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
               </SummaryCard>
 
               {preFerments.length > 0 && (
-                <SummaryCard title="PRE-FERMENT" isPrintHidden={false}>
-                  <div className="space-y-3 print:space-y-1">
+                <SummaryCard title="PRE-FERMENT">
+                  <div className="space-y-3">
                     {preFerments.map(pf => (
-                      <div key={pf.name} className="flex justify-between items-center border-b border-black/5 pb-2 print:pb-1">
-                        <span className="text-sm font-bold print:text-xs">{pf.name}</span>
+                      <div key={pf.name} className="flex justify-between items-center border-b border-black/5 pb-2">
+                        <span className="text-sm font-bold">{pf.name}</span>
                         <div className="flex items-center gap-2">
-                          <input 
-                            type="text" inputMode="decimal"
-                            value={pfYields[pf.name] || ""} 
-                            onChange={(e) => setPfYields({ ...pfYields, [pf.name]: e.target.value.replace(',', '.') })}
-                            className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-right font-mono text-xs outline-none print:border-none print:bg-transparent print:p-0"
-                            placeholder="100"
-                          />
+                          <input type="text" inputMode="decimal" value={pfYields[pf.name] || ""} onChange={(e) => setPfYields({ ...pfYields, [pf.name]: e.target.value.replace(',', '.') })} className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-right font-mono text-xs outline-none" placeholder="100" />
                           <span className="text-[10px] font-bold text-gray-400">%</span>
                         </div>
                       </div>
@@ -369,16 +331,8 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
             </>
           )}
 
-          {/* 온도/pH 일지 입력창은 인쇄 시 복잡하므로 깔끔하게 숨김 처리 */}
           <div className="print:hidden">
-            <QuickTempEntry 
-              tempLogs={tempLogs} 
-              setTempLogs={setTempLogs} 
-              currentProductName={currentRecipe?.productName} 
-              memo={memo}
-              setMemo={setMemo}
-              isPreFermentMode={category === "사전반죽"}
-            />
+            <QuickTempEntry tempLogs={tempLogs} setTempLogs={setTempLogs} currentProductName={currentRecipe?.productName} memo={memo} setMemo={setMemo} isPreFermentMode={category === "사전반죽"} />
           </div>
         </div>
       </div>
@@ -526,6 +480,100 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
   );
 }
 
+// 📈 순수 SVG를 활용한 반응형 선 그래프 컴포넌트 추가
+function HistoryChart({ logs }) {
+  // 날짜 오름차순 정렬 및 '결과' 데이터가 있는 로그 필터링
+  const chartData = useMemo(() => {
+    return [...logs]
+      .filter(l => l.data?.["결과"]?.t || l.data?.["결과"]?.p)
+      .reverse() // 최신순에서 과거순으로 저장되어 있으므로 반전시켜 타임라인화
+      .slice(-7); // 최근 최대 7개만 노출
+  }, [logs]);
+
+  if (chartData.length < 2) {
+    return (
+      <div className="h-32 flex items-center justify-center border border-dashed border-black/10 rounded-xl bg-white/40 text-[11px] text-gray-400 font-bold uppercase tracking-wider">
+        트렌드를 보려면 '결과(°C/pH)'가 입력된 로그가 2개 이상 필요합니다.
+      </div>
+    );
+  }
+
+  // 데이터 가공 및 경계값 계산
+  const temps = chartData.map(d => parseFloat(d.data["결과"].t) || 0);
+  const phs = chartData.map(d => parseFloat(d.data["결과"].p) || 0);
+
+  const maxTemp = Math.max(...temps, 30);
+  const minTemp = Math.min(...temps, 15);
+  const maxPh = Math.max(...phs, 7);
+  const minPh = Math.min(...phs, 3);
+
+  const tempRange = maxTemp - minTemp || 1;
+  const phRange = maxPh - minPh || 1;
+
+  // SVG 좌표 맵핑 (가로 500, 세로 150 기준 뷰포트)
+  const width = 500;
+  const height = 150;
+  const padding = 25;
+
+  const points = chartData.map((d, i) => {
+    const x = padding + (i / (chartData.length - 1)) * (width - padding * 2);
+    
+    const tVal = parseFloat(d.data["결과"].t) || minTemp;
+    const yTemp = height - padding - ((tVal - minTemp) / tempRange) * (height - padding * 2);
+
+    const pVal = parseFloat(d.data["결과"].p) || minPh;
+    const yPh = height - padding - ((pVal - minPh) / phRange) * (height - padding * 2);
+
+    return { x, yTemp, yPh, date: d.timestamp, t: d.data["결과"].t, p: d.data["결과"].p };
+  });
+
+  const tempPath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yTemp}`).join(' ');
+  const phPath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yPh}`).join(' ');
+
+  return (
+    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm mb-6">
+      <div className="flex gap-4 text-[10px] font-black uppercase tracking-wider mb-2 justify-end">
+        <span className="flex items-center gap-1 text-amber-500">─ 결과 온도(°C)</span>
+        <span className="flex items-center gap-1 text-purple-600">─ 결과 pH</span>
+      </div>
+      <div className="relative w-full overflow-hidden">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+          {/* 가이드 격자선 */}
+          <line x1={padding} y1={padding} x2={width-padding} y2={padding} stroke="#f3f4f6" strokeDasharray="3" />
+          <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="#f3f4f6" strokeDasharray="3" />
+          <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#e5e7eb" />
+
+          {/* 선 그리기 */}
+          {temps.some(t => t > 0) && <path d={tempPath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+          {phs.some(p => p > 0) && <path d={phPath} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+
+          {/* 데이터 포인트 닷 고정 및 수치 텍스트 표기 */}
+          {points.map((p, i) => (
+            <g key={i} className="group cursor-pointer">
+              {p.t && (
+                <>
+                  <circle cx={p.x} cy={p.yTemp} r="4" fill="#fff" stroke="#f59e0b" strokeWidth="2" />
+                  <text x={p.x} y={p.yTemp - 6} textAnchor="middle" className="text-[9px] font-mono font-bold fill-amber-600">{p.t}°</text>
+                </>
+              )}
+              {p.p && (
+                <>
+                  <circle cx={p.x} cy={p.yPh} r="4" fill="#fff" stroke="#7c3aed" strokeWidth="2" />
+                  <text x={p.x} y={p.yPh + 12} textAnchor="middle" className="text-[9px] font-mono font-bold fill-purple-700">{p.p}</text>
+                </>
+              )}
+              {/* 하단 날짜 축 */}
+              <text x={p.x} y={height - 6} textAnchor="middle" className="text-[8px] font-bold fill-gray-400 font-mono">
+                {p.date.split('-').slice(1).join('/')}
+              </text>
+            </g>
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 function TempPhDB({ tempLogs, setTempLogs }) {
   const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
@@ -536,10 +584,8 @@ function TempPhDB({ tempLogs, setTempLogs }) {
     const groups = {};
     const filtered = tempLogs.filter(log => log.productName.toLowerCase().includes(searchTerm.toLowerCase()));
     filtered.forEach(log => {
-      if (!groups[log.productName]) groups[log.productName] = {};
-      const dateKey = log.timestamp || "날짜 미지정";
-      if (!groups[log.productName][dateKey]) groups[log.productName][dateKey] = [];
-      groups[log.productName][dateKey].push(log);
+      if (!groups[log.productName]) groups[log.productName] = [];
+      groups[log.productName].push(log);
     });
     return groups;
   }, [tempLogs, searchTerm]);
@@ -550,53 +596,71 @@ function TempPhDB({ tempLogs, setTempLogs }) {
         <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">History</h1>
         <input type="text" placeholder="Search product..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-64 bg-white border border-gray-200 rounded-full px-4 py-2 text-sm outline-none shadow-inner" />
       </div>
+      
       <div className="space-y-4">
-        {Object.entries(groupedLogs).map(([productName, dateGroups]) => (
-          <div key={productName} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-            <div onClick={() => setExpandedProduct(expandedProduct === productName ? null : productName)} className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50">
-              <div>
-                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product</div>
-                <div className="text-xl font-black tracking-tighter uppercase">{productName}</div>
+        {Object.entries(groupedLogs).map(([productName, logs]) => {
+          // 날짜 그룹화 이전에 해당 제품 전체의 로그 리스트 추출 (차트용)
+          const dateGroups = {};
+          logs.forEach(log => {
+            const dateKey = log.timestamp || "날짜 미지정";
+            if (!dateGroups[dateKey]) dateGroups[dateKey] = [];
+            dateGroups[dateKey].push(log);
+          });
+
+          return (
+            <div key={productName} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+              <div onClick={() => setExpandedProduct(expandedProduct === productName ? null : productName)} className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50">
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product</div>
+                  <div className="text-xl font-black tracking-tighter uppercase">{productName}</div>
+                </div>
+                <span className="text-xs">{expandedProduct === productName ? "▲" : "▼"}</span>
               </div>
-              <span className="text-xs">{expandedProduct === productName ? "▲" : "▼"}</span>
-            </div>
-            {expandedProduct === productName && (
-              <div className="px-5 pb-5 bg-[#fcfcfb]">
-                {Object.entries(dateGroups).map(([date, logs]) => (
-                  <div key={date} className="border-t border-gray-100 py-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {logs.map(log => {
-                        const activeItems = log.type === "사전반죽 기록" ? pfItems : normalItems;
-                        return (
-                          <div key={log.id} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative">
-                            <div className="mb-4 flex justify-between">
-                              <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
-                              <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
-                            </div>
-                            <div className="space-y-1">
-                              {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].h || log.data[item].v) ? (
-                                <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
-                                  <span className="font-bold text-gray-400 uppercase">{item}</span>
-                                  <span className="font-mono text-black">
-                                    {log.data[item].t}{log.data[item].t && item !== "날짜" ? "°" : ""}
-                                    {log.data[item].p ? ` / ${log.data[item].p}pH` : ""}
-                                    {log.data[item].h ? ` / ${log.data[item].h}m` : ""}
-                                    {log.data[item].v ? ` / ${log.data[item].v}` : ""}
-                                  </span>
-                                </div>
-                              ) : null)}
-                            </div>
-                            {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] font-medium text-gray-500 whitespace-pre-wrap">{log.memo}</div>}
-                          </div>
-                        );
-                      })}
-                    </div>
+              
+              {expandedProduct === productName && (
+                <div className="px-5 pb-5 bg-[#fcfcfb]">
+                  {/* 제품 접힘이 해제되면 상단에 직관적인 트렌드 선 그래프 로드 */}
+                  <div className="pt-4">
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Trend Chart (최근 7회차 흐름)</div>
+                    <HistoryChart logs={logs} />
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+
+                  {Object.entries(dateGroups).map(([date, dateLogs]) => (
+                    <div key={date} className="border-t border-gray-100 py-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {dateLogs.map(log => {
+                          const activeItems = log.type === "사전반죽 기록" ? pfItems : normalItems;
+                          return (
+                            <div key={log.id} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative">
+                              <div className="mb-4 flex justify-between">
+                                <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
+                                <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
+                              </div>
+                              <div className="space-y-1">
+                                {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].h || log.data[item].v) ? (
+                                  <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
+                                    <span className="font-bold text-gray-400 uppercase">{item}</span>
+                                    <span className="font-mono text-black">
+                                      {log.data[item].t}{log.data[item].t && item !== "날짜" ? "°" : ""}
+                                      {log.data[item].p ? ` / ${log.data[item].p}pH` : ""}
+                                      {log.data[item].h ? ` / ${log.data[item].h}m` : ""}
+                                      {log.data[item].v ? ` / ${log.data[item].v}` : ""}
+                                    </span>
+                                  </div>
+                                ) : null)}
+                              </div>
+                              {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] font-medium text-gray-500 whitespace-pre-wrap">{log.memo}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </main>
   );
@@ -647,8 +711,8 @@ function RecipeModal({ initialData, onSave, onClose }) {
         <button onClick={onClose} className="absolute top-6 right-6 text-xl">✕</button>
         <h2 className="text-2xl md:text-3xl font-black tracking-tighter mb-8 uppercase">Recipe Editor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <InputField label="분류" isPrintHidden={false}><select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold"><option value="하드계열">하드계열</option><option value="소프트계열">소프트계열</option><option value="사전반죽">사전반죽</option></select></InputField>
-          <InputField label="제품명" isPrintHidden={false}><input value={productName} onChange={e => setProductName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" /></InputField>
+          <InputField label="분류"><select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold"><option value="하드계열">하드계열</option><option value="소프트계열">소프트계열</option><option value="사전반죽">사전반죽</option></select></InputField>
+          <InputField label="제품명"><input value={productName} onChange={e => setProductName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" /></InputField>
         </div>
         <div className="space-y-3">
           {ingredients.map((ing, i) => (
@@ -671,19 +735,19 @@ function RecipeModal({ initialData, onSave, onClose }) {
   );
 }
 
-function InputField({ label, children, isPrintHidden = false }) {
+function InputField({ label, children }) {
     return (
-        <div className={isPrintHidden ? "print:hidden" : ""}>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block print:text-gray-500">{label}</label>
+        <div>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">{label}</label>
             {children}
         </div>
     );
 }
 
-function SummaryCard({ title, children, isPrintHidden = false }) {
+function SummaryCard({ title, children }) {
   return (
-    <div className={`bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 print:bg-white print:shadow-none print:border-t print:border-black print:rounded-none print:p-2 ${isPrintHidden ? "print:hidden" : ""}`}>
-      <h2 className="text-xl md:text-2xl font-black tracking-tighter border-b-2 border-black pb-2 mb-4 uppercase print:text-sm print:pb-1 print:mb-2">{title}</h2>
+    <div className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50">
+      <h2 className="text-xl md:text-2xl font-black tracking-tighter border-b-2 border-black pb-2 mb-4 uppercase">{title}</h2>
       {children}
     </div>
   );
@@ -691,8 +755,8 @@ function SummaryCard({ title, children, isPrintHidden = false }) {
 
 function SummaryRow({ label, value }) {
   return (
-    <div className="flex justify-between border-b border-dashed pb-2 text-xs md:text-sm mb-2 print:pb-1 print:mb-1">
-      <span className="text-gray-600 font-bold uppercase text-[10px] tracking-tight print:text-black">{label}</span>
+    <div className="flex justify-between border-b border-dashed pb-2 text-xs md:text-sm mb-2">
+      <span className="text-gray-600 font-bold uppercase text-[10px] tracking-tight">{label}</span>
       <span className="font-mono font-bold">{value}</span>
     </div>
   );
