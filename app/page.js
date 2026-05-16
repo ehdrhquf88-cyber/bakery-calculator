@@ -344,7 +344,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
   const [isEntryMode, setIsEntryMode] = useState(false);
   const [logType, setLogType] = useState("1차 저온");
   const [currentEntry, setCurrentEntry] = useState({});
-  const [editingLogId, setEditingLogId] = useState(null); // 수정 상태 추적 인덱서
+  const [editingLogId, setEditingLogId] = useState(null);
 
   const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
@@ -354,7 +354,6 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
     return tempLogs.find(l => l.productName === currentProductName);
   }, [tempLogs, currentProductName]);
 
-  // 기존 카드를 눌렀을 때 입력 인프라에 값 주입 및 수정 모드 활성화
   const handleEditActive = (log) => {
     setEditingLogId(log.id);
     setLogType(log.type);
@@ -367,12 +366,11 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
     if (!currentProductName) return;
     
     if (editingLogId) {
-      // 갱신(Update) 무결성 처리
       const updatedLogs = tempLogs.map(log => {
         if (log.id === editingLogId) {
           return {
             ...log,
-            type: logType,
+            type: isPreFermentMode ? "사전반죽 기록" : logType,
             data: currentEntry,
             memo: memo,
             timestamp: currentEntry["날짜"]?.t || log.timestamp
@@ -383,7 +381,6 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
       setTempLogs(updatedLogs);
       alert("데이터가 수정되었습니다.");
     } else {
-      // 신규(Insert) 무결성 처리
       const now = new Date();
       const newLog = { 
         id: Date.now(),
@@ -483,7 +480,6 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
         <div className="space-y-4">
           {latestLog ? (
             <>
-              {/* 카드 클릭 안내 디자인 보존 및 클릭 트리거 연결 */}
               <div onClick={() => handleEditActive(latestLog)} className="bg-white/50 p-3 rounded-lg border border-white text-[10px] cursor-pointer hover:border-black/30 transition-all group relative">
                 <div className="absolute top-2 right-2 text-[8px] font-black text-gray-300 group-hover:text-black uppercase tracking-tighter">Click to Edit ✏️</div>
                 <div className="flex justify-between mb-1 border-b border-black/5 font-bold text-gray-400 uppercase tracking-tighter">
@@ -583,7 +579,7 @@ function HistoryChart({ logs, isPreFerment }) {
     const { minT, tRange, minP, pRange } = scaleBounds;
     return points.map(p => {
       const yTemp = p.tVal !== null ? height - padding - ((p.tVal - minT) / tRange) * (height - padding * 2) : null;
-      const yPh = p.yPh = p.pVal !== null ? height - padding - ((p.pVal - minP) / pRange) * (height - padding * 2) : null;
+      const yPh = p.pVal !== null ? height - padding - ((p.pVal - minP) / pRange) * (height - padding * 2) : null;
       return { ...p, yTemp, yPh };
     });
   }, [points, scaleBounds]);
@@ -666,7 +662,6 @@ function TempPhDB({ tempLogs, setTempLogs }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedProduct, setExpandedProduct] = useState(null);
 
-  // 인라인 인플레이스(In-place) 텍스트 수정을 위한 고유 상태 관리 컨텍스트
   const [inlineEditId, setInlineEditId] = useState(null);
   const [inlineData, setInlineData] = useState({});
   const [inlineMemo, setInlineMemo] = useState("");
@@ -682,7 +677,6 @@ function TempPhDB({ tempLogs, setTempLogs }) {
     return groups;
   }, [tempLogs, searchTerm]);
 
-  // 히스토리 내 특정 카드 활성화 트리거
   const startInlineEdit = (log) => {
     setInlineEditId(log.id);
     setInlineData(log.data || {});
@@ -738,7 +732,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
               {expandedProduct === productName && (
                 <div className="px-5 pb-5 bg-[#fcfcfb]">
                   <div className="pt-4">
-                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Trend Chart (커스텀 데이터 축 매핑)</div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Trend Chart</div>
                     <HistoryChart logs={logs} isPreFerment={isPreFerment} />
                   </div>
 
@@ -753,10 +747,9 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                             <div key={log.id} className={`bg-white p-5 rounded-xl border shadow-sm relative transition-all ${isEditingNow ? "border-black ring-1 ring-black/10" : "border-gray-100"}`}>
                               
                               {isEditingNow ? (
-                                /* 🔄 인라인 수정 활성 상태 레이아웃 */
                                 <div className="space-y-3">
                                   <div className="flex justify-between items-center mb-2">
-                                    {!isPreFerment ? (
+                                    {log.type !== "사전반죽 기록" ? (
                                       <select value={inlineType} onChange={(e) => setInlineType(e.target.value)} className="bg-transparent font-black text-[10px] uppercase border-b border-black outline-none font-sans">
                                         <option>1차 저온</option><option>2차 저온</option>
                                       </select>
@@ -768,25 +761,36 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                                   </div>
                                   <div className="space-y-1 max-h-[220px] overflow-y-auto pr-1 no-scrollbar">
                                     {activeItems.map(item => (
-                                      <div key={item} className="grid grid-cols-[1fr_100px] gap-2 items-center border-b border-black/5 pb-1 text-[11px]">
+                                      <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1 text-[11px]">
                                         <span className="font-bold uppercase text-gray-400">{item}</span>
                                         {item === "날짜" ? (
-                                          <input type="date" value={inlineData["날짜"]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { t: e.target.value } })} />
-                                        ) : isPreFerment && (item === "사용시점" || item === "정점" || item === "결과") ? (
-                                          <input placeholder="pH/°C" type="text" value={inlineData[item]?.p || inlineData[item]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], p: e.target.value, t: e.target.value } })} />
+                                          <input type="date" value={inlineData["날짜"]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px] border border-transparent" onChange={(e) => setInlineData({ ...inlineData, [item]: { t: e.target.value } })} />
+                                        ) : log.type === "사전반죽 기록" && (item === "사용시점" || item === "정점") ? (
+                                          <div className="grid grid-cols-3 gap-1">
+                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], p: e.target.value.replace(',', '.') } })} />
+                                            <input placeholder="Min" type="text" value={inlineData[item]?.h || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], h: e.target.value } })} />
+                                            <input placeholder="Vol" type="text" value={inlineData[item]?.v || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], v: e.target.value } })} />
+                                          </div>
+                                        ) : log.type === "사전반죽 기록" && item === "결과" ? (
+                                          <div className="grid grid-cols-3 gap-1">
+                                            <input placeholder="°C" type="text" value={inlineData[item]?.t || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], t: e.target.value.replace(',', '.') } })} />
+                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], p: e.target.value.replace(',', '.') } })} />
+                                            <input placeholder="Vol" type="text" value={inlineData[item]?.v || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], v: e.target.value } })} />
+                                          </div>
+                                        ) : item === "밀" ? (
+                                          <input placeholder="°C" type="text" value={inlineData[item]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { t: e.target.value.replace(',', '.') } })} />
                                         ) : (
                                           <div className="flex gap-1">
-                                            <input placeholder="°" type="text" value={inlineData[item]?.t || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], t: e.target.value } })} />
-                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], p: e.target.value } })} />
+                                            <input placeholder="°" type="text" value={inlineData[item]?.t || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], t: e.target.value.replace(',', '.') } })} />
+                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], p: e.target.value.replace(',', '.') } })} />
                                           </div>
                                         )}
                                       </div>
                                     ))}
                                   </div>
-                                  <textarea value={inlineMemo} onChange={(e) => setInlineMemo(e.target.value)} className="w-full bg-gray-50 border border-none rounded-lg p-2 text-[10px] leading-4 resize-none h-14 outline-none" placeholder="Memo..." />
+                                  <textarea value={inlineMemo} onChange={(e) => setInlineMemo(e.target.value)} className="w-full bg-gray-50 border-none rounded-lg p-2 text-[10px] leading-4 resize-none h-14 outline-none" placeholder="Memo..." />
                                 </div>
                               ) : (
-                                /* 👁️ 일반 뷰 상태 레이아웃 (클릭 시 수정 모드로 진입) */
                                 <div onClick={() => startInlineEdit(log)} className="cursor-pointer group">
                                   <div className="absolute top-2 right-2 text-[8px] font-black text-gray-200 group-hover:text-black uppercase tracking-tighter transition-colors">Edit ✏️</div>
                                   <div className="mb-4 flex justify-between">
@@ -871,7 +875,7 @@ function RecipeModal({ initialData, onSave, onClose }) {
         <button onClick={onClose} className="absolute top-6 right-6 text-xl">✕</button>
         <h2 className="text-2xl md:text-3xl font-black tracking-tighter mb-8 uppercase">Recipe Editor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <InputField label="분류"><select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold"><option value="하드계열">하드계열</option><option value="소프트계열">소프트계열</option><option value="사전반죽">사전반죽</option></select></InputField>
+          <InputField label="분류"><select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold"><option value="하드계열">하드계열</option><option value="소프트계열">소프트계열</option><option value="사전반죽</option></select></InputField>
           <InputField label="제품명"><input value={productName} onChange={e => setProductName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" /></InputField>
         </div>
         <div className="space-y-3">
