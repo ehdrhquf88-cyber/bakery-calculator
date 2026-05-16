@@ -480,96 +480,192 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
   );
 }
 
-// 📈 순수 SVG를 활용한 반응형 선 그래프 컴포넌트 추가
-function HistoryChart({ logs }) {
-  // 날짜 오름차순 정렬 및 '결과' 데이터가 있는 로그 필터링
-  const chartData = useMemo(() => {
-    return [...logs]
-      .filter(l => l.data?.["결과"]?.t || l.data?.["결과"]?.p)
-      .reverse() // 최신순에서 과거순으로 저장되어 있으므로 반전시켜 타임라인화
-      .slice(-7); // 최근 최대 7개만 노출
+// 📈 확장된 가변형 가로/세로축 커스텀 선 그래프 컴포넌트
+function HistoryChart({ logs, isPreFerment }) {
+  // 1단계: 가용한 데이터 필드 분석 추출
+  const availableFields = isPreFerment 
+    ? ["르방", "수분", "밀", "결과", "사용시점", "정점"]
+    : ["르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
+
+  const [selectedXField, setSelectedXField] = useState("결과"); // X축 대상 기본 항목
+  const [selectedDates, setSelectedDates] = useState([]); // Y축 데이터가 될 선택된 날짜 바구니
+
+  // 전체 유크 날짜 목록 필터링 (가장 오래된 데이터가 타임라인 왼쪽으로 오도록 정렬)
+  const allTimelineLogs = useMemo(() => {
+    return [...logs].reverse(); 
   }, [logs]);
 
-  if (chartData.length < 2) {
-    return (
-      <div className="h-32 flex items-center justify-center border border-dashed border-black/10 rounded-xl bg-white/40 text-[11px] text-gray-400 font-bold uppercase tracking-wider">
-        트렌드를 보려면 '결과(°C/pH)'가 입력된 로그가 2개 이상 필요합니다.
-      </div>
-    );
-  }
+  const uniqueDates = useMemo(() => {
+    const dates = allTimelineLogs.map(l => l.timestamp).filter(Boolean);
+    return Array.from(new Set(dates));
+  }, [allTimelineLogs]);
 
-  // 데이터 가공 및 경계값 계산
-  const temps = chartData.map(d => parseFloat(d.data["결과"].t) || 0);
-  const phs = chartData.map(d => parseFloat(d.data["결과"].p) || 0);
+  // 컴포넌트가 로드되거나 제품이 바뀔 때 기본적으로 최신 5개 날짜를 선택 상태로 지정
+  useEffect(() => {
+    if (uniqueDates.length > 0) {
+      setSelectedDates(uniqueDates.slice(-5));
+    }
+  }, [uniqueDates]);
 
-  const maxTemp = Math.max(...temps, 30);
-  const minTemp = Math.min(...temps, 15);
-  const maxPh = Math.max(...phs, 7);
-  const minPh = Math.min(...phs, 3);
+  // 날짜 체크박스 핸들러
+  const handleDateToggle = (date) => {
+    if (selectedDates.includes(date)) {
+      setSelectedDates(selectedDates.filter(d => d !== date));
+    } else {
+      setSelectedDates([...selectedDates, date]);
+    }
+  };
 
-  const tempRange = maxTemp - minTemp || 1;
-  const phRange = maxPh - minPh || 1;
+  // 최종 선택된 조건에 부합하는 필터 데이터셋 완성
+  const activeChartData = useMemo(() => {
+    return allTimelineLogs.filter(l => selectedDates.includes(l.timestamp));
+  }, [allTimelineLogs, selectedDates]);
 
-  // SVG 좌표 맵핑 (가로 500, 세로 150 기준 뷰포트)
+  // 가로세로 차트 그리기 규격 설정
   const width = 500;
-  const height = 150;
-  const padding = 25;
+  const height = 160;
+  const padding = 30;
 
-  const points = chartData.map((d, i) => {
-    const x = padding + (i / (chartData.length - 1)) * (width - padding * 2);
-    
-    const tVal = parseFloat(d.data["결과"].t) || minTemp;
-    const yTemp = height - padding - ((tVal - minTemp) / tempRange) * (height - padding * 2);
+  // 선택된 X축 세부 항목의 유효 데이터 파싱
+  const points = useMemo(() => {
+    if (activeChartData.length === 0) return [];
 
-    const pVal = parseFloat(d.data["결과"].p) || minPh;
-    const yPh = height - padding - ((pVal - minPh) / phRange) * (height - padding * 2);
+    return activeChartData.map((d, i) => {
+      // 가로 분할 X 좌표 계산
+      const x = padding + (activeChartData.length > 1 ? (i / (activeChartData.length - 1)) * (width - padding * 2) : (width - padding * 2) / 2);
+      
+      const fieldData = d.data?.[selectedXField] || {};
+      const tVal = parseFloat(fieldData.t) || null;
+      const pVal = parseFloat(fieldData.p) || null;
 
-    return { x, yTemp, yPh, date: d.timestamp, t: d.data["결과"].t, p: d.data["결과"].p };
-  });
+      return { x, tVal, pVal, date: d.timestamp };
+    });
+  }, [activeChartData, selectedXField]);
 
-  const tempPath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yTemp}`).join(' ');
-  const phPath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yPh}`).join(' ');
+  // Y축 밸런싱용 경계값 동적 스케일링
+  const scaleBounds = useMemo(() => {
+    const validTemps = points.map(p => p.tVal).filter(v => v !== null);
+    const validPhs = points.map(p => p.pVal).filter(v => v !== null);
+
+    const maxT = validTemps.length > 0 ? Math.max(...validTemps, 30) : 30;
+    const minT = validTemps.length > 0 ? Math.min(...validTemps, 15) : 15;
+    const maxP = validPhs.length > 0 ? Math.max(...validPhs, 7) : 7;
+    const minP = validPhs.length > 0 ? Math.min(...validPhs, 3) : 3;
+
+    return { maxT, minT, maxP, minP, tRange: maxT - minT || 1, pRange: maxP - minP || 1 };
+  }, [points]);
+
+  // 최종 화면 선 세그먼트 좌표 매핑
+  const renderedPoints = useMemo(() => {
+    const { minT, tRange, minP, pRange } = scaleBounds;
+    return points.map(p => {
+      const yTemp = p.tVal !== null ? height - padding - ((p.tVal - minT) / tRange) * (height - padding * 2) : null;
+      const yPh = p.pVal !== null ? height - padding - ((p.pVal - minP) / pRange) * (height - padding * 2) : null;
+      return { ...p, yTemp, yPh };
+    });
+  }, [points, scaleBounds]);
+
+  const tempPath = renderedPoints.filter(p => p.yTemp !== null).map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yTemp}`).join(' ');
+  const phPath = renderedPoints.filter(p => p.yPh !== null).map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yPh}`).join(' ');
 
   return (
-    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm mb-6">
-      <div className="flex gap-4 text-[10px] font-black uppercase tracking-wider mb-2 justify-end">
-        <span className="flex items-center gap-1 text-amber-500">─ 결과 온도(°C)</span>
-        <span className="flex items-center gap-1 text-purple-600">─ 결과 pH</span>
-      </div>
-      <div className="relative w-full overflow-hidden">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
-          {/* 가이드 격자선 */}
-          <line x1={padding} y1={padding} x2={width-padding} y2={padding} stroke="#f3f4f6" strokeDasharray="3" />
-          <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="#f3f4f6" strokeDasharray="3" />
-          <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#e5e7eb" />
+    <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-100 shadow-sm mb-6 space-y-4">
+      {/* 🛠 축 컨트롤 필터 영역 - 모바일 반응성 적용 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-gray-100 pb-4 text-xs">
+        {/* X축 변수 선택 슬롯 */}
+        <div>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">X축 항목 선택 (검색 지점)</label>
+          <div className="flex flex-wrap gap-1">
+            {availableFields.map(f => (
+              <button 
+                key={f} 
+                onClick={() => setSelectedXField(f)}
+                className={`px-2.5 py-1 rounded-md font-bold transition-all text-[11px] ${selectedXField === f ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          {/* 선 그리기 */}
-          {temps.some(t => t > 0) && <path d={tempPath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-          {phs.some(p => p > 0) && <path d={phPath} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-
-          {/* 데이터 포인트 닷 고정 및 수치 텍스트 표기 */}
-          {points.map((p, i) => (
-            <g key={i} className="group cursor-pointer">
-              {p.t && (
-                <>
-                  <circle cx={p.x} cy={p.yTemp} r="4" fill="#fff" stroke="#f59e0b" strokeWidth="2" />
-                  <text x={p.x} y={p.yTemp - 6} textAnchor="middle" className="text-[9px] font-mono font-bold fill-amber-600">{p.t}°</text>
-                </>
-              )}
-              {p.p && (
-                <>
-                  <circle cx={p.x} cy={p.yPh} r="4" fill="#fff" stroke="#7c3aed" strokeWidth="2" />
-                  <text x={p.x} y={p.yPh + 12} textAnchor="middle" className="text-[9px] font-mono font-bold fill-purple-700">{p.p}</text>
-                </>
-              )}
-              {/* 하단 날짜 축 */}
-              <text x={p.x} y={height - 6} textAnchor="middle" className="text-[8px] font-bold fill-gray-400 font-mono">
-                {p.date.split('-').slice(1).join('/')}
-              </text>
-            </g>
-          ))}
-        </svg>
+        {/* Y축 시계열 날짜 선택 슬롯 (최소 2개 이상 유효성 가이드) */}
+        <div>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">
+            Y축 비교 날짜 지정 (최소 2개 선택 필수: {selectedDates.length}/2)
+          </label>
+          <div className="flex flex-wrap gap-1.5 max-h-[72px] overflow-y-auto p-0.5 no-scrollbar">
+            {uniqueDates.map(date => {
+              const isChecked = selectedDates.includes(date);
+              return (
+                <label 
+                  key={date} 
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-mono font-bold cursor-pointer transition-all ${isChecked ? "bg-amber-50 border-amber-300 text-amber-900 shadow-sm" : "bg-white border-gray-200 text-gray-400 hover:bg-gray-50"}`}
+                >
+                  <input 
+                    type="checkbox" 
+                    checked={isChecked} 
+                    onChange={() => handleDateToggle(date)} 
+                    className="accent-amber-500 w-3 h-3 cursor-pointer"
+                  />
+                  {date.split('-').slice(1).join('/')}
+                </label>
+              );
+            })}
+          </div>
+        </div>
       </div>
+
+      {/* 📊 메인 캔버스 그리기 구역 */}
+      {selectedDates.length < 2 ? (
+        <div className="h-36 flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center">
+          <span>⚠️ 비교 분석을 위해 날짜를 최소 2개 이상 체크해 주세요.</span>
+        </div>
+      ) : renderedPoints.length === 0 || (!renderedPoints.some(p => p.tVal !== null) && !renderedPoints.some(p => p.pVal !== null)) ? (
+        <div className="h-36 flex items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center">
+          <span>선택한 항목 [{selectedXField}]에 등록된 온도/pH 결과값이 없습니다.</span>
+        </div>
+      ) : (
+        <div>
+          <div className="flex gap-4 text-[10px] font-black uppercase tracking-wider mb-2 justify-end">
+            <span className="flex items-center gap-1 text-amber-500">─ {selectedXField} 온도(°C)</span>
+            <span className="flex items-center gap-1 text-purple-600">─ {selectedXField} pH</span>
+          </div>
+          <div className="relative w-full overflow-hidden">
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+              {/* 그리드 기준 수평 보조선 */}
+              <line x1={padding} y1={padding} x2={width-padding} y2={padding} stroke="#f3f4f6" strokeDasharray="3" />
+              <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="#f3f4f6" strokeDasharray="3" />
+              <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#e5e7eb" />
+
+              {/* 트렌드 커브 패스 추출 */}
+              {tempPath && <path d={tempPath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+              {phPath && <path d={phPath} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+
+              {/* 각 교차 데이터 노드 텍스트 마킹 */}
+              {renderedPoints.map((p, i) => (
+                <g key={i}>
+                  {p.yTemp !== null && (
+                    <>
+                      <circle cx={p.x} cy={p.yTemp} r="4" fill="#fff" stroke="#f59e0b" strokeWidth="2" />
+                      <text x={p.x} y={p.yTemp - 6} textAnchor="middle" className="text-[9px] font-mono font-bold fill-amber-600">{p.tVal}°</text>
+                    </>
+                  )}
+                  {p.yPh !== null && (
+                    <>
+                      <circle cx={p.x} cy={p.yPh} r="4" fill="#fff" stroke="#7c3aed" strokeWidth="2" />
+                      <text x={p.x} y={p.yPh + 12} textAnchor="middle" className="text-[9px] font-mono font-bold fill-purple-700">{p.pVal}</text>
+                    </>
+                  )}
+                  {/* 하단 시간 타임라인 라벨 */}
+                  <text x={p.x} y={height - 6} textAnchor="middle" className="text-[8px] font-bold fill-gray-400 font-mono">
+                    {p.date.split('-').slice(1).join('/')}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -599,13 +695,14 @@ function TempPhDB({ tempLogs, setTempLogs }) {
       
       <div className="space-y-4">
         {Object.entries(groupedLogs).map(([productName, logs]) => {
-          // 날짜 그룹화 이전에 해당 제품 전체의 로그 리스트 추출 (차트용)
           const dateGroups = {};
           logs.forEach(log => {
             const dateKey = log.timestamp || "날짜 미지정";
             if (!dateGroups[dateKey]) dateGroups[dateKey] = [];
             dateGroups[dateKey].push(log);
           });
+
+          const isPreFerment = logs.some(l => l.type === "사전반죽 기록");
 
           return (
             <div key={productName} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
@@ -619,10 +716,10 @@ function TempPhDB({ tempLogs, setTempLogs }) {
               
               {expandedProduct === productName && (
                 <div className="px-5 pb-5 bg-[#fcfcfb]">
-                  {/* 제품 접힘이 해제되면 상단에 직관적인 트렌드 선 그래프 로드 */}
                   <div className="pt-4">
-                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Trend Chart (최근 7회차 흐름)</div>
-                    <HistoryChart logs={logs} />
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Trend Chart (커스텀 데이터 축 매핑)</div>
+                    {/* 차트 컴포넌트에 사전반죽 여부를 주입하여 알맞은 필드 선택지 제공 */}
+                    <HistoryChart logs={logs} isPreFerment={isPreFerment} />
                   </div>
 
                   {Object.entries(dateGroups).map(([date, dateLogs]) => (
