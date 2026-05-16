@@ -55,7 +55,10 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   const [flourWeight, setFlourWeight] = useState("");
   const [pfYields, setPfYields] = useState({});
   const [memo, setMemo] = useState("");
-  const [customMultiplier, setCustomMultiplier] = useState("1"); // 직접 입력 배수 상태값
+  
+  // 두 가지 기준의 배수 상태값 독립 운영
+  const [doughMultiplier, setDoughMultiplier] = useState("1");
+  const [flourMultiplier, setFlourMultiplier] = useState("1");
 
   const filteredRecipes = recipes.filter(r => r.category === category);
   const currentRecipe = recipes.find(r => r.id === Number(selectedRecipeId));
@@ -78,11 +81,13 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       return recipe;
     });
     setRecipes(updatedRecipes);
-    setCustomMultiplier(""); // 비율 직접 수정 시 배수 초기화
+    // 비율 직접 변경 시 배수창들 초기화
+    setDoughMultiplier("");
+    setFlourMultiplier("");
   };
 
   const totals = useMemo(() => {
-    if (!currentRecipe) return { totalPercent: 0, totalSaltPercent: 0, finalYield: 0, totalCost: 0 };
+    if (!currentRecipe) return { totalPercent: 0, totalSaltPercent: 0, finalYield: 0, totalCost: 0, baseTotalDough: 0 };
     let totalFlourPct = 0; 
     let totalWaterPct = 0; 
     let totalSaltPct = 0; 
@@ -111,13 +116,40 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
         return sum + (weight * (parseFloat(String(ing.cost).replace(',', '.')) || 0));
     }, 0);
 
-    return { totalPercent: rawTotalPercent, totalSaltPercent: realSaltPercent.toFixed(2), finalYield, totalCost: cost };
+    // 기본 기준점: 밀가루 1000g 일 때의 기본 총 반죽량
+    const baseTotalDough = 1000 * (rawTotalPercent / 100);
+
+    return { totalPercent: rawTotalPercent, totalSaltPercent: realSaltPercent.toFixed(2), finalYield, totalCost: cost, baseTotalDough };
   }, [currentRecipe, pfYields, flourWeight]);
 
-  // 배수 직접 입력 변경 시 처리 로직
-  const handleMultiplierInputChange = (value) => {
+  // 1. 총 반죽량 기준 배수 변경 함수
+  const handleDoughMultiplierChange = (value) => {
     const cleanValue = value.replace(',', '.');
-    setCustomMultiplier(cleanValue);
+    setDoughMultiplier(cleanValue);
+    setFlourMultiplier(""); // 다른 쪽 배수 칸은 비워둠
+
+    if (!currentRecipe || totals.totalPercent === 0 || totals.baseTotalDough === 0) return;
+    
+    const multiplier = parseFloat(cleanValue);
+    if (isNaN(multiplier) || multiplier <= 0) {
+      setFlourWeight("");
+      setTotalDough("");
+      return;
+    }
+
+    // 밀가루 1000g 기준의 기본 총반죽량에 배율을 곱함
+    const targetDough = totals.baseTotalDough * multiplier;
+    const targetFlour = 1000 * multiplier;
+
+    setTotalDough(Math.round(targetDough));
+    setFlourWeight(Math.round(targetFlour));
+  };
+
+  // 2. 밀가루량 기준 배수 변경 함수
+  const handleFlourMultiplierChange = (value) => {
+    const cleanValue = value.replace(',', '.');
+    setFlourMultiplier(cleanValue);
+    setDoughMultiplier(""); // 다른 쪽 배수 칸은 비워둠
 
     if (!currentRecipe || totals.totalPercent === 0) return;
     
@@ -128,7 +160,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       return;
     }
 
-    // 기본 밀가루량 1000g 기준으로 입력받은 배수 적용
+    // 밀가루 기본 1000g 기준에 배율을 곱함
     const targetFlour = 1000 * multiplier;
     const targetDough = targetFlour * (totals.totalPercent / 100);
 
@@ -136,20 +168,22 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     setTotalDough(Math.round(targetDough));
   };
 
-  // 새로운 레시피 선택 시 1배수로 리셋
+  // 레시피 초기 선택 시 기본값 세팅 (밀가루 1000g 기준 = 1배수 기본값)
   useEffect(() => {
-    if (currentRecipe) {
-      setCustomMultiplier("1");
-      const targetFlour = 1000 * 1;
+    if (currentRecipe && totals.totalPercent > 0) {
+      setFlourMultiplier("1");
+      setDoughMultiplier("1");
+      const targetFlour = 1000;
       const targetDough = targetFlour * (totals.totalPercent / 100);
       setFlourWeight(Math.round(targetFlour));
       setTotalDough(Math.round(targetDough));
     } else {
       setTotalDough("");
       setFlourWeight("");
-      setCustomMultiplier("1");
+      setDoughMultiplier("1");
+      setFlourMultiplier("1");
     }
-  }, [selectedRecipeId, totals.totalPercent]);
+  }, [selectedRecipeId]);
 
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
@@ -176,27 +210,28 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
               </select>
             </InputField>
             
+            {/* 총 반죽량 구역 */}
             <div className="flex flex-col justify-between">
               <InputField label="총 반죽량 (g)">
                 <input type="text" inputMode="decimal" value={totalDough} onChange={(e) => {
                   const val = e.target.value.replace(',', '.');
                   setTotalDough(val);
-                  setCustomMultiplier(""); // 수동 입력 시 배수 칸 비우기
+                  setDoughMultiplier(""); 
+                  setFlourMultiplier(""); 
                   if (!val || totals.totalPercent === 0) setFlourWeight("");
                   else setFlourWeight(Math.round(parseFloat(val) / (totals.totalPercent / 100)));
                 }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none" />
               </InputField>
               
-              {/* 총 반죽량 아래 배치된 배수 직접 입력창 */}
               {currentRecipe && (
                 <div className="flex items-center gap-1.5 mt-2">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">배수 변환 :</span>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">총반죽 기준:</span>
                   <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
                     <input 
                       type="text" 
                       inputMode="decimal" 
-                      value={customMultiplier} 
-                      onChange={(e) => handleMultiplierInputChange(e.target.value)}
+                      value={doughMultiplier} 
+                      onChange={(e) => handleDoughMultiplierChange(e.target.value)}
                       placeholder="1.0" 
                       className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5"
                     />
@@ -206,15 +241,36 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
               )}
             </div>
 
-            <InputField label="밀가루량 (g)">
-              <input type="text" inputMode="decimal" value={flourWeight} onChange={(e) => {
-                const val = e.target.value.replace(',', '.');
-                setFlourWeight(val);
-                setCustomMultiplier(""); // 수동 입력 시 배수 칸 비우기
-                if (!val) setTotalDough("");
-                else setTotalDough(Math.round(parseFloat(val) * (totals.totalPercent / 100)));
-              }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none" />
-            </InputField>
+            {/* 밀가루량 구역 */}
+            <div className="flex flex-col justify-between">
+              <InputField label="밀가루량 (g)">
+                <input type="text" inputMode="decimal" value={flourWeight} onChange={(e) => {
+                  const val = e.target.value.replace(',', '.');
+                  setFlourWeight(val);
+                  setDoughMultiplier(""); 
+                  setFlourMultiplier(""); 
+                  if (!val) setTotalDough("");
+                  else setTotalDough(Math.round(parseFloat(val) * (totals.totalPercent / 100)));
+                }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none" />
+              </InputField>
+
+              {currentRecipe && (
+                <div className="flex items-center gap-1.5 mt-2">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">밀가루 기준:</span>
+                  <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
+                    <input 
+                      type="text" 
+                      inputMode="decimal" 
+                      value={flourMultiplier} 
+                      onChange={(e) => handleFlourMultiplierChange(e.target.value)}
+                      placeholder="1.0" 
+                      className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5"
+                    />
+                    <span className="text-[10px] font-bold text-gray-400 px-0.5">배</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="overflow-x-auto">
