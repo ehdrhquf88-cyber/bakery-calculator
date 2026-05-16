@@ -344,6 +344,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
   const [isEntryMode, setIsEntryMode] = useState(false);
   const [logType, setLogType] = useState("1차 저온");
   const [currentEntry, setCurrentEntry] = useState({});
+  const [editingLogId, setEditingLogId] = useState(null); // 수정 상태 추적 인덱서
 
   const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
@@ -353,23 +354,54 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
     return tempLogs.find(l => l.productName === currentProductName);
   }, [tempLogs, currentProductName]);
 
+  // 기존 카드를 눌렀을 때 입력 인프라에 값 주입 및 수정 모드 활성화
+  const handleEditActive = (log) => {
+    setEditingLogId(log.id);
+    setLogType(log.type);
+    setCurrentEntry(log.data || {});
+    setMemo(log.memo || "");
+    setIsEntryMode(true);
+  };
+
   const handleSave = () => {
     if (!currentProductName) return;
-    const now = new Date();
-    const newLog = { 
-      id: Date.now(),
-      productName: currentProductName,
-      type: isPreFermentMode ? "사전반죽 기록" : logType, 
-      displayTime: now.toLocaleString(),
-      timestamp: currentEntry["날짜"]?.t || now.toLocaleDateString(), 
-      data: currentEntry,
-      memo: memo 
-    };
-    setTempLogs([newLog, ...tempLogs]);
+    
+    if (editingLogId) {
+      // 갱신(Update) 무결성 처리
+      const updatedLogs = tempLogs.map(log => {
+        if (log.id === editingLogId) {
+          return {
+            ...log,
+            type: logType,
+            data: currentEntry,
+            memo: memo,
+            timestamp: currentEntry["날짜"]?.t || log.timestamp
+          };
+        }
+        return log;
+      });
+      setTempLogs(updatedLogs);
+      alert("데이터가 수정되었습니다.");
+    } else {
+      // 신규(Insert) 무결성 처리
+      const now = new Date();
+      const newLog = { 
+        id: Date.now(),
+        productName: currentProductName,
+        type: isPreFermentMode ? "사전반죽 기록" : logType, 
+        displayTime: now.toLocaleString(),
+        timestamp: currentEntry["날짜"]?.t || now.toLocaleDateString(), 
+        data: currentEntry,
+        memo: memo 
+      };
+      setTempLogs([newLog, ...tempLogs]);
+      alert("데이터베이스에 저장되었습니다.");
+    }
+
     setIsEntryMode(false);
     setCurrentEntry({});
     setMemo(""); 
-    alert("데이터베이스에 저장되었습니다.");
+    setEditingLogId(null);
   };
 
   if (!currentProductName) return (
@@ -388,7 +420,12 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
         ) : (
           <span className="font-black text-[10px] uppercase text-gray-400">Pre-Ferment Log</span>
         )}
-        <button onClick={() => setIsEntryMode(!isEntryMode)} className="text-[10px] font-black underline uppercase">{isEntryMode ? "Close" : "+ Add"}</button>
+        <button onClick={() => { 
+          setIsEntryMode(!isEntryMode); 
+          if(isEntryMode) { setCurrentEntry({}); setMemo(""); setEditingLogId(null); }
+        }} className="text-[10px] font-black underline uppercase">
+          {isEntryMode ? "Close" : "+ Add"}
+        </button>
       </div>
 
       {isEntryMode ? (
@@ -399,34 +436,34 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                 <span className="text-[11px] font-bold uppercase">{item}</span>
                 <div className="grid grid-cols-2 gap-1">
                   {item === "날짜" ? (
-                    <input type="date" className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100 outline-none"
+                    <input type="date" value={currentEntry["날짜"]?.t || ""} className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100 outline-none"
                       onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { t: e.target.value } })} />
                   ) : isPreFermentMode && (item === "사용시점" || item === "정점") ? (
                     <div className="col-span-2 grid grid-cols-3 gap-1">
-                      <input placeholder="pH" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value.replace(',', '.') } })} />
-                      <input placeholder="Min" type="text" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      <input placeholder="Min" type="text" value={currentEntry[item]?.h || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], h: e.target.value } })} />
-                      <input placeholder="Vol" type="text" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      <input placeholder="Vol" type="text" value={currentEntry[item]?.v || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], v: e.target.value } })} />
                     </div>
                   ) : isPreFermentMode && item === "결과" ? (
                     <div className="col-span-2 grid grid-cols-3 gap-1">
-                      <input placeholder="°C" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value.replace(',', '.') } })} />
-                      <input placeholder="pH" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value.replace(',', '.') } })} />
-                      <input placeholder="Vol" type="text" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      <input placeholder="Vol" type="text" value={currentEntry[item]?.v || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], v: e.target.value } })} />
                     </div>
                   ) : item === "밀" ? (
-                    <input placeholder="°C" type="text" inputMode="decimal" className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                    <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                       onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { t: e.target.value.replace(',', '.') } })} />
                   ) : (
                     <>
-                      <input placeholder="°C" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value.replace(',', '.') } })} />
-                      <input placeholder="pH" type="text" inputMode="decimal" className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
                         onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value.replace(',', '.') } })} />
                     </>
                   )}
@@ -438,13 +475,17 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
             <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block tracking-widest">Memo</label>
             <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-white/50 border border-black/5 rounded-lg p-3 text-xs leading-5 resize-none h-24 outline-none font-medium" placeholder="Notes..." />
           </div>
-          <button onClick={handleSave} className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs mt-2 uppercase shadow-lg">Save to DB</button>
+          <button onClick={handleSave} className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs mt-2 uppercase shadow-lg">
+            {editingLogId ? "Update Record" : "Save to DB"}
+          </button>
         </div>
       ) : (
         <div className="space-y-4">
           {latestLog ? (
             <>
-              <div className="bg-white/50 p-2 rounded-lg border border-white text-[10px]">
+              {/* 카드 클릭 안내 디자인 보존 및 클릭 트리거 연결 */}
+              <div onClick={() => handleEditActive(latestLog)} className="bg-white/50 p-3 rounded-lg border border-white text-[10px] cursor-pointer hover:border-black/30 transition-all group relative">
+                <div className="absolute top-2 right-2 text-[8px] font-black text-gray-300 group-hover:text-black uppercase tracking-tighter">Click to Edit ✏️</div>
                 <div className="flex justify-between mb-1 border-b border-black/5 font-bold text-gray-400 uppercase tracking-tighter">
                   <span className="text-black">LATEST ({latestLog.type})</span>
                   <span>{latestLog.timestamp}</span>
@@ -463,7 +504,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                   ) : null)}
                 </div>
               </div>
-              {latestLog.memo && <div className="bg-white/30 p-3 rounded-lg border-l-2 border-black/10 text-[11px] font-medium text-gray-600 leading-relaxed">{latestLog.memo}</div>}
+              {latestLog.memo && <div onClick={() => handleEditActive(latestLog)} className="bg-white/30 p-3 rounded-lg border-l-2 border-black/10 text-[11px] font-medium text-gray-600 leading-relaxed cursor-pointer hover:bg-white/50">{latestLog.memo}</div>}
               <div className="pt-2 border-t border-dashed border-black/10">
                 <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-16 font-medium" placeholder="Quick memo..." />
               </div>
@@ -480,17 +521,14 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
   );
 }
 
-// 📈 확장된 가변형 가로/세로축 커스텀 선 그래프 컴포넌트
 function HistoryChart({ logs, isPreFerment }) {
-  // 1단계: 가용한 데이터 필드 분석 추출
   const availableFields = isPreFerment 
     ? ["르방", "수분", "밀", "결과", "사용시점", "정점"]
     : ["르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
 
-  const [selectedXField, setSelectedXField] = useState("결과"); // X축 대상 기본 항목
-  const [selectedDates, setSelectedDates] = useState([]); // Y축 데이터가 될 선택된 날짜 바구니
+  const [selectedXField, setSelectedXField] = useState("결과"); 
+  const [selectedDates, setSelectedDates] = useState([]); 
 
-  // 전체 유크 날짜 목록 필터링 (가장 오래된 데이터가 타임라인 왼쪽으로 오도록 정렬)
   const allTimelineLogs = useMemo(() => {
     return [...logs].reverse(); 
   }, [logs]);
@@ -500,14 +538,12 @@ function HistoryChart({ logs, isPreFerment }) {
     return Array.from(new Set(dates));
   }, [allTimelineLogs]);
 
-  // 컴포넌트가 로드되거나 제품이 바뀔 때 기본적으로 최신 5개 날짜를 선택 상태로 지정
   useEffect(() => {
     if (uniqueDates.length > 0) {
       setSelectedDates(uniqueDates.slice(-5));
     }
   }, [uniqueDates]);
 
-  // 날짜 체크박스 핸들러
   const handleDateToggle = (date) => {
     if (selectedDates.includes(date)) {
       setSelectedDates(selectedDates.filter(d => d !== date));
@@ -516,51 +552,38 @@ function HistoryChart({ logs, isPreFerment }) {
     }
   };
 
-  // 최종 선택된 조건에 부합하는 필터 데이터셋 완성
   const activeChartData = useMemo(() => {
     return allTimelineLogs.filter(l => selectedDates.includes(l.timestamp));
   }, [allTimelineLogs, selectedDates]);
 
-  // 가로세로 차트 그리기 규격 설정
   const width = 500;
   const height = 160;
   const padding = 30;
 
-  // 선택된 X축 세부 항목의 유효 데이터 파싱
   const points = useMemo(() => {
     if (activeChartData.length === 0) return [];
-
     return activeChartData.map((d, i) => {
-      // 가로 분할 X 좌표 계산
       const x = padding + (activeChartData.length > 1 ? (i / (activeChartData.length - 1)) * (width - padding * 2) : (width - padding * 2) / 2);
-      
       const fieldData = d.data?.[selectedXField] || {};
-      const tVal = parseFloat(fieldData.t) || null;
-      const pVal = parseFloat(fieldData.p) || null;
-
-      return { x, tVal, pVal, date: d.timestamp };
+      return { x, tVal: parseFloat(fieldData.t) || null, pVal: parseFloat(fieldData.p) || null, date: d.timestamp };
     });
   }, [activeChartData, selectedXField]);
 
-  // Y축 밸런싱용 경계값 동적 스케일링
   const scaleBounds = useMemo(() => {
     const validTemps = points.map(p => p.tVal).filter(v => v !== null);
     const validPhs = points.map(p => p.pVal).filter(v => v !== null);
-
     const maxT = validTemps.length > 0 ? Math.max(...validTemps, 30) : 30;
     const minT = validTemps.length > 0 ? Math.min(...validTemps, 15) : 15;
     const maxP = validPhs.length > 0 ? Math.max(...validPhs, 7) : 7;
     const minP = validPhs.length > 0 ? Math.min(...validPhs, 3) : 3;
-
     return { maxT, minT, maxP, minP, tRange: maxT - minT || 1, pRange: maxP - minP || 1 };
   }, [points]);
 
-  // 최종 화면 선 세그먼트 좌표 매핑
   const renderedPoints = useMemo(() => {
     const { minT, tRange, minP, pRange } = scaleBounds;
     return points.map(p => {
       const yTemp = p.tVal !== null ? height - padding - ((p.tVal - minT) / tRange) * (height - padding * 2) : null;
-      const yPh = p.pVal !== null ? height - padding - ((p.pVal - minP) / pRange) * (height - padding * 2) : null;
+      const yPh = p.yPh = p.pVal !== null ? height - padding - ((p.pVal - minP) / pRange) * (height - padding * 2) : null;
       return { ...p, yTemp, yPh };
     });
   }, [points, scaleBounds]);
@@ -570,43 +593,23 @@ function HistoryChart({ logs, isPreFerment }) {
 
   return (
     <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-100 shadow-sm mb-6 space-y-4">
-      {/* 🛠 축 컨트롤 필터 영역 - 모바일 반응성 적용 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-gray-100 pb-4 text-xs">
-        {/* X축 변수 선택 슬롯 */}
         <div>
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">X축 항목 선택 (검색 지점)</label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">X축 항목 선택</label>
           <div className="flex flex-wrap gap-1">
             {availableFields.map(f => (
-              <button 
-                key={f} 
-                onClick={() => setSelectedXField(f)}
-                className={`px-2.5 py-1 rounded-md font-bold transition-all text-[11px] ${selectedXField === f ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
-              >
-                {f}
-              </button>
+              <button key={f} onClick={() => setSelectedXField(f)} className={`px-2.5 py-1 rounded-md font-bold transition-all text-[11px] ${selectedXField === f ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>{f}</button>
             ))}
           </div>
         </div>
-
-        {/* Y축 시계열 날짜 선택 슬롯 (최소 2개 이상 유효성 가이드) */}
         <div>
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">
-            Y축 비교 날짜 지정 (최소 2개 선택 필수: {selectedDates.length}/2)
-          </label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">Y축 비교 날짜 지정 ({selectedDates.length}/2)</label>
           <div className="flex flex-wrap gap-1.5 max-h-[72px] overflow-y-auto p-0.5 no-scrollbar">
             {uniqueDates.map(date => {
               const isChecked = selectedDates.includes(date);
               return (
-                <label 
-                  key={date} 
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-mono font-bold cursor-pointer transition-all ${isChecked ? "bg-amber-50 border-amber-300 text-amber-900 shadow-sm" : "bg-white border-gray-200 text-gray-400 hover:bg-gray-50"}`}
-                >
-                  <input 
-                    type="checkbox" 
-                    checked={isChecked} 
-                    onChange={() => handleDateToggle(date)} 
-                    className="accent-amber-500 w-3 h-3 cursor-pointer"
-                  />
+                <label key={date} className={`flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-mono font-bold cursor-pointer transition-all ${isChecked ? "bg-amber-50 border-amber-300 text-amber-900 shadow-sm" : "bg-white border-gray-200 text-gray-400 hover:bg-gray-50"}`}>
+                  <input type="checkbox" checked={isChecked} onChange={() => handleDateToggle(date)} className="accent-amber-500 w-3 h-3 cursor-pointer" />
                   {date.split('-').slice(1).join('/')}
                 </label>
               );
@@ -615,15 +618,10 @@ function HistoryChart({ logs, isPreFerment }) {
         </div>
       </div>
 
-      {/* 📊 메인 캔버스 그리기 구역 */}
       {selectedDates.length < 2 ? (
-        <div className="h-36 flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center">
-          <span>⚠️ 비교 분석을 위해 날짜를 최소 2개 이상 체크해 주세요.</span>
-        </div>
+        <div className="h-36 flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center"><span>⚠️ 비교 분석을 위해 날짜를 최소 2개 이상 체크해 주세요.</span></div>
       ) : renderedPoints.length === 0 || (!renderedPoints.some(p => p.tVal !== null) && !renderedPoints.some(p => p.pVal !== null)) ? (
-        <div className="h-36 flex items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center">
-          <span>선택한 항목 [{selectedXField}]에 등록된 온도/pH 결과값이 없습니다.</span>
-        </div>
+        <div className="h-36 flex items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center"><span>선택한 항목 [{selectedXField}]에 등록된 온도/pH 결과값이 없습니다.</span></div>
       ) : (
         <div>
           <div className="flex gap-4 text-[10px] font-black uppercase tracking-wider mb-2 justify-end">
@@ -632,16 +630,11 @@ function HistoryChart({ logs, isPreFerment }) {
           </div>
           <div className="relative w-full overflow-hidden">
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
-              {/* 그리드 기준 수평 보조선 */}
               <line x1={padding} y1={padding} x2={width-padding} y2={padding} stroke="#f3f4f6" strokeDasharray="3" />
               <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="#f3f4f6" strokeDasharray="3" />
               <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#e5e7eb" />
-
-              {/* 트렌드 커브 패스 추출 */}
               {tempPath && <path d={tempPath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
               {phPath && <path d={phPath} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-
-              {/* 각 교차 데이터 노드 텍스트 마킹 */}
               {renderedPoints.map((p, i) => (
                 <g key={i}>
                   {p.yTemp !== null && (
@@ -656,10 +649,7 @@ function HistoryChart({ logs, isPreFerment }) {
                       <text x={p.x} y={p.yPh + 12} textAnchor="middle" className="text-[9px] font-mono font-bold fill-purple-700">{p.pVal}</text>
                     </>
                   )}
-                  {/* 하단 시간 타임라인 라벨 */}
-                  <text x={p.x} y={height - 6} textAnchor="middle" className="text-[8px] font-bold fill-gray-400 font-mono">
-                    {p.date.split('-').slice(1).join('/')}
-                  </text>
+                  <text x={p.x} y={height - 6} textAnchor="middle" className="text-[8px] font-bold fill-gray-400 font-mono">{p.date.split('-').slice(1).join('/')}</text>
                 </g>
               ))}
             </svg>
@@ -676,6 +666,12 @@ function TempPhDB({ tempLogs, setTempLogs }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedProduct, setExpandedProduct] = useState(null);
 
+  // 인라인 인플레이스(In-place) 텍스트 수정을 위한 고유 상태 관리 컨텍스트
+  const [inlineEditId, setInlineEditId] = useState(null);
+  const [inlineData, setInlineData] = useState({});
+  const [inlineMemo, setInlineMemo] = useState("");
+  const [inlineType, setInlineType] = useState("");
+
   const groupedLogs = useMemo(() => {
     const groups = {};
     const filtered = tempLogs.filter(log => log.productName.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -685,6 +681,31 @@ function TempPhDB({ tempLogs, setTempLogs }) {
     });
     return groups;
   }, [tempLogs, searchTerm]);
+
+  // 히스토리 내 특정 카드 활성화 트리거
+  const startInlineEdit = (log) => {
+    setInlineEditId(log.id);
+    setInlineData(log.data || {});
+    setInlineMemo(log.memo || "");
+    setInlineType(log.type);
+  };
+
+  const saveInlineEdit = (logId) => {
+    const updated = tempLogs.map(l => {
+      if (l.id === logId) {
+        return {
+          ...l,
+          type: inlineType,
+          data: inlineData,
+          memo: inlineMemo,
+          timestamp: inlineData["날짜"]?.t || l.timestamp
+        };
+      }
+      return l;
+    });
+    setTempLogs(updated);
+    setInlineEditId(null);
+  };
 
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
@@ -718,7 +739,6 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                 <div className="px-5 pb-5 bg-[#fcfcfb]">
                   <div className="pt-4">
                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Trend Chart (커스텀 데이터 축 매핑)</div>
-                    {/* 차트 컴포넌트에 사전반죽 여부를 주입하여 알맞은 필드 선택지 제공 */}
                     <HistoryChart logs={logs} isPreFerment={isPreFerment} />
                   </div>
 
@@ -727,26 +747,69 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {dateLogs.map(log => {
                           const activeItems = log.type === "사전반죽 기록" ? pfItems : normalItems;
+                          const isEditingNow = inlineEditId === log.id;
+
                           return (
-                            <div key={log.id} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative">
-                              <div className="mb-4 flex justify-between">
-                                <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
-                                <button onClick={() => confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id))} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
-                              </div>
-                              <div className="space-y-1">
-                                {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].h || log.data[item].v) ? (
-                                  <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
-                                    <span className="font-bold text-gray-400 uppercase">{item}</span>
-                                    <span className="font-mono text-black">
-                                      {log.data[item].t}{log.data[item].t && item !== "날짜" ? "°" : ""}
-                                      {log.data[item].p ? ` / ${log.data[item].p}pH` : ""}
-                                      {log.data[item].h ? ` / ${log.data[item].h}m` : ""}
-                                      {log.data[item].v ? ` / ${log.data[item].v}` : ""}
-                                    </span>
+                            <div key={log.id} className={`bg-white p-5 rounded-xl border shadow-sm relative transition-all ${isEditingNow ? "border-black ring-1 ring-black/10" : "border-gray-100"}`}>
+                              
+                              {isEditingNow ? (
+                                /* 🔄 인라인 수정 활성 상태 레이아웃 */
+                                <div className="space-y-3">
+                                  <div className="flex justify-between items-center mb-2">
+                                    {!isPreFerment ? (
+                                      <select value={inlineType} onChange={(e) => setInlineType(e.target.value)} className="bg-transparent font-black text-[10px] uppercase border-b border-black outline-none font-sans">
+                                        <option>1차 저온</option><option>2차 저온</option>
+                                      </select>
+                                    ) : <span className="text-[9px] font-black text-gray-400 uppercase">Pre-Ferment</span>}
+                                    <div className="flex gap-2">
+                                      <button onClick={() => setInlineEditId(null)} className="text-[10px] font-bold text-gray-400 uppercase underline">Cancel</button>
+                                      <button onClick={() => saveInlineEdit(log.id)} className="text-[10px] font-black text-black uppercase underline">Save</button>
+                                    </div>
                                   </div>
-                                ) : null)}
-                              </div>
-                              {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] font-medium text-gray-500 whitespace-pre-wrap">{log.memo}</div>}
+                                  <div className="space-y-1 max-h-[220px] overflow-y-auto pr-1 no-scrollbar">
+                                    {activeItems.map(item => (
+                                      <div key={item} className="grid grid-cols-[1fr_100px] gap-2 items-center border-b border-black/5 pb-1 text-[11px]">
+                                        <span className="font-bold uppercase text-gray-400">{item}</span>
+                                        {item === "날짜" ? (
+                                          <input type="date" value={inlineData["날짜"]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { t: e.target.value } })} />
+                                        ) : isPreFerment && (item === "사용시점" || item === "정점" || item === "결과") ? (
+                                          <input placeholder="pH/°C" type="text" value={inlineData[item]?.p || inlineData[item]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], p: e.target.value, t: e.target.value } })} />
+                                        ) : (
+                                          <div className="flex gap-1">
+                                            <input placeholder="°" type="text" value={inlineData[item]?.t || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], t: e.target.value } })} />
+                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], p: e.target.value } })} />
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <textarea value={inlineMemo} onChange={(e) => setInlineMemo(e.target.value)} className="w-full bg-gray-50 border border-none rounded-lg p-2 text-[10px] leading-4 resize-none h-14 outline-none" placeholder="Memo..." />
+                                </div>
+                              ) : (
+                                /* 👁️ 일반 뷰 상태 레이아웃 (클릭 시 수정 모드로 진입) */
+                                <div onClick={() => startInlineEdit(log)} className="cursor-pointer group">
+                                  <div className="absolute top-2 right-2 text-[8px] font-black text-gray-200 group-hover:text-black uppercase tracking-tighter transition-colors">Edit ✏️</div>
+                                  <div className="mb-4 flex justify-between">
+                                    <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
+                                    <button onClick={(e) => { e.stopPropagation(); confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id)); }} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].h || log.data[item].v) ? (
+                                      <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
+                                        <span className="font-bold text-gray-400 uppercase">{item}</span>
+                                        <span className="font-mono text-black">
+                                          {log.data[item].t}{log.data[item].t && item !== "날짜" ? "°" : ""}
+                                          {log.data[item].p ? ` / ${log.data[item].p}pH` : ""}
+                                          {log.data[item].h ? ` / ${log.data[item].h}m` : ""}
+                                          {log.data[item].v ? ` / ${log.data[item].v}` : ""}
+                                        </span>
+                                      </div>
+                                    ) : null)}
+                                  </div>
+                                  {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] font-medium text-gray-500 whitespace-pre-wrap">{log.memo}</div>}
+                                </div>
+                              )}
+
                             </div>
                           );
                         })}
