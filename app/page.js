@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 
 export default function Home() {
   const [view, setView] = useState("calc"); 
@@ -8,18 +8,28 @@ export default function Home() {
   const [tempLogs, setTempLogs] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // 로컬스토리지 로드
   useEffect(() => {
-    const savedRecipes = localStorage.getItem("bakery_recipes");
-    const savedTempLogs = localStorage.getItem("bakery_temp_ph");
-    if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
-    if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
+    try {
+      const savedRecipes = localStorage.getItem("bakery_recipes");
+      const savedTempLogs = localStorage.getItem("bakery_temp_ph");
+      if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
+      if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
+    } catch (e) {
+      console.error("로컬스토리지 데이터를 읽는 중 오류가 발생했습니다.", e);
+    }
     setIsLoaded(true);
   }, []);
 
+  // 로컬스토리지 저장
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem("bakery_recipes", JSON.stringify(recipes));
-      localStorage.setItem("bakery_temp_ph", JSON.stringify(tempLogs));
+      try {
+        localStorage.setItem("bakery_recipes", JSON.stringify(recipes));
+        localStorage.setItem("bakery_temp_ph", JSON.stringify(tempLogs));
+      } catch (e) {
+        console.error("로컬스토리지 데이터 저장 중 오류가 발생했습니다.", e);
+      }
     }
   }, [recipes, tempLogs, isLoaded]);
 
@@ -59,33 +69,31 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   const [doughMultiplier, setDoughMultiplier] = useState("1");
   const [flourMultiplier, setFlourMultiplier] = useState("1");
 
-  const filteredRecipes = recipes.filter(r => r.category === category);
-  const currentRecipe = recipes.find(r => r.id === Number(selectedRecipeId));
+  const filteredRecipes = useMemo(() => recipes.filter(r => r.category === category), [recipes, category]);
+  const currentRecipe = useMemo(() => recipes.find(r => r.id === Number(selectedRecipeId)), [recipes, selectedRecipeId]);
   
   const preFerments = useMemo(() => {
     return currentRecipe ? currentRecipe.ingredients.filter(ing => ing.type === "사전반죽") : [];
   }, [currentRecipe]);
 
-  const handlePercentChange = (ingName, value) => {
-    if (!currentRecipe) return;
+  const handlePercentChange = useCallback((ingName, value) => {
+    if (!selectedRecipeId) return;
     const cleanValue = value.replace(',', '.');
-    const updatedRecipes = recipes.map(recipe => {
-      if (recipe.id === currentRecipe.id) {
-        const updatedIngredients = recipe.ingredients.map(ing => {
-          if (ing.name === ingName) return { ...ing, percent: cleanValue };
-          return ing;
-        });
-        return { ...recipe, ingredients: updatedIngredients };
+    setRecipes(prev => prev.map(recipe => {
+      if (recipe.id === Number(selectedRecipeId)) {
+        return {
+          ...recipe,
+          ingredients: recipe.ingredients.map(ing => ing.name === ingName ? { ...ing, percent: cleanValue } : ing)
+        };
       }
       return recipe;
-    });
-    setRecipes(updatedRecipes);
+    }));
     setDoughMultiplier("");
     setFlourMultiplier("");
-  };
+  }, [selectedRecipeId, setRecipes]);
 
   const totals = useMemo(() => {
-    if (!currentRecipe) return { totalPercent: 0, totalSaltPercent: 0, finalYield: 0, totalCost: 0, baseTotalDough: 0 };
+    if (!currentRecipe) return { totalPercent: 0, totalSaltPercent: "0.00", finalYield: 0, totalCost: 0, baseTotalDough: 0 };
     let totalFlourPct = 0; 
     let totalWaterPct = 0; 
     let totalSaltPct = 0; 
@@ -108,15 +116,24 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
 
     const realSaltPercent = totalFlourPct > 0 ? (totalSaltPct / totalFlourPct) * 100 : 0;
     const finalYield = totalFlourPct > 0 ? (totalWaterPct / totalFlourPct) * 100 : 0;
+    
+    const parsedFlourWeight = parseFloat(String(flourWeight).replace(',', '.')) || 0;
     const cost = currentRecipe.ingredients.reduce((sum, ing) => {
         const pctVal = parseFloat(String(ing.percent).replace(',', '.')) || 0;
-        const weight = flourWeight ? (parseFloat(String(flourWeight).replace(',', '.')) * (pctVal / 100)) : 0;
-        return sum + (weight * (parseFloat(String(ing.cost).replace(',', '.')) || 0));
+        const weight = parsedFlourWeight * (pctVal / 100);
+        const unitCost = parseFloat(String(ing.cost).replace(',', '.')) || 0;
+        return sum + (weight * unitCost);
     }, 0);
 
     const baseTotalDough = 1000 * (rawTotalPercent / 100);
 
-    return { totalPercent: rawTotalPercent, totalSaltPercent: realSaltPercent.toFixed(2), finalYield, totalCost: cost, baseTotalDough };
+    return { 
+      totalPercent: rawTotalPercent, 
+      totalSaltPercent: isNaN(realSaltPercent) ? "0.00" : realSaltPercent.toFixed(2), 
+      finalYield: isNaN(finalYield) ? 0 : finalYield, 
+      totalCost: isNaN(cost) ? 0 : cost, 
+      baseTotalDough 
+    };
   }, [currentRecipe, pfYields, flourWeight]);
 
   const handleDoughMultiplierChange = (value) => {
@@ -230,7 +247,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                   setDoughMultiplier(""); 
                   setFlourMultiplier(""); 
                   if (!val || totals.totalPercent === 0) setFlourWeight("");
-                  else setFlourWeight(Math.round(parseFloat(val) / (totals.totalPercent / 100)));
+                  else setFlourWeight(Math.round(parseFloat(val) / (totals.totalPercent / 100)) || "");
                 }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
               </InputField>
               {currentRecipe && (
@@ -252,7 +269,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                   setDoughMultiplier(""); 
                   setFlourMultiplier(""); 
                   if (!val) setTotalDough("");
-                  else setTotalDough(Math.round(parseFloat(val) * (totals.totalPercent / 100)));
+                  else setTotalDough(Math.round(parseFloat(val) * (totals.totalPercent / 100)) || "");
                 }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
               </InputField>
               {currentRecipe && (
@@ -275,29 +292,34 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 </tr>
               </thead>
               <tbody>
-                {currentRecipe ? currentRecipe.ingredients.map((ing, idx) => (
-                  <tr key={idx} className="border-b border-gray-200">
-                    <td className="p-2">
-                        <div className="text-[9px] text-gray-400 font-bold uppercase">{ing.type}</div>
-                        <div className="font-black text-sm">{ing.name}</div>
-                    </td>
-                    <td className="p-2 text-right">
-                      <div className="flex items-center justify-end gap-0.5">
-                        <input 
-                          type="text" inputMode="decimal" value={ing.percent}
-                          size={String(ing.percent).length || 1}
-                          onChange={(e) => handlePercentChange(ing.name, e.target.value)}
-                          style={{ minWidth: '1.5rem' }}
-                          className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto print:border-none"
-                        />
-                        <span className="font-mono text-xs font-bold text-gray-400">%</span>
-                      </div>
-                    </td>
-                    <td className="p-2 text-right font-bold text-gray-400 text-sm">
-                      {flourWeight ? Math.round((parseFloat(String(flourWeight).replace(',','.')) || 0) * ((parseFloat(String(ing.percent).replace(',','.')) || 0) / 100)).toLocaleString() : 0}g
-                    </td>
-                  </tr>
-                )) : <tr><td colSpan="3" className="p-12 text-center text-gray-400 text-xs tracking-widest uppercase">Select a recipe</td></tr>}
+                {currentRecipe ? currentRecipe.ingredients.map((ing, idx) => {
+                  const parsedFlour = parseFloat(String(flourWeight).replace(',','.')) || 0;
+                  const parsedPercent = parseFloat(String(ing.percent).replace(',','.')) || 0;
+                  const computedGrams = Math.round(parsedFlour * (parsedPercent / 100));
+                  return (
+                    <tr key={idx} className="border-b border-gray-200">
+                      <td className="p-2">
+                          <div className="text-[9px] text-gray-400 font-bold uppercase">{ing.type}</div>
+                          <div className="font-black text-sm">{ing.name}</div>
+                      </td>
+                      <td className="p-2 text-right">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <input 
+                            type="text" inputMode="decimal" value={ing.percent}
+                            size={String(ing.percent).length || 1}
+                            onChange={(e) => handlePercentChange(ing.name, e.target.value)}
+                            style={{ minWidth: '1.5rem' }}
+                            className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto print:border-none"
+                          />
+                          <span className="font-mono text-xs font-bold text-gray-400">%</span>
+                        </div>
+                      </td>
+                      <td className="p-2 text-right font-bold text-gray-400 text-sm">
+                        {(computedGrams || 0).toLocaleString()}g
+                      </td>
+                    </tr>
+                  );
+                }) : <tr><td colSpan="3" className="p-12 text-center text-gray-400 text-xs tracking-widest uppercase">Select a recipe</td></tr>}
               </tbody>
             </table>
           </div>
@@ -309,7 +331,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
               <SummaryCard title="SUMMARY">
                 <SummaryRow label="사전반죽 포함 수율" value={`${totals.finalYield.toFixed(1)}%`} />
                 <SummaryRow label="사전반죽 포함 소금" value={`${totals.totalSaltPercent}%`} />
-                <SummaryRow label="총 반죽량" value={`${Number(String(totalDough).replace(',', '.')).toLocaleString()}g`} />
+                <SummaryRow label="총 반죽량" value={`${(Math.round(parseFloat(String(totalDough).replace(',', '.'))) || 0).toLocaleString()}g`} />
                 <SummaryRow label="총 원가" value={`₩${Math.round(totals.totalCost).toLocaleString()}`} />
               </SummaryCard>
 
@@ -366,7 +388,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
     if (!currentProductName) return;
     
     if (editingLogId) {
-      const updatedLogs = tempLogs.map(log => {
+      setTempLogs(prev => prev.map(log => {
         if (log.id === editingLogId) {
           return {
             ...log,
@@ -377,8 +399,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
           };
         }
         return log;
-      });
-      setTempLogs(updatedLogs);
+      }));
       alert("데이터가 수정되었습니다.");
     } else {
       const now = new Date();
@@ -391,7 +412,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
         data: currentEntry,
         memo: memo 
       };
-      setTempLogs([newLog, ...tempLogs]);
+      setTempLogs(prev => [newLog, ...prev]);
       alert("데이터베이스에 저장되었습니다.");
     }
 
@@ -438,20 +459,20 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                   ) : isPreFermentMode && (item === "사용시점" || item === "정점") ? (
                     <div className="col-span-2 grid grid-cols-3 gap-1">
                       <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value.replace(',', '.') } })} />
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
                       <input placeholder="Min" type="text" value={currentEntry[item]?.h || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], h: e.target.value } })} />
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), h: e.target.value } })} />
                       <input placeholder="Vol" type="text" value={currentEntry[item]?.v || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], v: e.target.value } })} />
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), v: e.target.value } })} />
                     </div>
                   ) : isPreFermentMode && item === "결과" ? (
                     <div className="col-span-2 grid grid-cols-3 gap-1">
                       <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value.replace(',', '.') } })} />
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), t: e.target.value.replace(',', '.') } })} />
                       <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value.replace(',', '.') } })} />
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
                       <input placeholder="Vol" type="text" value={currentEntry[item]?.v || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], v: e.target.value } })} />
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), v: e.target.value } })} />
                     </div>
                   ) : item === "밀" ? (
                     <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
@@ -459,9 +480,9 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                   ) : (
                     <>
                       <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], t: e.target.value.replace(',', '.') } })} />
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), t: e.target.value.replace(',', '.') } })} />
                       <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...currentEntry[item], p: e.target.value.replace(',', '.') } })} />
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
                     </>
                   )}
                 </div>
@@ -518,9 +539,9 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
 }
 
 function HistoryChart({ logs, isPreFerment }) {
-  const availableFields = isPreFerment 
+  const availableFields = useMemo(() => isPreFerment 
     ? ["르방", "수분", "밀", "결과", "사용시점", "정점"]
-    : ["르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
+    : ["르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"], [isPreFerment]);
 
   const [selectedXField, setSelectedXField] = useState("결과"); 
   const [selectedDates, setSelectedDates] = useState([]); 
@@ -536,7 +557,7 @@ function HistoryChart({ logs, isPreFerment }) {
 
   useEffect(() => {
     if (uniqueDates.length > 0) {
-      setSelectedDates(uniqueDates.slice(-5));
+      setSelectedDates(uniqueDates.slice(-2));
     }
   }, [uniqueDates]);
 
@@ -544,7 +565,7 @@ function HistoryChart({ logs, isPreFerment }) {
     if (selectedDates.includes(date)) {
       setSelectedDates(selectedDates.filter(d => d !== date));
     } else {
-      setSelectedDates([...selectedDates, date]);
+      setSelectedDates(prev => [...prev, date].slice(-2)); // 최대 2개만 유지되도록 제한 최적화
     }
   };
 
@@ -584,8 +605,8 @@ function HistoryChart({ logs, isPreFerment }) {
     });
   }, [points, scaleBounds]);
 
-  const tempPath = renderedPoints.filter(p => p.yTemp !== null).map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yTemp}`).join(' ');
-  const phPath = renderedPoints.filter(p => p.yPh !== null).map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yPh}`).join(' ');
+  const tempPath = useMemo(() => renderedPoints.filter(p => p.yTemp !== null).map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yTemp}`).join(' '), [renderedPoints]);
+  const phPath = useMemo(() => renderedPoints.filter(p => p.yPh !== null).map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yPh}`).join(' '), [renderedPoints]);
 
   return (
     <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-100 shadow-sm mb-6 space-y-4">
@@ -685,7 +706,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
   };
 
   const saveInlineEdit = (logId) => {
-    const updated = tempLogs.map(l => {
+    setTempLogs(prev => prev.map(l => {
       if (l.id === logId) {
         return {
           ...l,
@@ -696,8 +717,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
         };
       }
       return l;
-    });
-    setTempLogs(updated);
+    }));
     setInlineEditId(null);
   };
 
@@ -767,22 +787,22 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                                           <input type="date" value={inlineData["날짜"]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px] border border-transparent" onChange={(e) => setInlineData({ ...inlineData, [item]: { t: e.target.value } })} />
                                         ) : log.type === "사전반죽 기록" && (item === "사용시점" || item === "정점") ? (
                                           <div className="grid grid-cols-3 gap-1">
-                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], p: e.target.value.replace(',', '.') } })} />
-                                            <input placeholder="Min" type="text" value={inlineData[item]?.h || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], h: e.target.value } })} />
-                                            <input placeholder="Vol" type="text" value={inlineData[item]?.v || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], v: e.target.value } })} />
+                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), p: e.target.value.replace(',', '.') } })} />
+                                            <input placeholder="Min" type="text" value={inlineData[item]?.h || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), h: e.target.value } })} />
+                                            <input placeholder="Vol" type="text" value={inlineData[item]?.v || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), v: e.target.value } })} />
                                           </div>
                                         ) : log.type === "사전반죽 기록" && item === "결과" ? (
                                           <div className="grid grid-cols-3 gap-1">
-                                            <input placeholder="°C" type="text" value={inlineData[item]?.t || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], t: e.target.value.replace(',', '.') } })} />
-                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], p: e.target.value.replace(',', '.') } })} />
-                                            <input placeholder="Vol" type="text" value={inlineData[item]?.v || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], v: e.target.value } })} />
+                                            <input placeholder="°C" type="text" value={inlineData[item]?.t || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), t: e.target.value.replace(',', '.') } })} />
+                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), p: e.target.value.replace(',', '.') } })} />
+                                            <input placeholder="Vol" type="text" value={inlineData[item]?.v || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), v: e.target.value } })} />
                                           </div>
                                         ) : item === "밀" ? (
                                           <input placeholder="°C" type="text" value={inlineData[item]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { t: e.target.value.replace(',', '.') } })} />
                                         ) : (
                                           <div className="flex gap-1">
-                                            <input placeholder="°" type="text" value={inlineData[item]?.t || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], t: e.target.value.replace(',', '.') } })} />
-                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...inlineData[item], p: e.target.value.replace(',', '.') } })} />
+                                            <input placeholder="°" type="text" value={inlineData[item]?.t || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), t: e.target.value.replace(',', '.') } })} />
+                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), p: e.target.value.replace(',', '.') } })} />
                                           </div>
                                         )}
                                       </div>
@@ -795,7 +815,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                                   <div className="absolute top-2 right-2 text-[8px] font-black text-gray-200 group-hover:text-black uppercase tracking-tighter transition-colors">Edit ✏️</div>
                                   <div className="mb-4 flex justify-between">
                                     <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
-                                    <button onClick={(e) => { e.stopPropagation(); confirm("삭제하시겠습니까?") && setTempLogs(tempLogs.filter(l => l.id !== log.id)); }} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
+                                    <button onClick={(e) => { e.stopPropagation(); confirm("삭제하시겠습니까?") && setTempLogs(prev => prev.filter(l => l.id !== log.id)); }} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
                                   </div>
                                   <div className="space-y-1">
                                     {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].h || log.data[item].v) ? (
@@ -834,7 +854,11 @@ function RecipeDB({ recipes, setRecipes }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingRecipe, setEditingRecipe] = useState(null);
-  const displayedRecipes = recipes.filter(r => r.productName.toLowerCase().includes(searchTerm.toLowerCase()));
+  
+  const displayedRecipes = useMemo(() => {
+    return recipes.filter(r => r.productName.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [recipes, searchTerm]);
+
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-6 gap-4">
@@ -851,13 +875,13 @@ function RecipeDB({ recipes, setRecipes }) {
               <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{recipe.category}</div>
               <div className="text-xl font-black tracking-tighter uppercase">{recipe.productName}</div>
             </div>
-            <button onClick={(e) => { e.stopPropagation(); if (confirm("삭제하시겠습니까?")) setRecipes(recipes.filter(r => r.id !== recipe.id)); }} className="text-gray-300 hover:text-red-500">✕</button>
+            <button onClick={(e) => { e.stopPropagation(); if (confirm("삭제하시겠습니까?")) setRecipes(prev => prev.filter(r => r.id !== recipe.id)); }} className="text-gray-300 hover:text-red-500">✕</button>
           </div>
         ))}
       </div>
       {isModalOpen && <RecipeModal initialData={editingRecipe} onSave={(data) => {
-        if (editingRecipe) setRecipes(recipes.map(r => r.id === editingRecipe.id ? { ...data, id: r.id } : r));
-        else setRecipes([...recipes, { ...data, id: Date.now() }]);
+        if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id } : r));
+        else setRecipes(prev => [...prev, { ...data, id: Date.now() }]);
         setIsModalOpen(false);
       }} onClose={() => setIsModalOpen(false)} />}
     </main>
@@ -868,7 +892,9 @@ function RecipeModal({ initialData, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
+  
   const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => idx === i ? { ...ing, [f]: (f === "percent" || f === "cost") ? v.replace(',', '.') : v } : ing));
+  
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
       <div className="bg-[#f7f6f3] w-full max-w-4xl rounded-[2rem] p-6 md:p-12 shadow-2xl max-h-[90vh] overflow-y-auto relative">
