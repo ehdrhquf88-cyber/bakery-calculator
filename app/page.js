@@ -197,7 +197,9 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { size: auto; margin: 15mm; }
-          body { background: white; color: black; }
+          body { background: white; color: black !important; }
+          input, select { color: black !important; -webkit-appearance: none; -moz-appearance: none; appearance: none; border: none !important; box-shadow: none !important; background: transparent !important; }
+          .print-black-text { color: black !important; }
         }
       `}} />
 
@@ -218,7 +220,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
             )}
           </div>
           
-          <div className="grid grid-cols-2 gap-4 mb-8 text-sm print:mb-4 print:gap-2">
+          <div className="grid grid-cols-2 gap-4 mb-8 text-sm print:mb-4 print:gap-4 print:grid-cols-2">
             <InputField label="제품 분류">
               <select value={category} onChange={(e) => { setCategory(e.target.value); setSelectedRecipeId(""); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
                 <option value="하드계열">하드계열</option>
@@ -246,11 +248,11 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
               </InputField>
               {currentRecipe && (
-                <div className="flex items-center gap-1.5 mt-2 print:hidden">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">총반죽 기준:</span>
-                  <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
-                    <input type="text" inputMode="decimal" value={doughMultiplier} onChange={(e) => handleDoughMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5" />
-                    <span className="text-[10px] font-bold text-gray-400 px-0.5">배</span>
+                <div className="flex items-center gap-1.5 mt-2 print:flex print:mt-1">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight print:text-black">총반죽 기준:</span>
+                  <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors print:border-none">
+                    <input type="text" inputMode="decimal" value={doughMultiplier} onChange={(e) => handleDoughMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5 print:text-left print:w-auto" />
+                    <span className="text-[10px] font-bold text-gray-400 px-0.5 print:text-black">배</span>
                   </div>
                 </div>
               )}
@@ -268,11 +270,11 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
               </InputField>
               {currentRecipe && (
-                <div className="flex items-center gap-1.5 mt-2 print:hidden">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">밀가루 기준:</span>
-                  <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
-                    <input type="text" inputMode="decimal" value={flourMultiplier} onChange={(e) => handleFlourMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5" />
-                    <span className="text-[10px] font-bold text-gray-400 px-0.5">배</span>
+                <div className="flex items-center gap-1.5 mt-2 print:flex print:mt-1">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight print:text-black">밀가루 기준:</span>
+                  <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors print:border-none">
+                    <input type="text" inputMode="decimal" value={flourMultiplier} onChange={(e) => handleFlourMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5 print:text-left print:w-auto" />
+                    <span className="text-[10px] font-bold text-gray-400 px-0.5 print:text-black">배</span>
                   </div>
                 </div>
               )}
@@ -282,7 +284,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
           <div className="overflow-x-auto">
             <table className="w-full mt-4 min-w-[300px] print:mt-2">
               <thead>
-                <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest">
+                <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest print:text-black">
                   <th className="p-2 text-left">재료</th><th className="p-2 text-right">% (수정)</th><th className="p-2 text-right w-24">g</th>
                 </tr>
               </thead>
@@ -294,7 +296,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                   return (
                     <tr key={idx} className="border-b border-gray-200">
                       <td className="p-2">
-                          <div className="text-[9px] text-gray-400 font-bold uppercase">{ing.type}</div>
+                          <div className="text-[9px] text-gray-400 font-bold uppercase print:text-black">{ing.type}</div>
                           <div className="font-black text-sm">{ing.name}</div>
                       </td>
                       <td className="p-2 text-right">
@@ -302,13 +304,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                           <input 
                             type="text" inputMode="decimal" value={ing.percent}
                             onChange={(e) => handlePercentChange(ing.name, e.target.value)}
-                            style={{ minWidth: '2.5rem', width: `${Math.max(2.5, String(ing.percent).length * 0.6)}rem` }}
-                            className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto print:border-none"
+                            className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto print:border-none w-16 pr-1"
                           />
-                          <span className="font-mono text-xs font-bold text-gray-400">%</span>
+                          <span className="font-mono text-xs font-bold text-gray-400 print:text-black">%</span>
                         </div>
                       </td>
-                      <td className="p-2 text-right font-bold text-gray-400 text-sm">
+                      <td className="p-2 text-right font-bold text-black text-sm print-black-text">
                           {(computedGrams || 0).toLocaleString()}g
                       </td>
                     </tr>
@@ -336,8 +337,8 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                       <div key={pf.name} className="flex justify-between items-center border-b border-black/5 pb-2">
                         <span className="text-sm font-bold">{pf.name}</span>
                         <div className="flex items-center gap-2">
-                          <input type="text" inputMode="decimal" value={pfYields[pf.name] || ""} onChange={(e) => setPfYields({ ...pfYields, [pf.name]: e.target.value.replace(',', '.') })} className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-right font-mono text-xs outline-none" placeholder="100" />
-                          <span className="text-[10px] font-bold text-gray-400">%</span>
+                          <input type="text" inputMode="decimal" value={pfYields[pf.name] || ""} onChange={(e) => setPfYields({ ...pfYields, [pf.name]: e.target.value.replace(',', '.') })} className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-right font-mono text-xs outline-none print:border-none print:bg-transparent" placeholder="100" />
+                          <span className="text-[10px] font-bold text-gray-400 % print:text-black">%</span>
                         </div>
                       </div>
                     ))}
@@ -911,8 +912,8 @@ function RecipeModal({ initialData, onSave, onClose }) {
             <div key={i} className="grid grid-cols-2 md:grid-cols-[120px_1fr_80px_100px_40px] gap-2 md:gap-4 items-center bg-white p-3 md:p-4 rounded-xl shadow-sm">
               <select value={ing.type} onChange={e => updateIng(i, "type", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold"><option>밀</option><option>수분</option><option>사전반죽</option><option>소금</option><option>기타</option></select>
               <input value={ing.name} onChange={e => updateIng(i, "name", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold" placeholder="Ingredient Name" />
-              <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="%" type="text" inputMode="decimal" />
-              <input value={ing.cost} onChange={e => updateIng(i, "cost", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="Cost" type="text" inputMode="decimal" />
+              <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold w-full" placeholder="%" type="text" inputMode="decimal" />
+              <input value={ing.cost} onChange={e => updateIng(i, "cost", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold w-full" placeholder="Cost" type="text" inputMode="decimal" />
               <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))} className="text-red-300 font-bold hover:text-red-500 font-sans text-xs">Delete</button>
             </div>
           ))}
