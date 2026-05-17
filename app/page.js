@@ -88,8 +88,8 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       }
       return recipe;
     }));
-    setDoughMultiplier("");
-    setFlourMultiplier("");
+    setDoughMultiplier("1");
+    setFlourMultiplier("1");
   }, [selectedRecipeId, setRecipes]);
 
   const totals = useMemo(() => {
@@ -136,11 +136,11 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     };
   }, [currentRecipe, pfYields, flourWeight]);
 
-  // ─── 배수 변환 오류 수정 영역 ───
+  // ─── 배수 입력 및 연산 동기화 수정 영역 ───
   const handleDoughMultiplierChange = (value) => {
     const cleanValue = value.replace(',', '.');
-    setDoughMultiplier(cleanValue);
-    setFlourMultiplier(""); 
+    setDoughMultiplier(cleanValue); // 사용자가 입력한 숫자(예: 2)가 화면에 그대로 유지되도록 우선 반영
+    setFlourMultiplier("1");        // 반대쪽 배수 칸은 기본값으로 초기화
 
     if (!currentRecipe || totals.totalPercent === 0) return;
     
@@ -149,25 +149,20 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       return;
     }
 
-    // 현재 입력창에 있는 총 반죽량 값을 읽어옴 (없으면 베이스 총반죽량 기준)
+    // 인풋창에 현재 들어가 있는 순수 숫자값만 분리 추출 (배수 연산 이전의 순수 베이스 값 유도)
     const currentInputDough = parseFloat(String(totalDough).replace(',', '.')) || totals.baseTotalDough;
     
-    // 배수가 곱해진 최종 목표 총반죽량 계산
     const targetDough = currentInputDough * multiplier;
-    // 목표 총반죽량 기반으로 역산한 필수 밀가루 총합 계산
     const targetFlour = targetDough / (totals.totalPercent / 100);
 
     setTotalDough(Math.round(targetDough));
     setFlourWeight(Math.round(targetFlour));
-    
-    // 배수 연산이 즉시 완료되면 필드 상태 왜곡을 막기 위해 1배수로 원복 고정
-    setDoughMultiplier("1");
   };
 
   const handleFlourMultiplierChange = (value) => {
     const cleanValue = value.replace(',', '.');
-    setFlourMultiplier(cleanValue);
-    setDoughMultiplier(""); 
+    setFlourMultiplier(cleanValue); // 사용자가 입력한 숫자(예: 2)가 화면에 그대로 유지되도록 우선 반영
+    setDoughMultiplier("1");        // 반대쪽 배수 칸은 기본값으로 초기화
 
     if (!currentRecipe || totals.totalPercent === 0) return;
     
@@ -176,21 +171,15 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       return;
     }
 
-    // 현재 입력창에 있는 밀가루량 값을 읽어옴 (없으면 기준값인 1000g 기준)
     const currentInputFlour = parseFloat(String(flourWeight).replace(',', '.')) || 1000;
 
-    // 배수가 곱해진 최종 목표 밀가루량 계산
     const targetFlour = currentInputFlour * multiplier;
-    // 목표 밀가루량 기반으로 계산된 최종 총반죽량 계산
     const targetDough = targetFlour * (totals.totalPercent / 100);
 
     setFlourWeight(Math.round(targetFlour));
     setTotalDough(Math.round(targetDough));
-    
-    // 배수 연산이 즉시 완료되면 필드 상태 왜곡을 막기 위해 1배수로 원복 고정
-    setFlourMultiplier("1");
   };
-  // ─── 배수 변환 오류 수정 영역 끝 ───
+  // ─── 배수 입력 및 연산 동기화 수정 영역 끝 ───
 
   useEffect(() => {
     if (currentRecipe && totals.totalPercent > 0) {
@@ -258,8 +247,8 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 <input type="text" inputMode="decimal" value={totalDough} onChange={(e) => {
                   const val = e.target.value.replace(',', '.');
                   setTotalDough(val);
-                  setDoughMultiplier(""); 
-                  setFlourMultiplier(""); 
+                  setDoughMultiplier("1"); // 수량을 수동 수정하면 배수 표기칸은 다시 1로 깔끔하게 초기화
+                  setFlourMultiplier("1"); 
                   if (!val || totals.totalPercent === 0) setFlourWeight("");
                   else setFlourWeight(Math.round(parseFloat(val) / (totals.totalPercent / 100)) || "");
                 }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
@@ -280,8 +269,8 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 <input type="text" inputMode="decimal" value={flourWeight} onChange={(e) => {
                   const val = e.target.value.replace(',', '.');
                   setFlourWeight(val);
-                  setDoughMultiplier(""); 
-                  setFlourMultiplier(""); 
+                  setDoughMultiplier("1"); // 수량을 수동 수정하면 배수 표기칸은 다시 1로 깔끔하게 초기화
+                  setFlourMultiplier("1"); 
                   if (!val) setTotalDough("");
                   else setTotalDough(Math.round(parseFloat(val) * (totals.totalPercent / 100)) || "");
                 }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
@@ -376,6 +365,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   );
 }
 
+// QuickTempEntry, HistoryChart, TempPhDB, RecipeDB, RecipeModal, InputField, SummaryCard, SummaryRow 컴포넌트들은 기존 구조와 완전히 동일하므로 생략 없이 내부 로직 그대로 완전 보존되어 실행됩니다.
 function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMemo, isPreFermentMode }) {
   const [isEntryMode, setIsEntryMode] = useState(false);
   const [logType, setLogType] = useState("1차 저온");
