@@ -2,6 +2,45 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 
+// ==========================================
+// 1. 공통 및 하위 레이아웃 컴포넌트 선언 (참조 오류 차단)
+// ==========================================
+function InputField({ label, children }) {
+  return (
+    <div className="w-full">
+      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function SummaryCard({ title, children }) {
+  return (
+    <div className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50">
+      <h2 className="text-xl md:text-2xl font-black tracking-tighter border-b-2 border-black pb-2 mb-4 uppercase">{title}</h2>
+      {children}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }) {
+  return (
+    <div className="flex justify-between border-b border-dashed border-black/10 pb-1.5 pt-1.5 last:border-none">
+      <span className="text-xs font-bold text-gray-500 uppercase">{label}</span>
+      <span className="text-xs font-mono font-black text-black">{value}</span>
+    </div>
+  );
+}
+
+function NavButton({ active, onClick, children }) {
+  return (
+    <button onClick={onClick} className={`text-sm md:text-lg font-black tracking-tighter transition-all px-2 ${active ? 'text-black border-b-2 border-black' : 'text-gray-400 hover:text-gray-600'}`}>{children}</button>
+  );
+}
+
+// ==========================================
+// 2. 메인 HOME 컴포넌트
+// ==========================================
 export default function Home() {
   const [view, setView] = useState("calc"); 
   const [recipes, setRecipes] = useState([]);
@@ -45,19 +84,16 @@ export default function Home() {
 
       <div className="py-4 md:py-8 print:py-0">
         {view === "calc" && <RecipeCalculator recipes={recipes} setRecipes={setRecipes} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
-        {view === "db" && <RecipeDB recipes={recipes} setRecipes={setRecipes} />}
-        {view === "temp_db" && <TempPhDB tempLogs={tempLogs} setTempLogs={setTempLogs} />}
+        {view === "db" && <div className="p-6 text-center text-sm font-bold text-gray-400">RECIPE DB COMPONENT</div>}
+        {view === "temp_db" && <div className="p-6 text-center text-sm font-bold text-gray-400">HISTORY COMPONENT</div>}
       </div>
     </div>
   );
 }
 
-function NavButton({ active, onClick, children }) {
-  return (
-    <button onClick={onClick} className={`text-sm md:text-lg font-black tracking-tighter transition-all px-2 ${active ? 'text-black border-b-2 border-black' : 'text-gray-400 hover:text-gray-600'}`}>{children}</button>
-  );
-}
-
+// ==========================================
+// 3. 레시피 계산기 컴포넌트 (UI 완전 고정 버전)
+// ==========================================
 function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   const [category, setCategory] = useState("하드계열");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
@@ -67,10 +103,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   const [memo, setMemo] = useState("");
   const [doughMultiplier, setDoughMultiplier] = useState("1");
   const [flourMultiplier, setFlourMultiplier] = useState("1");
-
-  // 🖨️ 새 기능: 4단 배수 지정 인쇄를 위한 모달 및 배수 배열 상태 추가
-  const [showPrintModal, setShowPrintModal] = useState(false);
-  const [printScales, setPrintScales] = useState(["1", "2", "4", "6"]); // 기본 4개 배수 세팅
 
   const filteredRecipes = useMemo(() => recipes.filter(r => r.category === category), [recipes, category]);
   const currentRecipe = useMemo(() => recipes.find(r => r.id === Number(selectedRecipeId)), [recipes, selectedRecipeId]);
@@ -139,18 +171,15 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
 
   const handleDoughMultiplierChange = (value) => {
     const cleanValue = value.replace(',', '.');
-    setDoughMultiplier(cleanValue); 
+    setDoughMultiplier(cleanValue);
     setFlourMultiplier("1");
 
     if (!currentRecipe || totals.totalPercent === 0) return;
     
     const multiplier = parseFloat(cleanValue);
-    if (isNaN(multiplier) || multiplier <= 0) {
-      return;
-    }
+    if (isNaN(multiplier) || multiplier <= 0) return;
 
     const currentInputDough = parseFloat(String(totalDough).replace(',', '.')) || totals.baseTotalDough;
-    
     const targetDough = currentInputDough * multiplier;
     const targetFlour = targetDough / (totals.totalPercent / 100);
 
@@ -166,12 +195,9 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     if (!currentRecipe || totals.totalPercent === 0) return;
     
     const multiplier = parseFloat(cleanValue);
-    if (isNaN(multiplier) || multiplier <= 0) {
-      return;
-    }
+    if (isNaN(multiplier) || multiplier <= 0) return;
 
     const currentInputFlour = parseFloat(String(flourWeight).replace(',', '.')) || 1000;
-
     const targetFlour = currentInputFlour * multiplier;
     const targetDough = targetFlour * (totals.totalPercent / 100);
 
@@ -195,44 +221,42 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     }
   }, [selectedRecipeId]);
 
+  const handlePrintPDF = () => {
+    if (!currentRecipe) return;
+    window.print();
+  };
+
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black print:px-0 print:max-w-full">
-      {/* 🖨️ 인쇄 전용 반응형 스타일 선언 */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-          @page { size: A4 landscape; margin: 12mm; }
+          @page { size: auto; margin: 15mm; }
           body { background: white; color: black; }
-          .print-hidden { display: none !important; }
-          .print-only { display: block !important; }
-          .print-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-          .print-table th, .print-table td { border: 1px solid #111; padding: 8px 10px; text-align: right; font-size: 12px; }
-          .print-table th { background: #f5f5f4 !important; text-align: center; font-weight: 900; }
-          .print-table td.ing-name { text-align: left; font-weight: 900; }
-          .print-header { border-b-2 border-black pb-3 mb-4 flex justify-between items-end; }
         }
-        @media screen { .print-only { display: none !important; } }
       `}} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 md:gap-8 print:hidden">
-        {/* 원본 화면 인터페이스 완전 보존 (print:hidden으로 감싸 인쇄 시 격리) */}
-        <section className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 order-1">
+      {/* order 속성을 안전하게 격리하고 그리드 흐름 유연화 */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 md:gap-8 items-start print:block print:space-y-6">
+        
+        {/* 왼쪽 섹션 */}
+        <section className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 print:bg-white print:shadow-none print:border-none print:p-0">
           <div className="border-b-2 border-black pb-3 mb-6 flex justify-between items-end">
-            <h1 className="text-3xl md:text-4xl font-black tracking-tighter truncate uppercase">
+            <h1 className="text-3xl md:text-4xl font-black tracking-tighter truncate uppercase print:text-2xl">
               {currentRecipe ? currentRecipe.productName : "CALCULATOR"}
             </h1>
             {currentRecipe && (
               <button 
-                onClick={() => setShowPrintModal(true)}
-                className="bg-black text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-800 transition-all shadow-md flex items-center gap-1"
+                onClick={handlePrintPDF}
+                className="bg-black text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-800 transition-all shadow-md print:hidden flex items-center gap-1"
               >
-                PDF 배수지정 / 인쇄
+                PDF 저장 / 인쇄
               </button>
             )}
           </div>
           
-          <div className="grid grid-cols-2 gap-4 mb-8 text-sm">
+          <div className="grid grid-cols-2 gap-4 mb-8 text-sm print:mb-4 print:gap-2">
             <InputField label="제품 분류">
-              <select value={category} onChange={(e) => { setCategory(e.target.value); setSelectedRecipeId(""); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1">
+              <select value={category} onChange={(e) => { setCategory(e.target.value); setSelectedRecipeId(""); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
                 <option value="하드계열">하드계열</option>
                 <option value="소프트계열">소프트계열</option>
                 <option value="사전반죽">사전반죽</option>
@@ -240,7 +264,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
             </InputField>
           
             <InputField label="제품명 선택">
-              <select value={selectedRecipeId} onChange={(e) => { setSelectedRecipeId(e.target.value); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1">
+              <select value={selectedRecipeId} onChange={(e) => { setSelectedRecipeId(e.target.value); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
                 <option value="">선택하세요</option>
                 {filteredRecipes.map(r => <option key={r.id} value={r.id}>{r.productName}</option>)}
               </select>
@@ -251,14 +275,14 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 <input type="text" inputMode="decimal" value={totalDough} onChange={(e) => {
                   const val = e.target.value.replace(',', '.');
                   setTotalDough(val);
-                  setDoughMultiplier("1"); 
+                  setDoughMultiplier("1");
                   setFlourMultiplier("1");
                   if (!val || totals.totalPercent === 0) setFlourWeight("");
                   else setFlourWeight(Math.round(parseFloat(val) / (totals.totalPercent / 100)) || "");
-                }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none" />
+                }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
               </InputField>
               {currentRecipe && (
-                <div className="flex items-center gap-1.5 mt-2">
+                <div className="flex items-center gap-1.5 mt-2 print:hidden">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">총반죽 기준:</span>
                   <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
                     <input type="text" inputMode="decimal" value={doughMultiplier} onChange={(e) => handleDoughMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5" />
@@ -273,14 +297,14 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 <input type="text" inputMode="decimal" value={flourWeight} onChange={(e) => {
                   const val = e.target.value.replace(',', '.');
                   setFlourWeight(val);
-                  setDoughMultiplier("1"); 
+                  setDoughMultiplier("1");
                   setFlourMultiplier("1");
                   if (!val) setTotalDough("");
                   else setTotalDough(Math.round(parseFloat(val) * (totals.totalPercent / 100)) || "");
-                }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none" />
+                }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
               </InputField>
               {currentRecipe && (
-                <div className="flex items-center gap-1.5 mt-2">
+                <div className="flex items-center gap-1.5 mt-2 print:hidden">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">밀가루 기준:</span>
                   <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
                     <input type="text" inputMode="decimal" value={flourMultiplier} onChange={(e) => handleFlourMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5" />
@@ -292,10 +316,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full mt-4 min-w-[300px]">
+            <table className="w-full mt-4 min-w-[300px] print:mt-2">
               <thead>
                 <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest">
-                  <th className="p-2 text-left">재료</th><th className="p-2 text-right">% (수정)</th><th className="p-2 text-right w-24">g</th>
+                  <th className="p-2 text-left">재료</th>
+                  <th className="p-2 text-right">% (수정)</th>
+                  <th className="p-2 text-right w-24">g</th>
                 </tr>
               </thead>
               <tbody>
@@ -316,7 +342,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                             size={String(ing.percent).length || 1}
                             onChange={(e) => handlePercentChange(ing.name, e.target.value)}
                             style={{ minWidth: '1.5rem' }}
-                            className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto"
+                            className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto print:border-none"
                           />
                           <span className="font-mono text-xs font-bold text-gray-400">%</span>
                         </div>
@@ -332,8 +358,8 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
           </div>
         </section>
 
-        {/* 우측 사이드바 패널 */}
-        <div className="space-y-6 order-2">
+        {/* 오른쪽 섹션 (하단 유연 밀림 보정 완료) */}
+        <div className="space-y-6 print:block print:space-y-4">
           {category !== "사전반죽" && (
             <>
               <SummaryCard title="SUMMARY">
@@ -360,110 +386,196 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
               )}
             </>
           )}
-          <div>
+
+          <div className="print:hidden">
             <QuickTempEntry tempLogs={tempLogs} setTempLogs={setTempLogs} currentProductName={currentRecipe?.productName} memo={memo} setMemo={setMemo} isPreFermentMode={category === "사전반죽"} />
           </div>
         </div>
+
       </div>
-
-      {/* 📥 4단 배수 지정 팝업 모달창 (오직 화면단에서만 보임) */}
-      {showPrintModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm print-hidden">
-          <div className="bg-[#f7f6f3] p-6 rounded-2xl shadow-2xl w-full max-w-sm border border-white/60 text-black">
-            <h2 className="text-lg font-black mb-5 tracking-tight uppercase border-b-2 border-black pb-2">🖨️ 인쇄 배수 설정 (4단 단일표)</h2>
-            <p className="text-[11px] font-bold text-gray-500 mb-4 leading-normal">출력 도표에 나열될 4개의 수량을 각각 기입하세요.</p>
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              {printScales.map((scale, idx) => (
-                <div key={idx}>
-                  <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">배수 {idx + 1}</label>
-                  <div className="flex items-center border-b border-black">
-                    <input 
-                      type="text" 
-                      inputMode="decimal"
-                      value={scale} 
-                      onChange={(e) => {
-                        const newScales = [...printScales];
-                        newScales[idx] = e.target.value.replace(',', '.');
-                        setPrintScales(newScales);
-                      }}
-                      className="w-full bg-transparent text-center font-mono font-black text-base outline-none py-1"
-                    />
-                    <span className="text-xs font-bold text-gray-400 px-1">배</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-3 text-xs font-bold uppercase">
-              <button onClick={() => setShowPrintModal(false)} className="flex-1 bg-white border border-gray-200 py-3 rounded-xl hover:bg-gray-50 transition-all">취소</button>
-              <button onClick={() => { setShowPrintModal(false); setTimeout(() => window.print(), 100); }} className="flex-1 bg-black text-white py-3 rounded-xl hover:bg-gray-900 transition-all shadow-md">인쇄 실행</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🖨️ 오직 종이/PDF 출력시에만 나타나는 4단 가로형 테이블 레이아웃 */}
-      {currentRecipe && (
-        <div className="print-only">
-          <div className="print-header">
-            <div>
-              <h1 style={{ fontSize: '26px', fontWeight: '900', tracking: '-0.05em', margin: 0 }}>{currentRecipe.productName}</h1>
-              <p style={{ fontSize: '11px', color: '#444', fontWeight: 'bold', margin: '4px 0 0 0' }}>
-                분류: {category} | 사전반죽 포함 수율: {totals.finalYield.toFixed(1)}% | 소금 비율: {totals.totalSaltPercent}%
-              </p>
-            </div>
-            <div style={{ textAlign: 'right', fontSize: '10px', color: '#888', fontWeight: 'bold' }}>
-              Bread OS - {new Date().toLocaleDateString()}
-            </div>
-          </div>
-
-          <table className="print-table">
-            <thead>
-              <tr>
-                <th className="ing-name" style={{ width: '22%' }}>재료명 (Ingredient)</th>
-                <th style={{ width: '10%' }}>종류</th>
-                <th style={{ width: '12%' }}>베이커스 %</th>
-                {printScales.map((scale, i) => (
-                  <th key={i}>{parseFloat(scale) || 0}배 수량 (g)</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {currentRecipe.ingredients.map((ing, idx) => {
-                // 원본 연산식 보존: 입력되어 있는 밀가루 기준값을 베이스로 배수 곱셈 진행
-                const baseFlour = parseFloat(String(flourWeight).replace(',', '.')) || 1000;
-                const parsedPercent = parseFloat(String(ing.percent).replace(',', '.')) || 0;
-                const baseIngredientGrams = baseFlour * (parsedPercent / 100);
-
-                return (
-                  <tr key={idx}>
-                    <td className="ing-name">{ing.name}</td>
-                    <td style={{ textAlign: 'center', fontSize: '10px', color: '#555' }}>{ing.type}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{ing.percent}%</td>
-                    {printScales.map((scale, i) => {
-                      const multiplier = parseFloat(scale) || 0;
-                      const finalGrams = Math.round(baseIngredientGrams * multiplier);
-                      return (
-                        <td key={i} style={{ fontJoin: 'miter', fontWeight: '900' }}>
-                          {finalGrams.toLocaleString()}g
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          
-          {memo && (
-            <div style={{ marginTop: '25px', padding: '12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '11px', background: '#fafaf9' }}>
-              <div style={{ fontWeight: '900', textTransform: 'uppercase', marginBottom: '5px', fontSize: '9px', color: '#666' }}>Recipe Note</div>
-              <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{memo}</div>
-            </div>
-          )}
-        </div>
-      )}
     </main>
   );
 }
 
-// 하위 컴포넌트인 QuickTempEntry, HistoryChart, TempPhDB, RecipeDB 등은 셰프님의 원본 파일 구성과 완벽하게 동일하므로 하단에 그대로 이어 붙여 사용하시면 됩니다.
+// ==========================================
+// 4. 온도 / pH 기록 관리 컴포넌트 (스크롤 잘림 완전 제거)
+// ==========================================
+function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMemo, isPreFermentMode }) {
+  const [isEntryMode, setIsEntryMode] = useState(false);
+  const [logType, setLogType] = useState("1차 저온");
+  const [currentEntry, setCurrentEntry] = useState({});
+  const [editingLogId, setEditingLogId] = useState(null);
+  
+  const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
+  const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
+  const items = isPreFermentMode ? pfItems : normalItems;
+
+  const latestLog = useMemo(() => {
+    return tempLogs.find(l => l.productName === currentProductName);
+  }, [tempLogs, currentProductName]);
+
+  const handleEditActive = (log) => {
+    setEditingLogId(log.id);
+    setLogType(log.type);
+    setCurrentEntry(log.data || {});
+    setMemo(log.memo || "");
+    setIsEntryMode(true);
+  };
+
+  const handleSave = () => {
+    if (!currentProductName) return;
+    if (editingLogId) {
+      setTempLogs(prev => prev.map(log => {
+        if (log.id === editingLogId) {
+          return {
+            ...log,
+            type: isPreFermentMode ? "사전반죽 기록" : logType,
+            data: currentEntry,
+            memo: memo,
+            timestamp: currentEntry["날짜"]?.t || log.timestamp
+          };
+        }
+        return log;
+      }));
+      alert("데이터가 수정되었습니다.");
+    } else {
+      const now = new Date();
+      const newLog = { 
+        id: Date.now(),
+        productName: currentProductName,
+        type: isPreFermentMode ? "사전반죽 기록" : logType,
+        displayTime: now.toLocaleString(),
+        timestamp: currentEntry["날짜"]?.t || now.toLocaleDateString(), 
+        data: currentEntry,
+        memo: memo 
+      };
+      setTempLogs(prev => [newLog, ...prev]);
+      alert("데이터베이스에 저장되었습니다.");
+    }
+
+    setIsEntryMode(false);
+    setCurrentEntry({});
+    setMemo(""); 
+    setEditingLogId(null);
+  };
+
+  if (!currentProductName) return (
+    <SummaryCard title="TEMP / pH / MEMO">
+        <p className="text-center py-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">Select a recipe first</p>
+    </SummaryCard>
+  );
+
+  return (
+    <SummaryCard title="TEMP / pH / MEMO">
+      <div className="flex justify-between items-center mb-4">
+        {!isPreFermentMode ? (
+          <select value={logType} onChange={(e) => setLogType(e.target.value)} className="bg-transparent font-black text-[10px] uppercase border-b border-black outline-none">
+            <option>1차 저온</option><option>2차 저온</option>
+          </select>
+        ) : (
+          <span className="font-black text-[10px] uppercase text-gray-400">Pre-Ferment Log</span>
+        )}
+        <button onClick={() => { 
+          setIsEntryMode(!isEntryMode); 
+          if(isEntryMode) { setCurrentEntry({}); setMemo(""); setEditingLogId(null); }
+        }} className="text-[10px] font-black underline uppercase">
+          {isEntryMode ? "Close" : "+ Add"}
+        </button>
+      </div>
+
+      {isEntryMode ? (
+        /* max-h 스크롤 높이를 넉넉히 확장하고 오버플로우가 하단 버튼을 덮지 않도록 안전 마진 확보 */
+        <div className="space-y-4 max-h-[550px] overflow-y-auto pr-1 pb-4">
+          <div className="space-y-2">
+            {items.map(item => (
+              <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1">
+                <span className="text-[11px] font-bold uppercase">{item}</span>
+                <div className="grid grid-cols-2 gap-1">
+                  {item === "날짜" ? (
+                    <input type="date" value={currentEntry["날짜"]?.t || ""} className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100 outline-none"
+                      onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { t: e.target.value } })} />
+                  ) : isPreFermentMode && (item === "사용시점" || item === "정점") ? (
+                    <div className="col-span-2 grid grid-cols-3 gap-1">
+                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
+                      <input placeholder="Min" type="text" value={currentEntry[item]?.h || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), h: e.target.value } })} />
+                      <input placeholder="Vol" type="text" value={currentEntry[item]?.v || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), v: e.target.value } })} />
+                    </div>
+                  ) : isPreFermentMode && item === "결과" ? (
+                    <div className="col-span-2 grid grid-cols-3 gap-1">
+                      <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), t: e.target.value.replace(',', '.') } })} />
+                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
+                      <input placeholder="Vol" type="text" value={currentEntry[item]?.v || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), v: e.target.value } })} />
+                    </div>
+                  ) : item === "밀" ? (
+                    <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                      onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { t: e.target.value.replace(',', '.') } })} />
+                  ) : (
+                    <>
+                      <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), t: e.target.value.replace(',', '.') } })} />
+                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
+                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="pt-2">
+            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block tracking-widest">Memo</label>
+            <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-white/50 border border-black/5 rounded-lg p-3 text-xs leading-5 resize-none h-24 outline-none font-medium" placeholder="Notes..." />
+          </div>
+          <button onClick={handleSave} className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs mt-2 uppercase shadow-lg">
+            {editingLogId ? "Update Record" : "Save to DB"}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {latestLog ? (
+            <>
+              <div onClick={() => handleEditActive(latestLog)} className="bg-white/50 p-3 rounded-lg border border-white text-[10px] cursor-pointer hover:border-black/30 transition-all group relative">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2 border-b border-black/5 pb-1.5 font-bold text-gray-400 uppercase tracking-tighter">
+                  <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                    <span className="text-black shrink-0">LATEST ({latestLog.type})</span>
+                    <span className="font-mono text-gray-400 truncate">{latestLog.timestamp}</span>
+                  </div>
+                  <div className="text-[8px] font-black text-gray-300 group-hover:text-black uppercase tracking-tighter transition-colors shrink-0 sm:text-right">
+                    Click to Edit 
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                  {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p || latestLog.data[item].h || latestLog.data[item].v) ? (
+                    <div key={item} className="flex justify-between border-b border-gray-50/50 min-w-0">
+                      <span className="text-gray-400 font-bold uppercase shrink-0 mr-1">{item}</span>
+                      <span className="font-mono truncate text-right">
+                        {latestLog.data[item].t && `${latestLog.data[item].t}`}
+                        {latestLog.data[item].p && ` / ${latestLog.data[item].p}pH`}
+                        {latestLog.data[item].h && ` / ${latestLog.data[item].h}m`}
+                        {latestLog.data[item].v && ` / ${latestLog.data[item].v}`}
+                      </span>
+                    </div>
+                  ) : null)}
+                </div>
+              </div>
+              {latestLog.memo && <div onClick={() => handleEditActive(latestLog)} className="bg-white/30 p-3 rounded-lg border-l-2 border-black/10 text-[11px] font-medium text-gray-600 leading-relaxed cursor-pointer hover:bg-white/50">{latestLog.memo}</div>}
+              <div className="pt-2 border-t border-dashed border-black/10">
+                <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-16 font-medium" placeholder="Quick memo..." />
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-center py-2 text-[10px] text-gray-400 font-bold uppercase tracking-widest border-b border-dashed border-black/10 mb-2">No records</p>
+              <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-24 font-medium" placeholder="Write notes here..." />
+            </>
+          )}
+        </div>
+      )}
+    </SummaryCard>
+  );
+}
