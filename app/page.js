@@ -136,25 +136,32 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     };
   }, [currentRecipe, pfYields, flourWeight]);
 
+  // ─── 배수 변환 오류 수정 영역 ───
   const handleDoughMultiplierChange = (value) => {
     const cleanValue = value.replace(',', '.');
     setDoughMultiplier(cleanValue);
     setFlourMultiplier(""); 
 
-    if (!currentRecipe || totals.totalPercent === 0 || totals.baseTotalDough === 0) return;
+    if (!currentRecipe || totals.totalPercent === 0) return;
     
     const multiplier = parseFloat(cleanValue);
     if (isNaN(multiplier) || multiplier <= 0) {
-      setFlourWeight("");
-      setTotalDough("");
       return;
     }
 
-    const targetDough = totals.baseTotalDough * multiplier;
-    const targetFlour = 1000 * multiplier;
+    // 현재 입력창에 있는 총 반죽량 값을 읽어옴 (없으면 베이스 총반죽량 기준)
+    const currentInputDough = parseFloat(String(totalDough).replace(',', '.')) || totals.baseTotalDough;
+    
+    // 배수가 곱해진 최종 목표 총반죽량 계산
+    const targetDough = currentInputDough * multiplier;
+    // 목표 총반죽량 기반으로 역산한 필수 밀가루 총합 계산
+    const targetFlour = targetDough / (totals.totalPercent / 100);
 
     setTotalDough(Math.round(targetDough));
     setFlourWeight(Math.round(targetFlour));
+    
+    // 배수 연산이 즉시 완료되면 필드 상태 왜곡을 막기 위해 1배수로 원복 고정
+    setDoughMultiplier("1");
   };
 
   const handleFlourMultiplierChange = (value) => {
@@ -166,17 +173,24 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     
     const multiplier = parseFloat(cleanValue);
     if (isNaN(multiplier) || multiplier <= 0) {
-      setFlourWeight("");
-      setTotalDough("");
       return;
     }
 
-    const targetFlour = 1000 * multiplier;
+    // 현재 입력창에 있는 밀가루량 값을 읽어옴 (없으면 기준값인 1000g 기준)
+    const currentInputFlour = parseFloat(String(flourWeight).replace(',', '.')) || 1000;
+
+    // 배수가 곱해진 최종 목표 밀가루량 계산
+    const targetFlour = currentInputFlour * multiplier;
+    // 목표 밀가루량 기반으로 계산된 최종 총반죽량 계산
     const targetDough = targetFlour * (totals.totalPercent / 100);
 
     setFlourWeight(Math.round(targetFlour));
     setTotalDough(Math.round(targetDough));
+    
+    // 배수 연산이 즉시 완료되면 필드 상태 왜곡을 막기 위해 1배수로 원복 고정
+    setFlourMultiplier("1");
   };
+  // ─── 배수 변환 오류 수정 영역 끝 ───
 
   useEffect(() => {
     if (currentRecipe && totals.totalPercent > 0) {
@@ -502,7 +516,6 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
           {latestLog ? (
             <>
               <div onClick={() => handleEditActive(latestLog)} className="bg-white/50 p-3 rounded-lg border border-white text-[10px] cursor-pointer hover:border-black/30 transition-all group relative">
-                {/* ─── 여기부터 요구하신 겹침 오류 수정 영역입니다 ─── */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2 border-b border-black/5 pb-1.5 font-bold text-gray-400 uppercase tracking-tighter">
                   <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                     <span className="text-black shrink-0">LATEST ({latestLog.type})</span>
@@ -512,7 +525,6 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                     Click to Edit ✏️
                   </div>
                 </div>
-                {/* ─── 여기까지 요구하신 겹침 오류 수정 영역입니다 ─── */}
                 
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                   {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p || latestLog.data[item].h || latestLog.data[item].v) ? (
