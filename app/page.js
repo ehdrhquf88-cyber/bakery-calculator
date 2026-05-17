@@ -1,10 +1,3 @@
-제공해주신 파일 내용을 바탕으로 생략된 하위 컴포넌트(`QuickTempEntry`, `HistoryChart`, `TempPhDB`, `RecipeDB`, `RecipeModal`, `InputField`, `SummaryCard`, `SummaryRow`)들의 내부 로직을 모두 유기적으로 연결하고, 완벽하게 실행 가능하도록 복원한 **전체 통합 코드**입니다.
-
-기존 코드에서 발생하던 자잘한 구문 오류(일부 버튼 태그 안의 닫히지 않은 부분이나 비어 있는 아이콘 영역 등)를 깔끔하게 다듬고, 숫자가 미세하게 잘리던 현상이 발생하지 않도록 UI 스타일을 보정했습니다.
-
-이 코드를 복사해서 Next.js의 해당 페이지 파일(예: `page.js` 또는 `page.tsx`)에 **그대로 전체 붙여넣기** 하시면 됩니다.
-
-```jsx
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -960,5 +953,3 @@ function SummaryRow({ label, value }) {
     </div>
   );
 }
-
-```
