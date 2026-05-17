@@ -502,16 +502,23 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
           {latestLog ? (
             <>
               <div onClick={() => handleEditActive(latestLog)} className="bg-white/50 p-3 rounded-lg border border-white text-[10px] cursor-pointer hover:border-black/30 transition-all group relative">
-                <div className="absolute top-2 right-2 text-[8px] font-black text-gray-300 group-hover:text-black uppercase tracking-tighter">Click to Edit ✏️</div>
-                <div className="flex justify-between mb-1 border-b border-black/5 font-bold text-gray-400 uppercase tracking-tighter">
-                  <span className="text-black">LATEST ({latestLog.type})</span>
-                  <span>{latestLog.timestamp}</span>
+                {/* ─── 여기부터 요구하신 겹침 오류 수정 영역입니다 ─── */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2 border-b border-black/5 pb-1.5 font-bold text-gray-400 uppercase tracking-tighter">
+                  <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                    <span className="text-black shrink-0">LATEST ({latestLog.type})</span>
+                    <span className="font-mono text-gray-400 truncate">{latestLog.timestamp}</span>
+                  </div>
+                  <div className="text-[8px] font-black text-gray-300 group-hover:text-black uppercase tracking-tighter transition-colors shrink-0 sm:text-right">
+                    Click to Edit ✏️
+                  </div>
                 </div>
+                {/* ─── 여기까지 요구하신 겹침 오류 수정 영역입니다 ─── */}
+                
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                   {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p || latestLog.data[item].h || latestLog.data[item].v) ? (
-                    <div key={item} className="flex justify-between border-b border-gray-50/50">
-                      <span className="text-gray-400 font-bold uppercase">{item}</span>
-                      <span className="font-mono">
+                    <div key={item} className="flex justify-between border-b border-gray-50/50 min-w-0">
+                      <span className="text-gray-400 font-bold uppercase shrink-0 mr-1">{item}</span>
+                      <span className="font-mono truncate text-right">
                         {latestLog.data[item].t && `${latestLog.data[item].t}${item !== "날짜" ? "°" : ""}`}
                         {latestLog.data[item].p && ` / ${latestLog.data[item].p}pH`}
                         {latestLog.data[item].h && ` / ${latestLog.data[item].h}m`}
@@ -565,7 +572,7 @@ function HistoryChart({ logs, isPreFerment }) {
     if (selectedDates.includes(date)) {
       setSelectedDates(selectedDates.filter(d => d !== date));
     } else {
-      setSelectedDates(prev => [...prev, date].slice(-2)); // 최대 2개만 유지되도록 제한 최적화
+      setSelectedDates(prev => [...prev, date].slice(-2));
     }
   };
 
