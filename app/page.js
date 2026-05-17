@@ -65,13 +65,11 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   const [flourWeight, setFlourWeight] = useState("");
   const [pfYields, setPfYields] = useState({});
   const [memo, setMemo] = useState("");
-  
   const [doughMultiplier, setDoughMultiplier] = useState("1");
   const [flourMultiplier, setFlourMultiplier] = useState("1");
 
   const filteredRecipes = useMemo(() => recipes.filter(r => r.category === category), [recipes, category]);
   const currentRecipe = useMemo(() => recipes.find(r => r.id === Number(selectedRecipeId)), [recipes, selectedRecipeId]);
-  
   const preFerments = useMemo(() => {
     return currentRecipe ? currentRecipe.ingredients.filter(ing => ing.type === "사전반죽") : [];
   }, [currentRecipe]);
@@ -121,10 +119,9 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     const cost = currentRecipe.ingredients.reduce((sum, ing) => {
         const pctVal = parseFloat(String(ing.percent).replace(',', '.')) || 0;
         const weight = parsedFlourWeight * (pctVal / 100);
-        const unitCost = parseFloat(String(ing.cost).replace(',', '.')) || 0;
-        return sum + (weight * unitCost);
+        const fontCost = parseFloat(String(ing.cost).replace(',', '.')) || 0;
+        return sum + (weight * fontCost);
     }, 0);
-
     const baseTotalDough = 1000 * (rawTotalPercent / 100);
 
     return { 
@@ -136,20 +133,16 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     };
   }, [currentRecipe, pfYields, flourWeight]);
 
-  // ─── 배수 입력 및 연산 동기화 수정 영역 ───
   const handleDoughMultiplierChange = (value) => {
     const cleanValue = value.replace(',', '.');
-    setDoughMultiplier(cleanValue); // 사용자가 입력한 숫자(예: 2)가 화면에 그대로 유지되도록 우선 반영
-    setFlourMultiplier("1");        // 반대쪽 배수 칸은 기본값으로 초기화
+    setDoughMultiplier(cleanValue); 
+    setFlourMultiplier("1");
 
     if (!currentRecipe || totals.totalPercent === 0) return;
     
     const multiplier = parseFloat(cleanValue);
-    if (isNaN(multiplier) || multiplier <= 0) {
-      return;
-    }
+    if (isNaN(multiplier) || multiplier <= 0) return;
 
-    // 인풋창에 현재 들어가 있는 순수 숫자값만 분리 추출 (배수 연산 이전의 순수 베이스 값 유도)
     const currentInputDough = parseFloat(String(totalDough).replace(',', '.')) || totals.baseTotalDough;
     
     const targetDough = currentInputDough * multiplier;
@@ -161,15 +154,13 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
 
   const handleFlourMultiplierChange = (value) => {
     const cleanValue = value.replace(',', '.');
-    setFlourMultiplier(cleanValue); // 사용자가 입력한 숫자(예: 2)가 화면에 그대로 유지되도록 우선 반영
-    setDoughMultiplier("1");        // 반대쪽 배수 칸은 기본값으로 초기화
+    setFlourMultiplier(cleanValue);
+    setDoughMultiplier("1");
 
     if (!currentRecipe || totals.totalPercent === 0) return;
     
     const multiplier = parseFloat(cleanValue);
-    if (isNaN(multiplier) || multiplier <= 0) {
-      return;
-    }
+    if (isNaN(multiplier) || multiplier <= 0) return;
 
     const currentInputFlour = parseFloat(String(flourWeight).replace(',', '.')) || 1000;
 
@@ -179,7 +170,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     setFlourWeight(Math.round(targetFlour));
     setTotalDough(Math.round(targetDough));
   };
-  // ─── 배수 입력 및 연산 동기화 수정 영역 끝 ───
 
   useEffect(() => {
     if (currentRecipe && totals.totalPercent > 0) {
@@ -207,11 +197,15 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { size: auto; margin: 15mm; }
-          body { background: white; color: black; }
+          body { background: white; color: black !important; }
+          input, select { color: black !important; -webkit-appearance: none; -moz-appearance: none; appearance: none; border: none !important; box-shadow: none !important; background: transparent !important; }
+          .print-black-text { color: black !important; }
+          .print-label { font-size: 10px !important; color: black !important; font-weight: bold !important; }
         }
       `}} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 md:gap-8 print:block print:space-y-6">
+        
         <section className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 order-1 print:bg-white print:shadow-none print:border-none print:p-0">
           <div className="border-b-2 border-black pb-3 mb-6 flex justify-between items-end">
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter truncate uppercase print:text-2xl">
@@ -222,12 +216,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 onClick={handlePrintPDF}
                 className="bg-black text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-800 transition-all shadow-md print:hidden flex items-center gap-1"
               >
-                <span>📄</span> PDF 저장 / 인쇄
+                PDF 저장 / 인쇄
               </button>
             )}
           </div>
           
-          <div className="grid grid-cols-2 gap-4 mb-8 text-sm print:mb-4 print:gap-2">
+          <div className="grid grid-cols-2 gap-4 mb-8 text-sm print:mb-4 print:gap-4 print:grid-cols-2">
             <InputField label="제품 분류">
               <select value={category} onChange={(e) => { setCategory(e.target.value); setSelectedRecipeId(""); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
                 <option value="하드계열">하드계열</option>
@@ -235,7 +229,8 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 <option value="사전반죽">사전반죽</option>
               </select>
             </InputField>
-            <InputField label="제품명 선택">
+          
+            <InputField label="제품명 선택" className="print:hidden">
               <select value={selectedRecipeId} onChange={(e) => { setSelectedRecipeId(e.target.value); setPfYields({}); setTotalDough(""); setFlourWeight(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
                 <option value="">선택하세요</option>
                 {filteredRecipes.map(r => <option key={r.id} value={r.id}>{r.productName}</option>)}
@@ -247,18 +242,18 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 <input type="text" inputMode="decimal" value={totalDough} onChange={(e) => {
                   const val = e.target.value.replace(',', '.');
                   setTotalDough(val);
-                  setDoughMultiplier("1"); // 수량을 수동 수정하면 배수 표기칸은 다시 1로 깔끔하게 초기화
-                  setFlourMultiplier("1"); 
+                  setDoughMultiplier("1"); 
+                  setFlourMultiplier("1");
                   if (!val || totals.totalPercent === 0) setFlourWeight("");
                   else setFlourWeight(Math.round(parseFloat(val) / (totals.totalPercent / 100)) || "");
                 }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
               </InputField>
               {currentRecipe && (
-                <div className="flex items-center gap-1.5 mt-2 print:hidden">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">총반죽 기준:</span>
-                  <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
-                    <input type="text" inputMode="decimal" value={doughMultiplier} onChange={(e) => handleDoughMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5" />
-                    <span className="text-[10px] font-bold text-gray-400 px-0.5">배</span>
+                <div className="flex items-center gap-1.5 mt-2 print:mt-1">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight print:text-black print:font-bold">총반죽 기준 배수:</span>
+                  <div className="flex items-center border-b border-black/20 print:border-none">
+                    <input type="text" inputMode="decimal" value={doughMultiplier} onChange={(e) => handleDoughMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5 print:text-left print:w-auto print:font-mono" />
+                    <span className="text-[10px] font-bold text-gray-400 px-0.5 print:text-black">배</span>
                   </div>
                 </div>
               )}
@@ -269,18 +264,18 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 <input type="text" inputMode="decimal" value={flourWeight} onChange={(e) => {
                   const val = e.target.value.replace(',', '.');
                   setFlourWeight(val);
-                  setDoughMultiplier("1"); // 수량을 수동 수정하면 배수 표기칸은 다시 1로 깔끔하게 초기화
-                  setFlourMultiplier("1"); 
+                  setDoughMultiplier("1"); 
+                  setFlourMultiplier("1");
                   if (!val) setTotalDough("");
                   else setTotalDough(Math.round(parseFloat(val) * (totals.totalPercent / 100)) || "");
                 }} placeholder="0" className="bg-transparent border-b border-black font-bold w-full pb-1 outline-none print:border-none" />
               </InputField>
               {currentRecipe && (
-                <div className="flex items-center gap-1.5 mt-2 print:hidden">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">밀가루 기준:</span>
-                  <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
-                    <input type="text" inputMode="decimal" value={flourMultiplier} onChange={(e) => handleFlourMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5" />
-                    <span className="text-[10px] font-bold text-gray-400 px-0.5">배</span>
+                <div className="flex items-center gap-1.5 mt-2 print:mt-1">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight print:text-black print:font-bold">밀가루 기준 배수:</span>
+                  <div className="flex items-center border-b border-black/20 print:border-none">
+                    <input type="text" inputMode="decimal" value={flourMultiplier} onChange={(e) => handleFlourMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5 print:text-left print:w-auto print:font-mono" />
+                    <span className="text-[10px] font-bold text-gray-400 px-0.5 print:text-black">배</span>
                   </div>
                 </div>
               )}
@@ -290,7 +285,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
           <div className="overflow-x-auto">
             <table className="w-full mt-4 min-w-[300px] print:mt-2">
               <thead>
-                <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest">
+                <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest print:text-black print:border-black">
                   <th className="p-2 text-left">재료</th><th className="p-2 text-right">% (수정)</th><th className="p-2 text-right w-24">g</th>
                 </tr>
               </thead>
@@ -300,25 +295,23 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                   const parsedPercent = parseFloat(String(ing.percent).replace(',','.')) || 0;
                   const computedGrams = Math.round(parsedFlour * (parsedPercent / 100));
                   return (
-                    <tr key={idx} className="border-b border-gray-200">
+                    <tr key={idx} className="border-b border-gray-200 print:border-gray-300">
                       <td className="p-2">
-                          <div className="text-[9px] text-gray-400 font-bold uppercase">{ing.type}</div>
+                          <div className="text-[9px] text-gray-400 font-bold uppercase print:text-black">{ing.type}</div>
                           <div className="font-black text-sm">{ing.name}</div>
                       </td>
                       <td className="p-2 text-right">
                         <div className="flex items-center justify-end gap-0.5">
                           <input 
                             type="text" inputMode="decimal" value={ing.percent}
-                            size={String(ing.percent).length || 1}
                             onChange={(e) => handlePercentChange(ing.name, e.target.value)}
-                            style={{ minWidth: '1.5rem' }}
-                            className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto print:border-none"
+                            className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto print:border-none w-16 pr-1 print:font-mono"
                           />
-                          <span className="font-mono text-xs font-bold text-gray-400">%</span>
+                          <span className="font-mono text-xs font-bold text-gray-400 print:text-black">%</span>
                         </div>
                       </td>
-                      <td className="p-2 text-right font-bold text-gray-400 text-sm">
-                        {(computedGrams || 0).toLocaleString()}g
+                      <td className="p-2 text-right font-bold text-black text-sm print-black-text">
+                          {(computedGrams || 0).toLocaleString()}g
                       </td>
                     </tr>
                   );
@@ -335,18 +328,18 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                 <SummaryRow label="사전반죽 포함 수율" value={`${totals.finalYield.toFixed(1)}%`} />
                 <SummaryRow label="사전반죽 포함 소금" value={`${totals.totalSaltPercent}%`} />
                 <SummaryRow label="총 반죽량" value={`${(Math.round(parseFloat(String(totalDough).replace(',', '.'))) || 0).toLocaleString()}g`} />
-                <SummaryRow label="총 원가" value={`₩${Math.round(totals.totalCost).toLocaleString()}`} />
+                <SummaryRow label="총 원가" value={`${Math.round(totals.totalCost).toLocaleString()}`} />
               </SummaryCard>
 
               {preFerments.length > 0 && (
                 <SummaryCard title="PRE-FERMENT">
                   <div className="space-y-3">
                     {preFerments.map(pf => (
-                      <div key={pf.name} className="flex justify-between items-center border-b border-black/5 pb-2">
+                      <div key={pf.name} className="flex justify-between items-center border-b border-black/5 pb-2 print:border-gray-200">
                         <span className="text-sm font-bold">{pf.name}</span>
                         <div className="flex items-center gap-2">
-                          <input type="text" inputMode="decimal" value={pfYields[pf.name] || ""} onChange={(e) => setPfYields({ ...pfYields, [pf.name]: e.target.value.replace(',', '.') })} className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-right font-mono text-xs outline-none" placeholder="100" />
-                          <span className="text-[10px] font-bold text-gray-400">%</span>
+                          <input type="text" inputMode="decimal" value={pfYields[pf.name] || ""} onChange={(e) => setPfYields({ ...pfYields, [pf.name]: e.target.value.replace(',', '.') })} className="w-16 bg-white border border-gray-200 rounded px-2 py-1 text-right font-mono text-xs outline-none print:border-none print:bg-transparent print:font-mono" placeholder="100" />
+                          <span className="text-[10px] font-bold text-gray-400 print:text-black">%</span>
                         </div>
                       </div>
                     ))}
@@ -365,13 +358,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   );
 }
 
-// QuickTempEntry, HistoryChart, TempPhDB, RecipeDB, RecipeModal, InputField, SummaryCard, SummaryRow 컴포넌트들은 기존 구조와 완전히 동일하므로 생략 없이 내부 로직 그대로 완전 보존되어 실행됩니다.
 function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMemo, isPreFermentMode }) {
   const [isEntryMode, setIsEntryMode] = useState(false);
   const [logType, setLogType] = useState("1차 저온");
   const [currentEntry, setCurrentEntry] = useState({});
   const [editingLogId, setEditingLogId] = useState(null);
-
+  
   const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
   const items = isPreFermentMode ? pfItems : normalItems;
@@ -390,7 +382,6 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
 
   const handleSave = () => {
     if (!currentProductName) return;
-    
     if (editingLogId) {
       setTempLogs(prev => prev.map(log => {
         if (log.id === editingLogId) {
@@ -512,19 +503,18 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                     <span className="font-mono text-gray-400 truncate">{latestLog.timestamp}</span>
                   </div>
                   <div className="text-[8px] font-black text-gray-300 group-hover:text-black uppercase tracking-tighter transition-colors shrink-0 sm:text-right">
-                    Click to Edit ✏️
+                    Click to Edit 
                   </div>
                 </div>
-                
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                   {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p || latestLog.data[item].h || latestLog.data[item].v) ? (
                     <div key={item} className="flex justify-between border-b border-gray-50/50 min-w-0">
                       <span className="text-gray-400 font-bold uppercase shrink-0 mr-1">{item}</span>
-                      <span className="font-mono truncate text-right">
-                        {latestLog.data[item].t && `${latestLog.data[item].t}${item !== "날짜" ? "°" : ""}`}
-                        {latestLog.data[item].p && ` / ${latestLog.data[item].p}pH`}
-                        {latestLog.data[item].h && ` / ${latestLog.data[item].h}m`}
-                        {latestLog.data[item].v && ` / ${latestLog.data[item].v}`}
+                      <span className="font-mono truncate text-right text-black">
+                        {latestLog.data[item].t || ""}
+                        {latestLog.data[item].p ? ` / ${latestLog.data[item].p}pH` : ""}
+                        {latestLog.data[item].h ? ` / ${latestLog.data[item].h}m` : ""}
+                        {latestLog.data[item].v ? ` / ${latestLog.data[item].v}` : ""}
                       </span>
                     </div>
                   ) : null)}
@@ -551,9 +541,9 @@ function HistoryChart({ logs, isPreFerment }) {
   const availableFields = useMemo(() => isPreFerment 
     ? ["르방", "수분", "밀", "결과", "사용시점", "정점"]
     : ["르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"], [isPreFerment]);
-
+  
   const [selectedXField, setSelectedXField] = useState("결과"); 
-  const [selectedDates, setSelectedDates] = useState([]); 
+  const [selectedDates, setSelectedDates] = useState([]);
 
   const allTimelineLogs = useMemo(() => {
     return [...logs].reverse(); 
@@ -645,7 +635,7 @@ function HistoryChart({ logs, isPreFerment }) {
       </div>
 
       {selectedDates.length < 2 ? (
-        <div className="h-36 flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center"><span>⚠️ 비교 분석을 위해 날짜를 최소 2개 이상 체크해 주세요.</span></div>
+        <div className="h-36 flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center"><span> 비교 분석을 위해 날짜를 최소 2개 이상 체크해 주세요.</span></div>
       ) : renderedPoints.length === 0 || (!renderedPoints.some(p => p.tVal !== null) && !renderedPoints.some(p => p.pVal !== null)) ? (
         <div className="h-36 flex items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center"><span>선택한 항목 [{selectedXField}]에 등록된 온도/pH 결과값이 없습니다.</span></div>
       ) : (
@@ -666,7 +656,7 @@ function HistoryChart({ logs, isPreFerment }) {
                   {p.yTemp !== null && (
                     <>
                       <circle cx={p.x} cy={p.yTemp} r="4" fill="#fff" stroke="#f59e0b" strokeWidth="2" />
-                      <text x={p.x} y={p.yTemp - 6} textAnchor="middle" className="text-[9px] font-mono font-bold fill-amber-600">{p.tVal}°</text>
+                      <text x={p.x} y={p.yTemp - 6} textAnchor="middle" className="text-[9px] font-mono font-bold fill-amber-600">{p.tVal}</text>
                     </>
                   )}
                   {p.yPh !== null && (
@@ -689,9 +679,9 @@ function HistoryChart({ logs, isPreFerment }) {
 function TempPhDB({ tempLogs, setTempLogs }) {
   const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
+  
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedProduct, setExpandedProduct] = useState(null);
-
   const [inlineEditId, setInlineEditId] = useState(null);
   const [inlineData, setInlineData] = useState({});
   const [inlineMemo, setInlineMemo] = useState("");
@@ -810,7 +800,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                                           <input placeholder="°C" type="text" value={inlineData[item]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { t: e.target.value.replace(',', '.') } })} />
                                         ) : (
                                           <div className="flex gap-1">
-                                            <input placeholder="°" type="text" value={inlineData[item]?.t || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), t: e.target.value.replace(',', '.') } })} />
+                                            <input placeholder="°C" type="text" value={inlineData[item]?.t || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), t: e.target.value.replace(',', '.') } })} />
                                             <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), p: e.target.value.replace(',', '.') } })} />
                                           </div>
                                         )}
@@ -821,17 +811,20 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                                 </div>
                               ) : (
                                 <div onClick={() => startInlineEdit(log)} className="cursor-pointer group">
-                                  <div className="absolute top-2 right-2 text-[8px] font-black text-gray-200 group-hover:text-black uppercase tracking-tighter transition-colors">Edit ✏️</div>
-                                  <div className="mb-4 flex justify-between">
+                                  <div className="absolute top-2 right-2 text-[8px] font-black text-gray-200 group-hover:text-black uppercase tracking-tighter transition-colors">Edit </div>
+                                  <div className="mb-4 flex justify-between items-center">
                                     <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
-                                    <button onClick={(e) => { e.stopPropagation(); confirm("삭제하시겠습니까?") && setTempLogs(prev => prev.filter(l => l.id !== log.id)); }} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
+                                    <button onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      if(confirm("삭제하시겠습니까?")) setTempLogs(prev => prev.filter(l => l.id !== log.id));
+                                    }} className="text-gray-300 hover:text-red-500 text-xs font-bold font-sans">Delete</button>
                                   </div>
                                   <div className="space-y-1">
                                     {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].h || log.data[item].v) ? (
                                       <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
                                         <span className="font-bold text-gray-400 uppercase">{item}</span>
                                         <span className="font-mono text-black">
-                                          {log.data[item].t}{log.data[item].t && item !== "날짜" ? "°" : ""}
+                                          {log.data[item].t || ""}
                                           {log.data[item].p ? ` / ${log.data[item].p}pH` : ""}
                                           {log.data[item].h ? ` / ${log.data[item].h}m` : ""}
                                           {log.data[item].v ? ` / ${log.data[item].v}` : ""}
@@ -842,7 +835,6 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                                   {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] font-medium text-gray-500 whitespace-pre-wrap">{log.memo}</div>}
                                 </div>
                               )}
-
                             </div>
                           );
                         })}
@@ -884,7 +876,10 @@ function RecipeDB({ recipes, setRecipes }) {
               <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{recipe.category}</div>
               <div className="text-xl font-black tracking-tighter uppercase">{recipe.productName}</div>
             </div>
-            <button onClick={(e) => { e.stopPropagation(); if (confirm("삭제하시겠습니까?")) setRecipes(prev => prev.filter(r => r.id !== recipe.id)); }} className="text-gray-300 hover:text-red-500">✕</button>
+            <button onClick={(e) => { 
+              e.stopPropagation();
+              if (confirm("삭제하시겠습니까?")) setRecipes(prev => prev.filter(r => r.id !== recipe.id)); 
+            }} className="text-gray-300 hover:text-red-500 text-sm font-bold font-sans">Delete</button>
           </div>
         ))}
       </div>
@@ -901,13 +896,13 @@ function RecipeModal({ initialData, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
-  
+
   const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => idx === i ? { ...ing, [f]: (f === "percent" || f === "cost") ? v.replace(',', '.') : v } : ing));
-  
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
       <div className="bg-[#f7f6f3] w-full max-w-4xl rounded-[2rem] p-6 md:p-12 shadow-2xl max-h-[90vh] overflow-y-auto relative">
-        <button onClick={onClose} className="absolute top-6 right-6 text-xl">✕</button>
+        <button onClick={onClose} className="absolute top-6 right-6 text-xl font-sans font-bold hover:text-red-500">✕</button>
         <h2 className="text-2xl md:text-3xl font-black tracking-tighter mb-8 uppercase">Recipe Editor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <InputField label="분류"><select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold"><option value="하드계열">하드계열</option><option value="소프트계열">소프트계열</option><option value="사전반죽">사전반죽</option></select></InputField>
@@ -918,9 +913,9 @@ function RecipeModal({ initialData, onSave, onClose }) {
             <div key={i} className="grid grid-cols-2 md:grid-cols-[120px_1fr_80px_100px_40px] gap-2 md:gap-4 items-center bg-white p-3 md:p-4 rounded-xl shadow-sm">
               <select value={ing.type} onChange={e => updateIng(i, "type", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold"><option>밀</option><option>수분</option><option>사전반죽</option><option>소금</option><option>기타</option></select>
               <input value={ing.name} onChange={e => updateIng(i, "name", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold" placeholder="Ingredient Name" />
-              <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="%" type="text" inputMode="decimal" />
-              <input value={ing.cost} onChange={e => updateIng(i, "cost", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="Cost" type="text" inputMode="decimal" />
-              <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))} className="text-red-300 font-bold">✕</button>
+              <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold w-full" placeholder="%" type="text" inputMode="decimal" />
+              <input value={ing.cost} onChange={e => updateIng(i, "cost", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold w-full" placeholder="Cost" type="text" inputMode="decimal" />
+              <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))} className="text-red-300 font-bold hover:text-red-500 font-sans text-xs">Delete</button>
             </div>
           ))}
           <button onClick={() => setIngredients([...ingredients, { type: "밀", name: "", percent: "", cost: "" }])} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 font-black uppercase tracking-widest">+ Add Ingredient</button>
@@ -934,10 +929,10 @@ function RecipeModal({ initialData, onSave, onClose }) {
   );
 }
 
-function InputField({ label, children }) {
+function InputField({ label, children, className = "" }) {
     return (
-        <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">{label}</label>
+        <div className={className}>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block print-label">{label}</label>
             {children}
         </div>
     );
@@ -945,8 +940,8 @@ function InputField({ label, children }) {
 
 function SummaryCard({ title, children }) {
   return (
-    <div className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50">
-      <h2 className="text-xl md:text-2xl font-black tracking-tighter border-b-2 border-black pb-2 mb-4 uppercase">{title}</h2>
+    <div className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 print:bg-white print:shadow-none print:border-none print:p-0">
+      <h2 className="text-xl md:text-2xl font-black tracking-tighter border-b-2 border-black pb-2 mb-4 uppercase print:text-lg print:mt-4">{title}</h2>
       {children}
     </div>
   );
@@ -954,9 +949,9 @@ function SummaryCard({ title, children }) {
 
 function SummaryRow({ label, value }) {
   return (
-    <div className="flex justify-between border-b border-dashed pb-2 text-xs md:text-sm mb-2">
-      <span className="text-gray-600 font-bold uppercase text-[10px] tracking-tight">{label}</span>
-      <span className="font-mono font-bold">{value}</span>
+    <div className="flex justify-between border-b border-dashed border-gray-300 pb-2 text-xs md:text-sm mb-2 print:border-gray-300">
+      <span className="text-gray-600 font-bold uppercase text-[10px] tracking-tight print:text-black">{label}</span>
+      <span className="font-mono font-bold print:font-mono">{value}</span>
     </div>
   );
 }
