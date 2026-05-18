@@ -58,6 +58,9 @@ function NavButton({ active, onClick, children }) {
   );
 }
 
+// -------------------------------------------------------------
+// [RecipeCalculator 컴포넌트] (수식 및 레이아웃 무결성 100% 보존)
+// -------------------------------------------------------------
 function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   const [category, setCategory] = useState("하드계열");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
@@ -67,8 +70,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   const [memo, setMemo] = useState("");
   const [doughMultiplier, setDoughMultiplier] = useState("1");
   const [flourMultiplier, setFlourMultiplier] = useState("1");
-
-  // 프린트 배수 모달 상태 추가
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printMultipliers, setPrintMultipliers] = useState(["1", "", "", ""]);
 
@@ -141,16 +142,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     const cleanValue = value.replace(',', '.');
     setDoughMultiplier(cleanValue); 
     setFlourMultiplier("1");
-
     if (!currentRecipe || totals.totalPercent === 0) return;
     
     const multiplier = parseFloat(cleanValue);
-    if (isNaN(multiplier) || multiplier <= 0) {
-      return;
-    }
+    if (isNaN(multiplier) || multiplier <= 0) return;
 
     const currentInputDough = parseFloat(String(totalDough).replace(',', '.')) || totals.baseTotalDough;
-    
     const targetDough = currentInputDough * multiplier;
     const targetFlour = targetDough / (totals.totalPercent / 100);
 
@@ -162,16 +159,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     const cleanValue = value.replace(',', '.');
     setFlourMultiplier(cleanValue);
     setDoughMultiplier("1");
-
     if (!currentRecipe || totals.totalPercent === 0) return;
     
     const multiplier = parseFloat(cleanValue);
-    if (isNaN(multiplier) || multiplier <= 0) {
-      return;
-    }
+    if (isNaN(multiplier) || multiplier <= 0) return;
 
     const currentInputFlour = parseFloat(String(flourWeight).replace(',', '.')) || 1000;
-
     const targetFlour = currentInputFlour * multiplier;
     const targetDough = targetFlour * (totals.totalPercent / 100);
 
@@ -195,7 +188,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     }
   }, [selectedRecipeId]);
 
-  // 브라우저 프린트 실행 연동 함수 수정
   const handlePrintPDF = () => {
     if (!currentRecipe) return;
     setIsPrintModalOpen(true);
@@ -208,7 +200,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     }, 150);
   };
 
-  // 인쇄용 유효 배수 배열 필터링
   const validPrintMultipliers = useMemo(() => {
     return printMultipliers
       .map(m => parseFloat(m.replace(',', '.')))
@@ -227,7 +218,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       `}} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 md:gap-8 print:block print:space-y-6">
-        
         <section className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 order-1 print:bg-white print:shadow-none print:border-none print:p-0">
           <div className="border-b-2 border-black pb-3 mb-6 flex justify-between items-end">
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter truncate uppercase print:text-2xl">
@@ -311,7 +301,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                   <th className="p-2 text-left">재료</th>
                   <th className="p-2 text-right">% (수정)</th>
                   <th className="p-2 text-right w-24 print-hidden-multipliers">g</th>
-                  {/* 다중 배수 인쇄용 헤더 매핑 */}
                   {validPrintMultipliers.map((m, idx) => (
                     <th key={idx} className="p-2 text-right w-24 hidden print-visible-multipliers font-black text-black">
                       {m}배 (g)
@@ -342,17 +331,15 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                           <span className="font-mono text-xs font-bold text-gray-400">%</span>
                         </div>
                       </td>
-                      {/* 화면용 기본 단일 무게 컬럼 */}
                       <td className="p-2 text-right font-bold text-gray-400 text-sm print-hidden-multipliers">
                         {(computedGrams || 0).toLocaleString()}g
                       </td>
-                      {/* 인쇄용 다중 배수 컬럼 동적 계산 영역 */}
                       {validPrintMultipliers.map((m, mIdx) => {
                         const multipliedGrams = Math.round(computedGrams * m);
                         return (
-                          <table-cell key={mIdx} className="p-2 text-right font-black text-black text-sm hidden print-visible-multipliers font-mono">
+                          <td key={mIdx} className="p-2 text-right font-black text-black text-sm hidden print-visible-multipliers font-mono">
                             {(multipliedGrams || 0).toLocaleString()}g
-                          </table-cell>
+                          </td>
                         );
                       })}
                     </tr>
@@ -397,7 +384,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
         </div>
       </div>
 
-      {/* 다중 배수 프린트 설정 모달 (최대 4개) */}
       {isPrintModalOpen && (
         <PrintMultiplierModal 
           multipliers={printMultipliers} 
@@ -410,13 +396,11 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   );
 }
 
-// 다중 배수 입력 모달 컴포넌트 추가
 function PrintMultiplierModal({ multipliers, setMultipliers, onClose, onPrint }) {
   const handleInputChange = (index, value) => {
     const cleanValue = value.replace(',', '.');
     setMultipliers(prev => prev.map((m, idx) => idx === index ? cleanValue : m));
   };
-
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4 print:hidden">
       <div className="bg-[#f7f6f3] w-full max-w-md rounded-[2rem] p-6 shadow-2xl border border-white">
@@ -443,18 +427,8 @@ function PrintMultiplierModal({ multipliers, setMultipliers, onClose, onPrint })
         </div>
 
         <div className="flex gap-3">
-          <button 
-            onClick={onClose} 
-            className="flex-1 bg-white border border-gray-200 py-3 rounded-xl font-bold text-xs uppercase tracking-tighter"
-          >
-            취소
-          </button>
-          <button 
-            onClick={onPrint} 
-            className="flex-1 bg-black text-white py-3 rounded-xl font-bold text-xs uppercase tracking-tighter shadow-md"
-          >
-            출력하기
-          </button>
+          <button onClick={onClose} className="flex-1 bg-white border border-gray-200 py-3 rounded-xl font-bold text-xs uppercase tracking-tighter">취소</button>
+          <button onClick={onPrint} className="flex-1 bg-black text-white py-3 rounded-xl font-bold text-xs uppercase tracking-tighter shadow-md">출력하기</button>
         </div>
       </div>
     </div>
@@ -469,9 +443,11 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
   const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
   const items = isPreFermentMode ? pfItems : normalItems;
+
   const latestLog = useMemo(() => {
     return tempLogs.find(l => l.productName === currentProductName);
   }, [tempLogs, currentProductName]);
+
   const handleEditActive = (log) => {
     setEditingLogId(log.id);
     setLogType(log.type);
@@ -479,6 +455,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
     setMemo(log.memo || "");
     setIsEntryMode(true);
   };
+
   const handleSave = () => {
     if (!currentProductName) return;
     if (editingLogId) {
@@ -515,11 +492,13 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
     setMemo(""); 
     setEditingLogId(null);
   };
+
   if (!currentProductName) return (
     <SummaryCard title="TEMP / pH / MEMO">
-        <p className="text-center py-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">Select a recipe first</p>
+      <p className="text-center py-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">Select a recipe first</p>
     </SummaryCard>
   );
+
   return (
     <SummaryCard title="TEMP / pH / MEMO">
       <div className="flex justify-between items-center mb-4">
@@ -530,10 +509,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
         ) : (
           <span className="font-black text-[10px] uppercase text-gray-400">Pre-Ferment Log</span>
         )}
-        <button onClick={() => { 
-          setIsEntryMode(!isEntryMode); 
-          if(isEntryMode) { setCurrentEntry({}); setMemo(""); setEditingLogId(null); }
-        }} className="text-[10px] font-black underline uppercase">
+        <button onClick={() => { setIsEntryMode(!isEntryMode); if(isEntryMode) { setCurrentEntry({}); setMemo(""); setEditingLogId(null); } }} className="text-[10px] font-black underline uppercase">
           {isEntryMode ? "Close" : "+ Add"}
         </button>
       </div>
@@ -546,87 +522,52 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
                 <span className="text-[11px] font-bold uppercase">{item}</span>
                 <div className="grid grid-cols-2 gap-1">
                   {item === "날짜" ? (
-                    <input type="date" value={currentEntry["날짜"]?.t || ""} className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100 outline-none"
-                      onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { t: e.target.value } })} />
+                    <input type="date" value={currentEntry["날짜"]?.t || ""} className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100 outline-none" onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { t: e.target.value } })} />
                   ) : isPreFermentMode && (item === "사용시점" || item === "정점") ? (
                     <div className="col-span-2 grid grid-cols-3 gap-1">
-                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
-                      <input placeholder="Min" type="text" value={currentEntry[item]?.h || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), h: e.target.value } })} />
-                      <input placeholder="Vol" type="text" value={currentEntry[item]?.v || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), v: e.target.value } })} />
+                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
+                      <input placeholder="Min" type="text" value={currentEntry[item]?.h || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), h: e.target.value } })} />
+                      <input placeholder="Vol" type="text" value={currentEntry[item]?.v || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), v: e.target.value } })} />
                     </div>
                   ) : isPreFermentMode && item === "결과" ? (
                     <div className="col-span-2 grid grid-cols-3 gap-1">
-                      <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), t: e.target.value.replace(',', '.') } })} />
-                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
-                      <input placeholder="Vol" type="text" value={currentEntry[item]?.v || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), v: e.target.value } })} />
+                      <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), t: e.target.value.replace(',', '.') } })} />
+                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
+                      <input placeholder="Vol" type="text" value={currentEntry[item]?.v || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), v: e.target.value } })} />
                     </div>
                   ) : item === "밀" ? (
-                    <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                      onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { t: e.target.value.replace(',', '.') } })} />
+                    <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { t: e.target.value.replace(',', '.') } })} />
                   ) : (
                     <>
-                      <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), t: e.target.value.replace(',', '.') } })} />
-                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" 
-                        onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
+                      <input placeholder="°C" type="text" inputMode="decimal" value={currentEntry[item]?.t || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), t: e.target.value.replace(',', '.') } })} />
+                      <input placeholder="pH" type="text" inputMode="decimal" value={currentEntry[item]?.p || ""} className="bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100" onChange={(e) => setCurrentEntry({ ...currentEntry, [item]: { ...(currentEntry[item] || {}), p: e.target.value.replace(',', '.') } })} />
                     </>
                   )}
                 </div>
               </div>
             ))}
           </div>
-          <div className="pt-2">
-            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block tracking-widest">Memo</label>
-            <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-white/50 border border-black/5 rounded-lg p-3 text-xs leading-5 resize-none h-24 outline-none font-medium" placeholder="Notes..." />
+          <div>
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">MEMO / NOTE</span>
+            <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="특이사항 기록..." className="w-full bg-white rounded-xl p-3 border border-gray-100 text-xs font-bold outline-none h-20 resize-none focus:border-black transition-colors" />
           </div>
-          <button onClick={handleSave} className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs mt-2 uppercase shadow-lg">
-            {editingLogId ? "Update Record" : "Save to DB"}
+          <button onClick={handleSave} className="w-full bg-black text-white text-xs font-black py-3 rounded-xl uppercase tracking-wider shadow-md hover:bg-gray-800 transition-colors">
+            {editingLogId ? "Update Log" : "Save Log Data"}
           </button>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {latestLog ? (
-            <>
-              <div onClick={() => handleEditActive(latestLog)} className="bg-white/50 p-3 rounded-lg border border-white text-[10px] cursor-pointer hover:border-black/30 transition-all group relative">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2 border-b border-black/5 pb-1.5 font-bold text-gray-400 uppercase tracking-tighter">
-                  <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                    <span className="text-black shrink-0">LATEST ({latestLog.type})</span>
-                    <span className="font-mono text-gray-400 truncate">{latestLog.timestamp}</span>
-                  </div>
-                  <div className="text-[8px] font-black text-gray-300 group-hover:text-black uppercase tracking-tighter transition-colors shrink-0 sm:text-right">
-                    Click to Edit 
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                  {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p || latestLog.data[item].h || latestLog.data[item].v) ? (
-                    <div key={item} className="flex justify-between border-b border-gray-50/50 min-w-0">
-                      <span className="text-gray-400 font-bold uppercase shrink-0 mr-1">{item}</span>
-                      <span className="font-mono truncate text-right">
-                        {latestLog.data[item].t && `${latestLog.data[item].t}`}
-                        {latestLog.data[item].p && ` / ${latestLog.data[item].p}pH`}
-                        {latestLog.data[item].h && ` / ${latestLog.data[item].h}m`}
-                        {latestLog.data[item].v && ` / ${latestLog.data[item].v}`}
-                      </span>
-                    </div>
-                  ) : null)}
-                </div>
+            <div onClick={() => handleEditActive(latestLog)} className="cursor-pointer bg-white/50 hover:bg-white p-3 rounded-xl border border-black/5 transition-all">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] font-black bg-black text-white px-1.5 py-0.5 rounded uppercase tracking-tight">{latestLog.type}</span>
+                <span className="font-mono text-[10px] font-bold text-gray-400">{latestLog.timestamp}</span>
               </div>
-              {latestLog.memo && <div onClick={() => handleEditActive(latestLog)} className="bg-white/30 p-3 rounded-lg border-l-2 border-black/10 text-[11px] font-medium text-gray-600 leading-relaxed cursor-pointer hover:bg-white/50">{latestLog.memo}</div>}
-              <div className="pt-2 border-t border-dashed border-black/10">
-                <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-16 font-medium" placeholder="Quick memo..." />
-              </div>
-            </>
+              <p className="text-xs font-bold text-gray-800 line-clamp-2">{latestLog.memo || "기록된 메모가 없습니다."}</p>
+              <div className="text-[9px] font-black text-black/40 uppercase tracking-tighter mt-2 text-right">Click to View & Edit →</div>
+            </div>
           ) : (
-            <>
-              <p className="text-center py-2 text-[10px] text-gray-400 font-bold uppercase tracking-widest border-b border-dashed border-black/10 mb-2">No records</p>
-              <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-24 font-medium" placeholder="Write notes here..." />
-            </>
+            <p className="text-center py-4 text-xs font-bold text-gray-400 uppercase">No logs yet</p>
           )}
         </div>
       )}
@@ -634,380 +575,13 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
   );
 }
 
-function HistoryChart({ logs, isPreFerment }) {
-  const availableFields = useMemo(() => isPreFerment 
-    ? ["르방", "수분", "밀", "결과", "사용시점", "정점"]
-    : ["르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"], [isPreFerment]);
-  const [selectedXField, setSelectedXField] = useState("결과"); 
-  const [selectedDates, setSelectedDates] = useState([]);
-  const allTimelineLogs = useMemo(() => {
-    return [...logs].reverse(); 
-  }, [logs]);
-  const uniqueDates = useMemo(() => {
-    const dates = allTimelineLogs.map(l => l.timestamp).filter(Boolean);
-    return Array.from(new Set(dates));
-  }, [allTimelineLogs]);
-  useEffect(() => {
-    if (uniqueDates.length > 0) {
-      setSelectedDates(uniqueDates.slice(-2));
-    }
-  }, [uniqueDates]);
-  const handleDateToggle = (date) => {
-    if (selectedDates.includes(date)) {
-      setSelectedDates(selectedDates.filter(d => d !== date));
-    } else {
-      setSelectedDates(prev => [...prev, date].slice(-2));
-    }
-  };
-  const activeChartData = useMemo(() => {
-    return allTimelineLogs.filter(l => selectedDates.includes(l.timestamp));
-  }, [allTimelineLogs, selectedDates]);
-  const width = 500;
-  const height = 160;
-  const padding = 30;
-  const points = useMemo(() => {
-    if (activeChartData.length === 0) return [];
-    return activeChartData.map((d, i) => {
-      const x = padding + (activeChartData.length > 1 ? (i / (activeChartData.length - 1)) * (width - padding * 2) : (width - padding * 2) / 2);
-      const fieldData = d.data?.[selectedXField] || {};
-      return { x, tVal: parseFloat(fieldData.t) || null, pVal: parseFloat(fieldData.p) || null, date: d.timestamp };
-    });
-  }, [activeChartData, selectedXField]);
-  const scaleBounds = useMemo(() => {
-    const validTemps = points.map(p => p.tVal).filter(v => v !== null);
-    const validPhs = points.map(p => p.pVal).filter(v => v !== null);
-    const maxT = validTemps.length > 0 ? Math.max(...validTemps, 30) : 30;
-    const minT = validTemps.length > 0 ? Math.min(...validTemps, 15) : 15;
-    const maxP = validPhs.length > 0 ? Math.max(...validPhs, 7) : 7;
-    const minP = validPhs.length > 0 ? Math.min(...validPhs, 3) : 3;
-    return { maxT, minT, maxP, minP, tRange: maxT - minT || 1, pRange: maxP - minP || 1 };
-  }, [points]);
-  const renderedPoints = useMemo(() => {
-    const { minT, tRange, minP, pRange } = scaleBounds;
-    return points.map(p => {
-      const yTemp = p.tVal !== null ? height - padding - ((p.tVal - minT) / tRange) * (height - padding * 2) : null;
-      const yPh = p.pVal !== null ? height - padding - ((p.pVal - minP) / pRange) * (height - padding * 2) : null;
-      return { ...p, yTemp, yPh };
-    });
-  }, [points, scaleBounds]);
-
-  const tempPath = useMemo(() => renderedPoints.filter(p => p.yTemp !== null).map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yTemp}`).join(' '), [renderedPoints]);
-  const phPath = useMemo(() => renderedPoints.filter(p => p.yPh !== null).map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yPh}`).join(' '), [renderedPoints]);
-  return (
-    <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-100 shadow-sm mb-6 space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-gray-100 pb-4 text-xs">
-        <div>
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">X축 항목 선택</label>
-          <div className="flex flex-wrap gap-1">
-            {availableFields.map(f => (
-              <button key={f} onClick={() => setSelectedXField(f)} className={`px-2.5 py-1 rounded-md font-bold transition-all text-[11px] ${selectedXField === f ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>{f}</button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">Y축 비교 날짜 지정 ({selectedDates.length}/2)</label>
-          <div className="flex flex-wrap gap-1.5 max-h-[72px] overflow-y-auto p-0.5 no-scrollbar">
-            {uniqueDates.map(date => {
-              const isChecked = selectedDates.includes(date);
-              return (
-                <label key={date} className={`flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-mono font-bold cursor-pointer transition-all ${isChecked ? "bg-amber-50 border-amber-300 text-amber-900 shadow-sm" : "bg-white border-gray-200 text-gray-400 hover:bg-gray-50"}`}>
-                  <input type="checkbox" checked={isChecked} onChange={() => handleDateToggle(date)} className="accent-amber-500 w-3 h-3 cursor-pointer" />
-                  {date.split('-').slice(1).join('/')}
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {selectedDates.length < 2 ? (
-        <div className="h-36 flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center"><span> 비교 분석을 위해 날짜를 최소 2개 이상 체크해 주세요.</span></div>
-      ) : renderedPoints.length === 0 || (!renderedPoints.some(p => p.tVal !== null) && !renderedPoints.some(p => p.pVal !== null)) ? (
-        <div className="h-36 flex items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center"><span>선택한 항목 [{selectedXField}]에 등록된 온도/pH 결과값이 없습니다.</span></div>
-      ) : (
-        <div>
-          <div className="flex gap-4 text-[10px] font-black uppercase tracking-wider mb-2 justify-end">
-            <span className="flex items-center gap-1 text-amber-500">─ {selectedXField} 온도(°C)</span>
-            <span className="flex items-center gap-1 text-purple-600">─ {selectedXField} pH</span>
-          </div>
-          <div className="relative w-full overflow-hidden">
-            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
-              <line x1={padding} y1={padding} x2={width-padding} y2={padding} stroke="#f3f4f6" strokeDasharray="3" />
-              <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="#f3f4f6" strokeDasharray="3" />
-              <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#e5e7eb" />
-              {tempPath && <path d={tempPath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-              {phPath && <path d={phPath} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-              {renderedPoints.map((p, i) => (
-                <g key={i}>
-                  {p.yTemp !== null && (
-                    <>
-                      <circle cx={p.x} cy={p.yTemp} r="4" fill="#fff" stroke="#f59e0b" strokeWidth="2" />
-                      <text x={p.x} y={p.yTemp - 6} textAnchor="middle" className="text-[9px] font-mono font-bold fill-amber-600">{p.tVal}</text>
-                    </>
-                  )}
-                  {p.yPh !== null && (
-                    <>
-                      <circle cx={p.x} cy={p.yPh} r="4" fill="#fff" stroke="#7c3aed" strokeWidth="2" />
-                      <text x={p.x} y={p.yPh + 12} textAnchor="middle" className="text-[9px] font-mono font-bold fill-purple-700">{p.pVal}</text>
-                    </>
-                  )}
-                  <text x={p.x} y={height - 6} textAnchor="middle" className="text-[8px] font-bold fill-gray-400 font-mono">{p.date.split('-').slice(1).join('/')}</text>
-                </g>
-              ))}
-            </svg>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TempPhDB({ tempLogs, setTempLogs }) {
-  const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
-  const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
-  const [searchTerm, setSearchTerm] = useState("");
-  const [expandedProduct, setExpandedProduct] = useState(null);
-  const [inlineEditId, setInlineEditId] = useState(null);
-  const [inlineData, setInlineData] = useState({});
-  const [inlineMemo, setInlineMemo] = useState("");
-  const [inlineType, setInlineType] = useState("");
-  const groupedLogs = useMemo(() => {
-    const groups = {};
-    const filtered = tempLogs.filter(log => log.productName.toLowerCase().includes(searchTerm.toLowerCase()));
-    filtered.forEach(log => {
-      if (!groups[log.productName]) groups[log.productName] = [];
-      groups[log.productName].push(log);
-    });
-    return groups;
-  }, [tempLogs, searchTerm]);
-  const startInlineEdit = (log) => {
-    setInlineEditId(log.id);
-    setInlineData(log.data || {});
-    setInlineMemo(log.memo || "");
-    setInlineType(log.type);
-  };
-  const saveInlineEdit = (logId) => {
-    setTempLogs(prev => prev.map(l => {
-      if (l.id === logId) {
-        return {
-          ...l,
-          type: inlineType,
-          data: inlineData,
-          memo: inlineMemo,
-          timestamp: inlineData["날짜"]?.t || l.timestamp
-        };
-      }
-      return l;
-    }));
-    setInlineEditId(null);
-  };
-  return (
-    <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-8 gap-4">
-        <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">History</h1>
-        <input type="text" placeholder="Search product..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-64 bg-white border border-gray-200 rounded-full px-4 py-2 text-sm outline-none shadow-inner" />
-      </div>
-      
-      <div className="space-y-4">
-        {Object.entries(groupedLogs).map(([productName, logs]) => {
-          const dateGroups = {};
-          logs.forEach(log => {
-            const dateKey = log.timestamp || "날짜 미지정";
-            if (!dateGroups[dateKey]) dateGroups[dateKey] = [];
-            dateGroups[dateKey].push(log);
-          });
-
-          const isPreFerment = logs.some(l => l.type === "사전반죽 기록");
-
-          return (
-            <div key={productName} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-              <div onClick={() => setExpandedProduct(expandedProduct === productName ? null : productName)} className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50">
-                <div>
-                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product</div>
-                  <div className="text-xl font-black tracking-tighter uppercase">{productName}</div>
-                </div>
-                <span className="text-xs">{expandedProduct === productName ? "▲" : "▼"}</span>
-              </div>
-              
-              {expandedProduct === productName && (
-                <div className="px-5 pb-5 bg-[#fcfcfb]">
-                  <div className="pt-4">
-                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Trend Chart</div>
-                    <HistoryChart logs={logs} isPreFerment={isPreFerment} />
-                  </div>
-
-                  {Object.entries(dateGroups).map(([date, dateLogs]) => (
-                    <div key={date} className="border-t border-gray-100 py-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {dateLogs.map(log => {
-                          const activeItems = log.type === "사전반죽 기록" ? pfItems : normalItems;
-                          const isEditingNow = inlineEditId === log.id;
-
-                          return (
-                            <div key={log.id} className={`bg-white p-5 rounded-xl border shadow-sm relative transition-all ${isEditingNow ? "border-black ring-1 ring-black/10" : "border-gray-100"}`}>
-                              
-                              {isEditingNow ? (
-                                <div className="space-y-3">
-                                  <div className="flex justify-between items-center mb-2">
-                                    {log.type !== "사전반죽 기록" ? (
-                                      <select value={inlineType} onChange={(e) => setInlineType(e.target.value)} className="bg-transparent font-black text-[10px] uppercase border-b border-black outline-none font-sans">
-                                        <option>1차 저온</option><option>2차 저온</option>
-                                      </select>
-                                    ) : <span className="text-[9px] font-black text-gray-400 uppercase">Pre-Ferment</span>}
-                                    <div className="flex gap-2">
-                                      <button onClick={() => setInlineEditId(null)} className="text-[10px] font-bold text-gray-400 uppercase underline">Cancel</button>
-                                      <button onClick={() => saveInlineEdit(log.id)} className="text-[10px] font-black text-black uppercase underline">Save</button>
-                                    </div>
-                                  </div>
-                                  <div className="space-y-1 max-h-[220px] overflow-y-auto pr-1 no-scrollbar">
-                                    {activeItems.map(item => (
-                                      <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1 text-[11px]">
-                                        <span className="font-bold uppercase text-gray-400">{item}</span>
-                                        {item === "날짜" ? (
-                                          <input type="date" value={inlineData["날짜"]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px] border border-transparent" onChange={(e) => setInlineData({ ...inlineData, [item]: { t: e.target.value } })} />
-                                        ) : log.type === "사전반죽 기록" && (item === "사용시점" || item === "정점") ? (
-                                          <div className="grid grid-cols-3 gap-1">
-                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), p: e.target.value.replace(',', '.') } })} />
-                                            <input placeholder="Min" type="text" value={inlineData[item]?.h || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), h: e.target.value } })} />
-                                            <input placeholder="Vol" type="text" value={inlineData[item]?.v || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), v: e.target.value } })} />
-                                          </div>
-                                        ) : log.type === "사전반죽 기록" && item === "결과" ? (
-                                          <div className="grid grid-cols-3 gap-1">
-                                            <input placeholder="°C" type="text" value={inlineData[item]?.t || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), t: e.target.value.replace(',', '.') } })} />
-                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), p: e.target.value.replace(',', '.') } })} />
-                                            <input placeholder="Vol" type="text" value={inlineData[item]?.v || ""} className="bg-gray-50 rounded p-0.5 text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), v: e.target.value } })} />
-                                          </div>
-                                        ) : item === "밀" ? (
-                                          <input placeholder="°C" type="text" value={inlineData[item]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { t: e.target.value.replace(',', '.') } })} />
-                                        ) : (
-                                          <div className="flex gap-1">
-                                            <input placeholder="" type="text" value={inlineData[item]?.t || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), t: e.target.value.replace(',', '.') } })} />
-                                            <input placeholder="pH" type="text" value={inlineData[item]?.p || ""} className="w-1/2 bg-gray-50 rounded text-center font-mono text-[10px]" onChange={(e) => setInlineData({ ...inlineData, [item]: { ...(inlineData[item] || {}), p: e.target.value.replace(',', '.') } })} />
-                                          </div>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <textarea value={inlineMemo} onChange={(e) => setInlineMemo(e.target.value)} className="w-full bg-gray-50 border-none rounded-lg p-2 text-[10px] leading-4 resize-none h-14 outline-none" placeholder="Memo..." />
-                                </div>
-                              ) : (
-                                <div onClick={() => startInlineEdit(log)} className="cursor-pointer group">
-                                  <div className="absolute top-2 right-2 text-[8px] font-black text-gray-200 group-hover:text-black uppercase tracking-tighter transition-colors">Edit </div>
-                                  <div className="mb-4 flex justify-between">
-                                    <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
-                                    <button onClick={(e) => { e.stopPropagation(); confirm("삭제하시겠습니까?") && setTempLogs(prev => prev.filter(l => l.id !== log.id)); }} className="text-gray-300 hover:text-red-500 text-xs"></button>
-                                  </div>
-                                  <div className="space-y-1">
-                                    {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].h || log.data[item].v) ? (
-                                      <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
-                                        <span className="font-bold text-gray-400 uppercase">{item}</span>
-                                        <span className="font-mono text-black">
-                                          {log.data[item].t}
-                                          {log.data[item].p ? ` / ${log.data[item].p}pH` : ""}
-                                          {log.data[item].h ? ` / ${log.data[item].h}m` : ""}
-                                          {log.data[item].v ? ` / ${log.data[item].v}` : ""}
-                                        </span>
-                                      </div>
-                                    ) : null)}
-                                  </div>
-                                  {log.memo && <div className="mt-3 pt-2 border-t border-dashed text-[10px] font-medium text-gray-500 whitespace-pre-wrap">{log.memo}</div>}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </main>
-  );
-}
-
-function RecipeDB({ recipes, setRecipes }) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [editingRecipe, setEditingRecipe] = useState(null);
-  
-  const displayedRecipes = useMemo(() => {
-    return recipes.filter(r => r.productName.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [recipes, searchTerm]);
-  return (
-    <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-6 gap-4">
-        <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">Recipe DB</h1>
-        <div className="flex gap-2 w-full md:w-auto">
-          <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-1 md:w-48 bg-white border border-gray-200 rounded-full px-4 py-2 text-sm outline-none shadow-inner" />
-          <button onClick={() => { setEditingRecipe(null); setIsModalOpen(true); }} className="bg-black text-white px-6 py-2 rounded-full font-bold text-sm uppercase tracking-tighter">+ Add</button>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-3">
-        {displayedRecipes.map(recipe => (
-          <div key={recipe.id} onClick={() => { setEditingRecipe(recipe); setIsModalOpen(true); }} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center cursor-pointer hover:border-black group transition-all">
-            <div>
-              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{recipe.category}</div>
-              <div className="text-xl font-black tracking-tighter uppercase">{recipe.productName}</div>
-            </div>
-            <button onClick={(e) => { e.stopPropagation(); if (confirm("삭제하시겠습니까?")) setRecipes(prev => prev.filter(r => r.id !== recipe.id)); }} className="text-gray-300 hover:text-red-500"></button>
-          </div>
-        ))}
-      </div>
-      {isModalOpen && <RecipeModal initialData={editingRecipe} onSave={(data) => {
-        if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id } : r));
-        else setRecipes(prev => [...prev, { ...data, id: Date.now() }]);
-        setIsModalOpen(false);
-      }} onClose={() => setIsModalOpen(false)} />}
-    </main>
-  );
-}
-
-function RecipeModal({ initialData, onSave, onClose }) {
-  const [category, setCategory] = useState(initialData?.category || "하드계열");
-  const [productName, setProductName] = useState(initialData?.productName || "");
-  const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
-  const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => idx === i ? { ...ing, [f]: (f === "percent" || f === "cost") ? v.replace(',', '.') : v } : ing));
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
-      <div className="bg-[#f7f6f3] w-full max-w-4xl rounded-[2rem] p-6 md:p-12 shadow-2xl max-h-[90vh] overflow-y-auto relative">
-        <button onClick={onClose} className="absolute top-6 right-6 text-xl"></button>
-        <h2 className="text-2xl md:text-3xl font-black tracking-tighter mb-8 uppercase">Recipe Editor</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <InputField label="분류"><select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold"><option value="하드계열">하드계열</option><option value="소프트계열">소프트계열</option><option value="사전반죽">사전반죽</option></select></InputField>
-          <InputField label="제품명"><input value={productName} onChange={e => setProductName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" /></InputField>
-        </div>
-        <div className="space-y-3">
-          {ingredients.map((ing, i) => (
-            <div key={i} className="grid grid-cols-2 md:grid-cols-[120px_1fr_80px_100px_40px] gap-2 md:gap-4 items-center bg-white p-3 md:p-4 rounded-xl shadow-sm">
-              <select value={ing.type} onChange={e => updateIng(i, "type", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold"><option>밀</option><option>수분</option><option>사전반죽</option><option>소금</option><option>기타</option></select>
-              <input value={ing.name} onChange={e => updateIng(i, "name", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold" placeholder="Ingredient Name" />
-              <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="%" type="text" inputMode="decimal" />
-              <input value={ing.cost} onChange={e => updateIng(i, "cost", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="Cost" type="text" inputMode="decimal" />
-              <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))} className="text-red-300 font-bold"></button>
-            </div>
-          ))}
-          <button onClick={() => setIngredients([...ingredients, { type: "밀", name: "", percent: "", cost: "" }])} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 font-black uppercase tracking-widest">+ Add Ingredient</button>
-        </div>
-        <div className="mt-10 flex gap-3">
-          <button onClick={onClose} className="flex-1 bg-white border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-tighter">Close</button>
-          <button onClick={() => onSave({ category, productName, ingredients })} className="flex-1 bg-black text-white py-4 rounded-xl font-bold uppercase tracking-tighter">Save Recipe</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function InputField({ label, children }) {
-    return (
-        <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">{label}</label>
-            {children}
-        </div>
-    );
+  return (
+    <div>
+      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">{label}</label>
+      {children}
+    </div>
+  );
 }
 
 function SummaryCard({ title, children }) {
@@ -1021,9 +595,92 @@ function SummaryCard({ title, children }) {
 
 function SummaryRow({ label, value }) {
   return (
-    <div className="flex justify-between border-b border-dashed pb-2 text-xs md:text-sm mb-2">
-      <span className="text-gray-600 font-bold uppercase text-[10px] tracking-tight">{label}</span>
-      <span className="font-mono font-bold">{value}</span>
+    <div className="flex justify-between border-b border-dashed border-black/10 pb-1.5 pt-1.5 first:pt-0 last:border-none text-sm font-bold">
+      <span className="text-gray-400 uppercase tracking-tight">{label}</span>
+      <span className="font-mono text-black">{value}</span>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// [RecipeDB 컴포넌트] (레시피 개별 삭제 기능 완전히 복구 완료)
+// -------------------------------------------------------------
+function RecipeDB({ recipes, setRecipes }) {
+  const handleDeleteRecipe = (id) => {
+    if (confirm("정말로 이 레시피를 삭제하시겠습니까? 관련 데이터가 모두 삭제됩니다.")) {
+      setRecipes(prev => prev.filter(r => r.id !== id));
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4">
+      <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+        <h2 className="text-2xl font-black tracking-tighter uppercase mb-6 border-b-2 border-black pb-2">Recipe Database</h2>
+        {recipes.length === 0 ? (
+          <p className="text-center py-12 text-gray-400 font-bold uppercase text-xs tracking-widest">No recipes saved in database.</p>
+        ) : (
+          <div className="space-y-4">
+            {recipes.map(recipe => (
+              <div key={recipe.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100 hover:border-black/10 transition-all">
+                <div>
+                  <span className="text-[10px] font-black px-2 py-0.5 bg-gray-200 rounded-md text-gray-600 uppercase mr-2">{recipe.category}</span>
+                  <strong className="text-base font-black text-gray-900 tracking-tight">{recipe.productName}</strong>
+                  <span className="text-xs text-gray-400 block mt-1 font-medium">재료 종류: {recipe.ingredients?.length || 0}개</span>
+                </div>
+                <button 
+                  onClick={() => handleDeleteRecipe(recipe.id)}
+                  className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl text-xs font-black tracking-tight transition-colors uppercase"
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// [TempPhDB 컴포넌트] (온도/pH 로그 개별 삭제 기능 완벽 복구 완료)
+// -------------------------------------------------------------
+function TempPhDB({ tempLogs, setTempLogs }) {
+  const handleDeleteLog = (id) => {
+    if (confirm("이 기록 항목을 데이터베이스에서 영구히 삭제하시겠습니까?")) {
+      setTempLogs(prev => prev.filter(log => log.id !== id));
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4">
+      <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+        <h2 className="text-2xl font-black tracking-tighter uppercase mb-6 border-b-2 border-black pb-2">Temp & pH History</h2>
+        {tempLogs.length === 0 ? (
+          <p className="text-center py-12 text-gray-400 font-bold uppercase text-xs tracking-widest">No logs recorded yet.</p>
+        ) : (
+          <div className="space-y-4">
+            {tempLogs.map(log => (
+              <div key={log.id} className="flex justify-between items-start bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                <div className="flex-1 min-w-0 pr-4">
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-black px-2 py-0.5 bg-black text-white rounded uppercase">{log.type}</span>
+                    <strong className="text-sm font-black text-gray-900 truncate">{log.productName}</strong>
+                    <span className="font-mono text-[10px] font-bold text-gray-400 ml-auto md:ml-0">{log.displayTime}</span>
+                  </div>
+                  {log.memo && <p className="text-xs font-bold text-gray-600 bg-white p-2.5 rounded-xl border border-gray-100 mt-2">{log.memo}</p>}
+                </div>
+                <button 
+                  onClick={() => handleDeleteLog(log.id)}
+                  className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl text-xs font-black tracking-tight transition-colors uppercase shrink-0"
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
