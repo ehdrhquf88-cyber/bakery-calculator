@@ -1,7 +1,55 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+const [showPrintModal, setShowPrintModal] = useState(false);
+function PrintModal({ onClose, onPrint }) {
+  const [selected, setSelected] = useState(1);
+  const [custom, setCustom] = useState("");
+  const presets = [1, 2, 3, 4, 5];
 
+  const handlePrint = () => {
+    const multiplier = custom ? parseFloat(custom.replace(',', '.')) : selected;
+    if (!multiplier || multiplier <= 0) return;
+    onPrint(multiplier);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
+      <div className="bg-white w-full max-w-sm rounded-3xl p-8 shadow-2xl">
+        <h2 className="text-2xl font-black tracking-tighter mb-1 uppercase">Print / PDF</h2>
+        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-6">배수를 선택하세요</p>
+        <div className="flex gap-2 mb-4">
+          {presets.map(n => (
+            <button key={n} onClick={() => { setSelected(n); setCustom(""); }}
+              className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${selected === n && !custom ? 'bg-black text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+              {n}배
+            </button>
+          ))}
+        </div>
+        <div className="mb-6">
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">직접 입력</label>
+          <div className="flex items-center border-2 border-gray-100 focus-within:border-black rounded-xl px-3 py-2 transition-all">
+            <input type="text" inputMode="decimal" value={custom}
+              onChange={(e) => { setCustom(e.target.value.replace(',', '.')); setSelected(null); }}
+              placeholder="예: 1.5"
+              className="flex-1 bg-transparent font-mono font-bold text-sm outline-none" />
+            <span className="text-xs font-bold text-gray-400">배</span>
+          </div>
+        </div>
+        <div className="bg-gray-50 rounded-xl p-3 mb-6 text-center">
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">밀가루 기준 1kg → </span>
+          <span className="font-black text-lg">
+            {((custom ? parseFloat(custom) || 0 : selected || 0) * 1000).toLocaleString()}g
+          </span>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 bg-gray-100 py-3 rounded-xl font-bold text-sm uppercase">취소</button>
+          <button onClick={handlePrint} className="flex-1 bg-black text-white py-3 rounded-xl font-bold text-sm uppercase shadow-lg">🖨 프린트</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 export default function Home() {
   const [view, setView] = useState("calc"); 
   const [recipes, setRecipes] = useState([]);
@@ -219,11 +267,24 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
             </h1>
             {currentRecipe && (
               <button 
-                onClick={handlePrintPDF}
-                className="bg-black text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-800 transition-all shadow-md print:hidden flex items-center gap-1"
-              >
-                <span>📄</span> PDF 저장 / 인쇄
-              </button>
+  onClick={() => setShowPrintModal(true)}
+  className="bg-black text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-800 transition-all shadow-md print:hidden flex items-center gap-1"
+>
+  <span>🖨</span> PDF 저장 / 인쇄
+</button>
+
+{showPrintModal && (
+  <PrintModal
+    onClose={() => setShowPrintModal(false)}
+    onPrint={(multiplier) => {
+      setShowPrintModal(false);
+      setFlourWeight(Math.round(1000 * multiplier));
+      setTotalDough(Math.round(1000 * multiplier * (totals.totalPercent / 100)));
+      setFlourMultiplier(String(multiplier));
+      setTimeout(() => window.print(), 300);
+    }}
+  />
+)}
             )}
           </div>
           
