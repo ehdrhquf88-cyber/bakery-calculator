@@ -207,14 +207,13 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       .filter(m => !isNaN(m) && m > 0);
   }, [printMultipliers]);
 
-  // 프론트엔드 내보내기용 정밀 Excel(CSV 규격) 다운로드 기능 함수
+  // Excel(CSV 규격) 다운로드 기능 함수
   const handleDownloadExcel = () => {
     if (!currentRecipe) return;
 
     const BOM = "\uFEFF";
     let csvContent = "";
 
-    // 헤더 구조 정보 세팅
     csvContent += `BREAD OS - 레시피 데이터 내보내기\n`;
     csvContent += `제품 분류,${category}\n`;
     csvContent += `제품명,${currentRecipe.productName}\n`;
@@ -223,7 +222,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     csvContent += `포함 수율,${totals.finalYield.toFixed(1)}%\n`;
     csvContent += `포함 소금 비율,${totals.totalSaltPercent}%\n\n`;
 
-    // 상세 테이블 구조화
     csvContent += `구분(Type),재료명(Ingredient),배합율(Baker's %),중량(g)\n`;
 
     currentRecipe.ingredients.forEach(ing => {
@@ -234,7 +232,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
       csvContent += `"${ing.type}","${ing.name}",${parsedPercent}%,${computedGrams}g\n`;
     });
 
-    // 다운로드 트리거 블록
     const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -264,12 +261,21 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
               {currentRecipe ? currentRecipe.productName : "CALCULATOR"}
             </h1>
             {currentRecipe && (
-              <button 
-                onClick={handlePrintPDF}
-                className="bg-black text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-800 transition-all shadow-md print:hidden flex items-center gap-1"
-              >
-                PDF 저장 / 인쇄
-              </button>
+              <div className="flex gap-2 print:hidden">
+                {/* Excel 저장 버튼이 PDF 저장 버튼 왼쪽으로 배치 완료 */}
+                <button 
+                  onClick={handleDownloadExcel}
+                  className="bg-white text-black border border-black px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-100 transition-all shadow-md flex items-center gap-1"
+                >
+                  Excel 저장
+                </button>
+                <button 
+                  onClick={handlePrintPDF}
+                  className="bg-black text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-800 transition-all shadow-md flex items-center gap-1"
+                >
+                  PDF 저장 / 인쇄
+                </button>
+              </div>
             )}
           </div>
           
@@ -394,16 +400,6 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
           {category !== "사전반죽" && (
             <>
               <SummaryCard title="SUMMARY">
-                {currentRecipe && (
-                  <div className="flex justify-end mb-3 print:hidden">
-                    <button 
-                      onClick={handleDownloadExcel}
-                      className="border border-black/20 text-black px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-tight hover:bg-black hover:text-white transition-all shadow-sm"
-                    >
-                      Excel 다운로드
-                    </button>
-                  </div>
-                )}
                 <SummaryRow label="사전반죽 포함 수율" value={`${totals.finalYield.toFixed(1)}%`} />
                 <SummaryRow label="사전반죽 포함 소금" value={`${totals.totalSaltPercent}%`} />
                 <SummaryRow label="총 반죽량" value={`${(Math.round(parseFloat(String(totalDough).replace(',', '.'))) || 0).toLocaleString()}g`} />
