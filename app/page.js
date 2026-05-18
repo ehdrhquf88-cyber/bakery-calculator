@@ -953,7 +953,7 @@ function RecipeDB({ recipes, setRecipes }) {
               <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{recipe.category}</div>
               <div className="text-xl font-black tracking-tighter uppercase">{recipe.productName}</div>
             </div>
-            <button onClick={(e) => { e.stopPropagation(); if (confirm("삭제하시겠습니까?")) setRecipes(prev => prev.filter(r => r.id !== recipe.id)); }} className="text-gray-300 hover:text-red-500"></button>
+            <button onClick={(e) => { e.stopPropagation(); if (confirm("삭제하시겠습니까?")) setRecipes(prev => prev.filter(r => r.id !== recipe.id)); }} className="text-gray-300 hover:text-red-500">x</button>
           </div>
         ))}
       </div>
