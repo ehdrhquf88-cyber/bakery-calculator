@@ -68,7 +68,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   const [doughMultiplier, setDoughMultiplier] = useState("1");
   const [flourMultiplier, setFlourMultiplier] = useState("1");
 
-  // 프린트 배수 모달 상태
+  // 프린트 배수 모달 상태 추가
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printMultipliers, setPrintMultipliers] = useState(["1", "", "", ""]);
 
@@ -145,9 +145,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     if (!currentRecipe || totals.totalPercent === 0) return;
     
     const multiplier = parseFloat(cleanValue);
-    if (isNaN(multiplier) || multiplier <= 0) return;
+    if (isNaN(multiplier) || multiplier <= 0) {
+      return;
+    }
 
     const currentInputDough = parseFloat(String(totalDough).replace(',', '.')) || totals.baseTotalDough;
+    
     const targetDough = currentInputDough * multiplier;
     const targetFlour = targetDough / (totals.totalPercent / 100);
 
@@ -163,9 +166,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     if (!currentRecipe || totals.totalPercent === 0) return;
     
     const multiplier = parseFloat(cleanValue);
-    if (isNaN(multiplier) || multiplier <= 0) return;
+    if (isNaN(multiplier) || multiplier <= 0) {
+      return;
+    }
 
     const currentInputFlour = parseFloat(String(flourWeight).replace(',', '.')) || 1000;
+
     const targetFlour = currentInputFlour * multiplier;
     const targetDough = targetFlour * (totals.totalPercent / 100);
 
@@ -189,6 +195,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     }
   }, [selectedRecipeId]);
 
+  // 브라우저 프린트 실행 연동 함수 수정
   const handlePrintPDF = () => {
     if (!currentRecipe) return;
     setIsPrintModalOpen(true);
@@ -201,46 +208,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
     }, 150);
   };
 
+  // 인쇄용 유효 배수 배열 필터링
   const validPrintMultipliers = useMemo(() => {
     return printMultipliers
       .map(m => parseFloat(m.replace(',', '.')))
       .filter(m => !isNaN(m) && m > 0);
   }, [printMultipliers]);
-
-  // Excel(CSV 규격) 다운로드 기능 함수
-  const handleDownloadExcel = () => {
-    if (!currentRecipe) return;
-
-    const BOM = "\uFEFF";
-    let csvContent = "";
-
-    csvContent += `BREAD OS - 레시피 데이터 내보내기\n`;
-    csvContent += `제품 분류,${category}\n`;
-    csvContent += `제품명,${currentRecipe.productName}\n`;
-    csvContent += `총 반죽량 (g),${totalDough || 0}\n`;
-    csvContent += `밀가루 총량 (g),${flourWeight || 0}\n`;
-    csvContent += `포함 수율,${totals.finalYield.toFixed(1)}%\n`;
-    csvContent += `포함 소금 비율,${totals.totalSaltPercent}%\n\n`;
-
-    csvContent += `구분(Type),재료명(Ingredient),배합율(Baker's %),중량(g)\n`;
-
-    currentRecipe.ingredients.forEach(ing => {
-      const parsedFlour = parseFloat(String(flourWeight).replace(',','.')) || 0;
-      const parsedPercent = parseFloat(String(ing.percent).replace(',','.')) || 0;
-      const computedGrams = Math.round(parsedFlour * (parsedPercent / 100));
-      
-      csvContent += `"${ing.type}","${ing.name}",${parsedPercent}%,${computedGrams}g\n`;
-    });
-
-    const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `${currentRecipe.productName}_Recipe_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black print:px-0 print:max-w-full">
@@ -261,21 +234,12 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
               {currentRecipe ? currentRecipe.productName : "CALCULATOR"}
             </h1>
             {currentRecipe && (
-              <div className="flex gap-2 print:hidden">
-                {/* Excel 저장 버튼이 PDF 저장 버튼 왼쪽으로 배치 완료 */}
-                <button 
-                  onClick={handleDownloadExcel}
-                  className="bg-white text-black border border-black px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-100 transition-all shadow-md flex items-center gap-1"
-                >
-                  Excel 저장
-                </button>
-                <button 
-                  onClick={handlePrintPDF}
-                  className="bg-black text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-800 transition-all shadow-md flex items-center gap-1"
-                >
-                  PDF 저장 / 인쇄
-                </button>
-              </div>
+              <button 
+                onClick={handlePrintPDF}
+                className="bg-black text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-800 transition-all shadow-md print:hidden flex items-center gap-1"
+              >
+                PDF 저장 / 인쇄
+              </button>
             )}
           </div>
           
@@ -347,6 +311,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                   <th className="p-2 text-left">재료</th>
                   <th className="p-2 text-right">% (수정)</th>
                   <th className="p-2 text-right w-24 print-hidden-multipliers">g</th>
+                  {/* 다중 배수 인쇄용 헤더 매핑 */}
                   {validPrintMultipliers.map((m, idx) => (
                     <th key={idx} className="p-2 text-right w-24 hidden print-visible-multipliers font-black text-black">
                       {m}배 (g)
@@ -377,15 +342,17 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
                           <span className="font-mono text-xs font-bold text-gray-400">%</span>
                         </div>
                       </td>
+                      {/* 화면용 기본 단일 무게 컬럼 */}
                       <td className="p-2 text-right font-bold text-gray-400 text-sm print-hidden-multipliers">
                         {(computedGrams || 0).toLocaleString()}g
                       </td>
+                      {/* 인쇄용 다중 배수 컬럼 동적 계산 영역 */}
                       {validPrintMultipliers.map((m, mIdx) => {
                         const multipliedGrams = Math.round(computedGrams * m);
                         return (
-                          <td key={mIdx} className="p-2 text-right font-black text-black text-sm hidden print-visible-multipliers font-mono">
+                          <table-cell key={mIdx} className="p-2 text-right font-black text-black text-sm hidden print-visible-multipliers font-mono">
                             {(multipliedGrams || 0).toLocaleString()}g
-                          </td>
+                          </table-cell>
                         );
                       })}
                     </tr>
@@ -430,6 +397,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
         </div>
       </div>
 
+      {/* 다중 배수 프린트 설정 모달 (최대 4개) */}
       {isPrintModalOpen && (
         <PrintMultiplierModal 
           multipliers={printMultipliers} 
@@ -442,6 +410,7 @@ function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
   );
 }
 
+// 다중 배수 입력 모달 컴포넌트 추가
 function PrintMultiplierModal({ multipliers, setMultipliers, onClose, onPrint }) {
   const handleInputChange = (index, value) => {
     const cleanValue = value.replace(',', '.');
@@ -802,7 +771,6 @@ function TempPhDB({ tempLogs, setTempLogs }) {
   const [inlineData, setInlineData] = useState({});
   const [inlineMemo, setInlineMemo] = useState("");
   const [inlineType, setInlineType] = useState("");
-  
   const groupedLogs = useMemo(() => {
     const groups = {};
     const filtered = tempLogs.filter(log => log.productName.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -812,14 +780,12 @@ function TempPhDB({ tempLogs, setTempLogs }) {
     });
     return groups;
   }, [tempLogs, searchTerm]);
-
   const startInlineEdit = (log) => {
     setInlineEditId(log.id);
     setInlineData(log.data || {});
     setInlineMemo(log.memo || "");
     setInlineType(log.type);
   };
-
   const saveInlineEdit = (logId) => {
     setTempLogs(prev => prev.map(l => {
       if (l.id === logId) {
@@ -835,7 +801,6 @@ function TempPhDB({ tempLogs, setTempLogs }) {
     }));
     setInlineEditId(null);
   };
-
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-8 gap-4">
@@ -930,6 +895,7 @@ function TempPhDB({ tempLogs, setTempLogs }) {
                                   <div className="absolute top-2 right-2 text-[8px] font-black text-gray-200 group-hover:text-black uppercase tracking-tighter transition-colors">Edit </div>
                                   <div className="mb-4 flex justify-between">
                                     <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
+                                    <button onClick={(e) => { e.stopPropagation(); confirm("삭제하시겠습니까?") && setTempLogs(prev => prev.filter(l => l.id !== log.id)); }} className="text-gray-300 hover:text-red-500 text-xs"></button>
                                   </div>
                                   <div className="space-y-1">
                                     {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].h || log.data[item].v) ? (
@@ -987,6 +953,7 @@ function RecipeDB({ recipes, setRecipes }) {
               <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{recipe.category}</div>
               <div className="text-xl font-black tracking-tighter uppercase">{recipe.productName}</div>
             </div>
+            <button onClick={(e) => { e.stopPropagation(); if (confirm("삭제하시겠습니까?")) setRecipes(prev => prev.filter(r => r.id !== recipe.id)); }} className="text-gray-300 hover:text-red-500"></button>
           </div>
         ))}
       </div>
@@ -1007,6 +974,7 @@ function RecipeModal({ initialData, onSave, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
       <div className="bg-[#f7f6f3] w-full max-w-4xl rounded-[2rem] p-6 md:p-12 shadow-2xl max-h-[90vh] overflow-y-auto relative">
+        <button onClick={onClose} className="absolute top-6 right-6 text-xl"></button>
         <h2 className="text-2xl md:text-3xl font-black tracking-tighter mb-8 uppercase">Recipe Editor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <InputField label="분류"><select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold"><option value="하드계열">하드계열</option><option value="소프트계열">소프트계열</option><option value="사전반죽">사전반죽</option></select></InputField>
