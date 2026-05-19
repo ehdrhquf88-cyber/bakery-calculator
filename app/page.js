@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import NavButton from "./components/NavButton";
 import RecipeCalculator from "./components/RecipeCalculator";
 import RecipeDB from "./components/RecipeDB";
+import ServiceWorkerUpdater from "./components/ServiceWorkerUpdater";
 import TempPhDB from "./components/TempPhDB";
 
 export default function Home() {
@@ -54,6 +55,7 @@ export default function Home() {
         {view === "db" && <RecipeDB recipes={recipes} setRecipes={setRecipes} />}
         {view === "temp_db" && <TempPhDB tempLogs={tempLogs} setTempLogs={setTempLogs} />}
       </div>
+      <ServiceWorkerUpdater />
     </div>
   );
 }
