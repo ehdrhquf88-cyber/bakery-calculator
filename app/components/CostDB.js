@@ -104,6 +104,7 @@ function CostModal({ initialData, onSave, onClose }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <InputField label="분류">
             <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold">
+              <option>미등록</option>
               <option>밀가루</option>
               <option>유제품</option>
               <option>설탕류</option>

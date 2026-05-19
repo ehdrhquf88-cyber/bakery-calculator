@@ -4,7 +4,7 @@ import { InputField } from "./common";
 
 
 
-export default function RecipeDB({ recipes, setRecipes, costItems }) {
+export default function RecipeDB({ recipes, setRecipes, costItems, setCostItems }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingRecipe, setEditingRecipe] = useState(null);
@@ -32,7 +32,7 @@ export default function RecipeDB({ recipes, setRecipes, costItems }) {
           </div>
         ))}
       </div>
-      {isModalOpen && <RecipeModal initialData={editingRecipe} costItems={costItems} onSave={(data) => {
+      {isModalOpen && <RecipeModal initialData={editingRecipe} costItems={costItems} setCostItems={setCostItems} onSave={(data) => {
         if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id } : r));
         else setRecipes(prev => [...prev, { ...data, id: Date.now() }]);
         setIsModalOpen(false);
@@ -41,7 +41,7 @@ export default function RecipeDB({ recipes, setRecipes, costItems }) {
   );
 }
 
-function RecipeModal({ initialData, costItems, onSave, onClose }) {
+function RecipeModal({ initialData, costItems, setCostItems, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
@@ -66,6 +66,65 @@ function RecipeModal({ initialData, costItems, onSave, onClose }) {
       cost: item.cost,
       costUnit: item.unit,
     } : ing));
+  };
+  const saveRecipe = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const knownItems = [...costItems];
+    const newCostItems = [];
+
+    const nextIngredients = ingredients.map((ing, index) => {
+      const trimmedName = ing.name.trim();
+      if (!trimmedName) return ing;
+
+      const linkedItem = knownItems.find(item => item.id === ing.ingredientId);
+      if (linkedItem) {
+        return {
+          ...ing,
+          name: linkedItem.name,
+          cost: ing.cost || linkedItem.cost,
+          costUnit: linkedItem.unit,
+        };
+      }
+
+      const exactItem = knownItems.find(item => item.name.trim().toLowerCase() === trimmedName.toLowerCase());
+      if (exactItem) {
+        return {
+          ...ing,
+          ingredientId: exactItem.id,
+          name: exactItem.name,
+          cost: ing.cost || exactItem.cost,
+          costUnit: exactItem.unit,
+        };
+      }
+
+      const newItem = {
+        id: Date.now() + index,
+        category: "미등록",
+        name: trimmedName,
+        cost: ing.cost || "",
+        unit: ing.costUnit || "g",
+        supplier: "",
+        memo: "레시피 DB에서 자동 등록",
+        updatedAt: today,
+      };
+
+      knownItems.push(newItem);
+      newCostItems.push(newItem);
+
+      return {
+        ...ing,
+        ingredientId: newItem.id,
+        name: newItem.name,
+        cost: newItem.cost,
+        costUnit: newItem.unit,
+      };
+    });
+
+    if (newCostItems.length > 0) {
+      setCostItems(prev => [...prev, ...newCostItems]);
+    }
+
+    onSave({ category, productName, ingredients: nextIngredients });
   };
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
@@ -96,7 +155,7 @@ function RecipeModal({ initialData, costItems, onSave, onClose }) {
         </div>
         <div className="mt-10 flex gap-3">
           <button onClick={onClose} className="flex-1 bg-white border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-tighter">Close</button>
-          <button onClick={() => onSave({ category, productName, ingredients })} className="flex-1 bg-black text-white py-4 rounded-xl font-bold uppercase tracking-tighter">Save Recipe</button>
+          <button onClick={saveRecipe} className="flex-1 bg-black text-white py-4 rounded-xl font-bold uppercase tracking-tighter">Save Recipe</button>
         </div>
       </div>
     </div>
@@ -107,7 +166,7 @@ function IngredientNameInput({ value, costItems, selectedIngredientId, onChange,
   const [isFocused, setIsFocused] = useState(false);
   const keyword = value.trim().toLowerCase();
   const matches = useMemo(() => {
-    if (!keyword) return costItems.slice(0, 5);
+    if (!keyword) return [];
     return costItems
       .filter(item => item.name.toLowerCase().includes(keyword))
       .slice(0, 6);
