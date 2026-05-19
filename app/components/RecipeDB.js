@@ -81,7 +81,7 @@ function RecipeModal({ initialData, costItems, setCostItems, onSave, onClose }) 
         return {
           ...ing,
           name: linkedItem.name,
-          cost: ing.cost || linkedItem.cost,
+          cost: linkedItem.cost,
           costUnit: linkedItem.unit,
         };
       }
@@ -92,7 +92,7 @@ function RecipeModal({ initialData, costItems, setCostItems, onSave, onClose }) 
           ...ing,
           ingredientId: exactItem.id,
           name: exactItem.name,
-          cost: ing.cost || exactItem.cost,
+          cost: exactItem.cost,
           costUnit: exactItem.unit,
         };
       }
@@ -136,21 +136,35 @@ function RecipeModal({ initialData, costItems, setCostItems, onSave, onClose }) 
           <InputField label="제품명"><input value={productName} onChange={e => setProductName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" /></InputField>
         </div>
         <div className="space-y-3">
-          {ingredients.map((ing, i) => (
-            <div key={i} className="grid grid-cols-2 md:grid-cols-[120px_1fr_80px_100px_40px] gap-2 md:gap-4 items-center bg-white p-3 md:p-4 rounded-xl shadow-sm">
-              <select value={ing.type} onChange={e => updateIng(i, "type", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold"><option>밀</option><option>수분</option><option>사전반죽</option><option>소금</option><option>기타</option></select>
-              <IngredientNameInput
-                value={ing.name}
-                costItems={costItems}
-                selectedIngredientId={ing.ingredientId}
-                onChange={(value) => updateIng(i, "name", value)}
-                onSelect={(item) => selectCostItem(i, item)}
-              />
-              <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="%" type="text" inputMode="decimal" />
-              <input value={ing.cost} onChange={e => updateIng(i, "cost", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="Cost" type="text" inputMode="decimal" />
-              <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))} className="text-red-300 font-bold">x</button>
-            </div>
-          ))}
+          {ingredients.map((ing, i) => {
+            const linkedCostItem = costItems.find(item => item.id === ing.ingredientId);
+            const displayCost = linkedCostItem ? linkedCostItem.cost : ing.cost;
+
+            return (
+              <div key={i} className="grid grid-cols-2 md:grid-cols-[120px_1fr_80px_100px_40px] gap-2 md:gap-4 items-center bg-white p-3 md:p-4 rounded-xl shadow-sm">
+                <select value={ing.type} onChange={e => updateIng(i, "type", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold"><option>밀</option><option>수분</option><option>사전반죽</option><option>소금</option><option>기타</option></select>
+                <IngredientNameInput
+                  value={ing.name}
+                  costItems={costItems}
+                  selectedIngredientId={ing.ingredientId}
+                  onChange={(value) => updateIng(i, "name", value)}
+                  onSelect={(item) => selectCostItem(i, item)}
+                />
+                <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="%" type="text" inputMode="decimal" />
+                <input
+                  value={displayCost}
+                  onChange={e => updateIng(i, "cost", e.target.value)}
+                  readOnly={Boolean(linkedCostItem)}
+                  title={linkedCostItem ? "원가는 원가 리스트 DB에서 수정하세요." : ""}
+                  className={`bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold ${linkedCostItem ? "text-gray-400 cursor-not-allowed" : ""}`}
+                  placeholder="Cost"
+                  type="text"
+                  inputMode="decimal"
+                />
+                <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))} className="text-red-300 font-bold">x</button>
+              </div>
+            );
+          })}
           <button onClick={() => setIngredients([...ingredients, { type: "밀", name: "", percent: "", cost: "" }])} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 font-black uppercase tracking-widest">+ Add Ingredient</button>
         </div>
         <div className="mt-10 flex gap-3">
