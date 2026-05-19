@@ -4,7 +4,7 @@ import { InputField } from "./common";
 
 
 
-export default function RecipeDB({ recipes, setRecipes }) {
+export default function RecipeDB({ recipes, setRecipes, costItems }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingRecipe, setEditingRecipe] = useState(null);
@@ -32,7 +32,7 @@ export default function RecipeDB({ recipes, setRecipes }) {
           </div>
         ))}
       </div>
-      {isModalOpen && <RecipeModal initialData={editingRecipe} onSave={(data) => {
+      {isModalOpen && <RecipeModal initialData={editingRecipe} costItems={costItems} onSave={(data) => {
         if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id } : r));
         else setRecipes(prev => [...prev, { ...data, id: Date.now() }]);
         setIsModalOpen(false);
@@ -41,11 +41,32 @@ export default function RecipeDB({ recipes, setRecipes }) {
   );
 }
 
-function RecipeModal({ initialData, onSave, onClose }) {
+function RecipeModal({ initialData, costItems, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
-  const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => idx === i ? { ...ing, [f]: (f === "percent" || f === "cost") ? v.replace(',', '.') : v } : ing));
+  const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => {
+    if (idx !== i) return ing;
+
+    const nextValue = (f === "percent" || f === "cost") ? v.replace(',', '.') : v;
+    const nextIng = { ...ing, [f]: nextValue };
+
+    if (f === "name") {
+      delete nextIng.ingredientId;
+      delete nextIng.costUnit;
+    }
+
+    return nextIng;
+  }));
+  const selectCostItem = (i, item) => {
+    setIngredients(ingredients.map((ing, idx) => idx === i ? {
+      ...ing,
+      ingredientId: item.id,
+      name: item.name,
+      cost: item.cost,
+      costUnit: item.unit,
+    } : ing));
+  };
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
       <div className="bg-[#f7f6f3] w-full max-w-4xl rounded-[2rem] p-6 md:p-12 shadow-2xl max-h-[90vh] overflow-y-auto relative">
@@ -59,7 +80,13 @@ function RecipeModal({ initialData, onSave, onClose }) {
           {ingredients.map((ing, i) => (
             <div key={i} className="grid grid-cols-2 md:grid-cols-[120px_1fr_80px_100px_40px] gap-2 md:gap-4 items-center bg-white p-3 md:p-4 rounded-xl shadow-sm">
               <select value={ing.type} onChange={e => updateIng(i, "type", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold"><option>밀</option><option>수분</option><option>사전반죽</option><option>소금</option><option>기타</option></select>
-              <input value={ing.name} onChange={e => updateIng(i, "name", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold" placeholder="Ingredient Name" />
+              <IngredientNameInput
+                value={ing.name}
+                costItems={costItems}
+                selectedIngredientId={ing.ingredientId}
+                onChange={(value) => updateIng(i, "name", value)}
+                onSelect={(item) => selectCostItem(i, item)}
+              />
               <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="%" type="text" inputMode="decimal" />
               <input value={ing.cost} onChange={e => updateIng(i, "cost", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="Cost" type="text" inputMode="decimal" />
               <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))} className="text-red-300 font-bold">x</button>
@@ -72,6 +99,56 @@ function RecipeModal({ initialData, onSave, onClose }) {
           <button onClick={() => onSave({ category, productName, ingredients })} className="flex-1 bg-black text-white py-4 rounded-xl font-bold uppercase tracking-tighter">Save Recipe</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function IngredientNameInput({ value, costItems, selectedIngredientId, onChange, onSelect }) {
+  const [isFocused, setIsFocused] = useState(false);
+  const keyword = value.trim().toLowerCase();
+  const matches = useMemo(() => {
+    if (!keyword) return costItems.slice(0, 5);
+    return costItems
+      .filter(item => item.name.toLowerCase().includes(keyword))
+      .slice(0, 6);
+  }, [costItems, keyword]);
+  const selectedItem = costItems.find(item => item.id === selectedIngredientId);
+  const shouldShowMatches = isFocused && matches.length > 0;
+
+  return (
+    <div className="relative">
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setTimeout(() => setIsFocused(false), 120)}
+        className="w-full bg-gray-50 p-2 rounded-lg text-xs font-bold"
+        placeholder="Ingredient Name"
+      />
+      {selectedItem && (
+        <div className="mt-1 text-[9px] font-black text-gray-400 uppercase tracking-tight">
+          Cost DB 연결됨 · {selectedItem.cost} / {selectedItem.unit}
+        </div>
+      )}
+      {shouldShowMatches && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-50 max-h-48 overflow-y-auto rounded-xl border border-gray-100 bg-white shadow-xl">
+          {matches.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onSelect(item)}
+              className="w-full px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-50 last:border-b-0"
+            >
+              <div className="text-xs font-black tracking-tight">{item.name}</div>
+              <div className="mt-0.5 flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-tight">
+                <span>{item.category}</span>
+                <span className="font-mono text-black">{item.cost || 0} / {item.unit}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

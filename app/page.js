@@ -58,7 +58,7 @@ export default function Home() {
 
       <div className="py-4 md:py-8 print:py-0">
         {view === "calc" && <RecipeCalculator recipes={recipes} setRecipes={setRecipes} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
-        {view === "db" && <RecipeDB recipes={recipes} setRecipes={setRecipes} />}
+        {view === "db" && <RecipeDB recipes={recipes} setRecipes={setRecipes} costItems={costItems} />}
         {view === "cost_db" && <CostDB costItems={costItems} setCostItems={setCostItems} />}
         {view === "temp_db" && <TempPhDB tempLogs={tempLogs} setTempLogs={setTempLogs} />}
       </div>
