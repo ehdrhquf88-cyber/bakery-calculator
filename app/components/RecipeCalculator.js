@@ -324,7 +324,7 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
               </SummaryCard>
 
               {preFerments.length > 0 && (
-                <SummaryCard title="PRE-FERMENT">
+                <SummaryCard title="사전반죽 수율">
                   <div className="space-y-3">
                     {preFerments.map(pf => (
                       <div key={pf.name} className="flex justify-between items-center border-b border-black/5 pb-2">
@@ -479,7 +479,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
             <option>1차 저온</option><option>2차 저온</option>
           </select>
         ) : (
-          <span className="font-black text-[10px] uppercase text-gray-400">Pre-Ferment Log</span>
+          <span className="font-black text-[10px] uppercase text-gray-400">사전반죽 수율 Log</span>
         )}
         <button onClick={() => { 
           setIsEntryMode(!isEntryMode); 
