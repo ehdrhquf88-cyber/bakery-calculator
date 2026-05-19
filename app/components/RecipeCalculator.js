@@ -301,8 +301,10 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                         const multipliedGrams = Math.round(computedGrams * m);
                         return (
                           <table-cell key={mIdx} className="p-2 text-right font-black text-black text-sm hidden print-visible-multipliers font-mono">
+                          <td key={mIdx} className="p-2 text-right font-black text-black text-sm hidden print-visible-multipliers font-mono">
                             {(multipliedGrams || 0).toLocaleString()}g
                           </table-cell>
+                          </td>
                         );
                       })}
                     </tr>
