@@ -76,7 +76,7 @@ export default function CostDB({ costItems, setCostItems }) {
 }
 
 function CostModal({ initialData, onSave, onClose }) {
-  const [category, setCategory] = useState(initialData?.category || "밀");
+  const [category, setCategory] = useState(initialData?.category || "밀가루");
   const [name, setName] = useState(initialData?.name || "");
   const [cost, setCost] = useState(initialData?.cost || "");
   const [unit, setUnit] = useState(initialData?.unit || "g");
@@ -104,10 +104,15 @@ function CostModal({ initialData, onSave, onClose }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <InputField label="분류">
             <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold">
-              <option>밀</option>
-              <option>수분</option>
-              <option>사전반죽</option>
+              <option>밀가루</option>
+              <option>유제품</option>
+              <option>설탕류</option>
+              <option>유지류</option>
+              <option>견과류</option>
+              <option>과일/필링</option>
+              <option>초콜릿</option>
               <option>소금</option>
+              <option>첨가물</option>
               <option>기타</option>
             </select>
           </InputField>
