@@ -6,6 +6,7 @@ export default function CostDB({ costItems, setCostItems }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingItem, setEditingItem] = useState(null);
+  const [expandedCategory, setExpandedCategory] = useState(null);
 
   const displayedItems = useMemo(() => {
     const keyword = searchTerm.toLowerCase();
@@ -15,6 +16,14 @@ export default function CostDB({ costItems, setCostItems }) {
       (item.supplier || "").toLowerCase().includes(keyword)
     );
   }, [costItems, searchTerm]);
+  const groupedItems = useMemo(() => {
+    return displayedItems.reduce((groups, item) => {
+      const category = item.category || "미등록";
+      if (!groups[category]) groups[category] = [];
+      groups[category].push(item);
+      return groups;
+    }, {});
+  }, [displayedItems]);
 
   const handleSave = (data) => {
     const itemData = {
@@ -41,21 +50,50 @@ export default function CostDB({ costItems, setCostItems }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3">
-        {displayedItems.map(item => (
-          <div key={item.id} onClick={() => { setEditingItem(item); setIsModalOpen(true); }} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center cursor-pointer hover:border-black group transition-all">
-            <div className="min-w-0">
-              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{item.category}</div>
-              <div className="text-xl font-black tracking-tighter uppercase truncate">{item.name}</div>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-bold text-gray-400 uppercase tracking-tight">
-                <span className="font-mono text-black">{item.cost || 0} / {item.unit}</span>
-                {item.supplier && <span>{item.supplier}</span>}
-                {item.updatedAt && <span>{item.updatedAt}</span>}
+      <div className="space-y-3">
+        {Object.entries(groupedItems).map(([category, items]) => {
+          const isCategoryExpanded = expandedCategory === category;
+
+          return (
+            <div key={category} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+              <button
+                type="button"
+                onClick={() => setExpandedCategory(isCategoryExpanded ? null : category)}
+                className="w-full p-5 flex justify-between items-center text-left hover:bg-gray-50 transition-all"
+              >
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Category</div>
+                  <div className="text-xl font-black tracking-tighter uppercase">{category}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{items.length} items</span>
+                  <span className="text-xs">{isCategoryExpanded ? "▲" : "▼"}</span>
+                </div>
+              </button>
+
+              {isCategoryExpanded && (
+                <div className="px-5 pb-5 bg-[#fcfcfb]">
+                  <div className="grid grid-cols-1 gap-3 pt-4 border-t border-gray-100">
+                    {items.map(item => (
+                      <div key={item.id} onClick={() => { setEditingItem(item); setIsModalOpen(true); }} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center cursor-pointer hover:border-black group transition-all">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{item.category}</div>
+                          <div className="text-xl font-black tracking-tighter uppercase truncate">{item.name}</div>
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-bold text-gray-400 uppercase tracking-tight">
+                            <span className="font-mono text-black">{item.cost || 0} / {item.unit}</span>
+                            {item.supplier && <span>{item.supplier}</span>}
+                            {item.updatedAt && <span>{item.updatedAt}</span>}
+                          </div>
+                        </div>
+                        <button onClick={(e) => { e.stopPropagation(); if (confirm("삭제하시겠습니까?")) setCostItems(prev => prev.filter(costItem => costItem.id !== item.id)); }} className="text-gray-300 hover:text-red-500">x</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               </div>
-            </div>
-            <button onClick={(e) => { e.stopPropagation(); if (confirm("삭제하시겠습니까?")) setCostItems(prev => prev.filter(costItem => costItem.id !== item.id)); }} className="text-gray-300 hover:text-red-500">x</button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {displayedItems.length === 0 && (
