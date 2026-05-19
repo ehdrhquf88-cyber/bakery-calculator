@@ -131,6 +131,7 @@ export default function TempPhDB({ tempLogs, setTempLogs }) {
   const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedProduct, setExpandedProduct] = useState(null);
+  const [expandedDate, setExpandedDate] = useState(null);
   const [inlineEditId, setInlineEditId] = useState(null);
   const [inlineData, setInlineData] = useState({});
   const [inlineMemo, setInlineMemo] = useState("");
@@ -185,7 +186,7 @@ export default function TempPhDB({ tempLogs, setTempLogs }) {
 
           return (
             <div key={productName} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-              <div onClick={() => setExpandedProduct(expandedProduct === productName ? null : productName)} className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50">
+              <div onClick={() => { setExpandedProduct(expandedProduct === productName ? null : productName); setExpandedDate(null); }} className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50">
                 <div>
                   <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product</div>
                   <div className="text-xl font-black tracking-tighter uppercase">{productName}</div>
@@ -200,9 +201,29 @@ export default function TempPhDB({ tempLogs, setTempLogs }) {
                     <HistoryChart logs={logs} isPreFerment={isPreFerment} />
                   </div>
 
-                  {Object.entries(dateGroups).map(([date, dateLogs]) => (
+                  {Object.entries(dateGroups).map(([date, dateLogs]) => {
+                    const dateKey = `${productName}-${date}`;
+                    const isDateExpanded = expandedDate === dateKey;
+
+                    return (
                     <div key={date} className="border-t border-gray-100 py-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedDate(isDateExpanded ? null : dateKey)}
+                        className="w-full bg-white p-4 rounded-xl border border-gray-100 flex justify-between items-center text-left hover:border-black transition-all"
+                      >
+                        <div>
+                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</div>
+                          <div className="text-sm font-black tracking-tight">{date}</div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{dateLogs.length} records</span>
+                          <span className="text-xs">{isDateExpanded ? "▲" : "▼"}</span>
+                        </div>
+                      </button>
+
+                      {isDateExpanded && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                         {dateLogs.map(log => {
                           const activeItems = log.type === "사전반죽 기록" ? pfItems : normalItems;
                           const isEditingNow = inlineEditId === log.id;
@@ -281,8 +302,10 @@ export default function TempPhDB({ tempLogs, setTempLogs }) {
                           );
                         })}
                       </div>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
