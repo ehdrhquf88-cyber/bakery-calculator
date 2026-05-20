@@ -86,8 +86,8 @@ function LoginScreen({ onFreeStart }) {
     >
       <div className="absolute inset-0 bg-black/45" />
       <div className="relative z-10 min-h-[calc(100vh-4rem)] w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-[1fr_420px] gap-8 items-center">
-        <div className="text-white pt-2 md:self-start md:pt-0">
-          <p className="text-2xl md:text-4xl font-black tracking-tighter">
+        <div className="text-black pt-10 md:self-start md:pt-16">
+          <p className="text-3xl md:text-5xl font-serif font-bold tracking-normal">
             빵쟁이들 안녕?
           </p>
         </div>
