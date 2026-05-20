@@ -85,7 +85,7 @@ function LoginScreen({ onFreeStart }) {
       style={{ backgroundImage: "url('/login-bg.jpg')" }}
     >
       <div className="absolute inset-0 bg-black/45" />
-      <section className="relative z-10 w-full max-w-md bg-white/95 border border-white/60 rounded-2xl shadow-2xl p-6 md:p-8 md:mr-8 backdrop-blur-sm">
+      <section className="relative z-10 w-full max-w-md bg-white/82 border border-white/35 rounded-2xl shadow-xl p-6 md:p-8 md:mr-8 backdrop-blur-md">
         <div className="border-b-2 border-black pb-4 mb-6">
           <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Levain Lab</div>
           <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">Sign In</h1>
