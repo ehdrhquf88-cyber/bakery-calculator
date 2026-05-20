@@ -80,8 +80,12 @@ function LoginScreen({ onFreeStart }) {
   };
 
   return (
-    <main className="min-h-screen bg-[#f7f6f3] px-4 py-8 md:px-8 flex items-center justify-center text-black">
-      <section className="w-full max-w-md bg-white border border-gray-100 rounded-2xl shadow-sm p-6 md:p-8">
+    <main
+      className="min-h-screen px-4 py-8 md:px-8 flex items-center justify-center md:justify-end text-black bg-cover bg-center relative overflow-hidden"
+      style={{ backgroundImage: "url('/login-bg.jpg')" }}
+    >
+      <div className="absolute inset-0 bg-black/45" />
+      <section className="relative z-10 w-full max-w-md bg-white/95 border border-white/60 rounded-2xl shadow-2xl p-6 md:p-8 md:mr-8 backdrop-blur-sm">
         <div className="border-b-2 border-black pb-4 mb-6">
           <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Levain Lab</div>
           <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">Sign In</h1>
