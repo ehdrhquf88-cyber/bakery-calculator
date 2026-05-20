@@ -12,8 +12,8 @@ function HistoryChart({ logs, isPreFerment }) {
   const [selectedXField, setSelectedXField] = useState("결과"); 
   // 사용자가 직접 선택한 비교 날짜 목록입니다. 비어 있으면 최근 2개 날짜를 기본값으로 씁니다.
   const [selectedDates, setSelectedDates] = useState([]);
-  // 날짜가 많아졌을 때 원하는 날짜를 타이핑해서 찾기 위한 검색어입니다.
-  const [dateSearchTerm, setDateSearchTerm] = useState("");
+  // 달력 입력창에서 선택 중인 날짜입니다.
+  const [datePickerValue, setDatePickerValue] = useState("");
 
   // 저장된 최신순 로그를 시간 흐름대로 보기 위해 역순으로 정렬합니다.
   const allTimelineLogs = useMemo(() => {
@@ -29,23 +29,26 @@ function HistoryChart({ logs, isPreFerment }) {
   // 직접 선택값이 없을 때만 최근 2개 날짜를 자동 비교 대상으로 잡습니다.
   const activeSelectedDates = selectedDates.length > 0 ? selectedDates : uniqueDates.slice(-2);
 
-  // 검색어와 일치하면서 아직 선택되지 않은 날짜 후보만 보여줍니다.
-  const filteredDateOptions = useMemo(() => {
-    const keyword = dateSearchTerm.trim().toLowerCase();
-    if (!keyword) return [];
-    return uniqueDates
-      .filter(date => date.toLowerCase().includes(keyword) || date.split('-').slice(1).join('/').includes(keyword))
-      .filter(date => !activeSelectedDates.includes(date))
-      .slice(0, 8);
-  }, [uniqueDates, activeSelectedDates, dateSearchTerm]);
+  // 달력에서 선택할 수 있는 기록 날짜 범위입니다.
+  const dateBounds = useMemo(() => {
+    return {
+      min: uniqueDates[0] || "",
+      max: uniqueDates[uniqueDates.length - 1] || "",
+    };
+  }, [uniqueDates]);
 
-  // 날짜 후보를 선택 목록에 추가합니다. 기본 최근 2개가 보이던 상태라면 그 값들을 유지한 채 추가합니다.
+  // 달력에서 선택한 날짜를 비교 목록에 추가합니다. 실제 기록이 있는 날짜만 추가합니다.
   const addSelectedDate = (date) => {
+    if (!uniqueDates.includes(date)) {
+      setDatePickerValue(date);
+      return;
+    }
+
     setSelectedDates(prev => {
       const baseDates = prev.length > 0 ? prev : activeSelectedDates;
       return baseDates.includes(date) ? baseDates : [...baseDates, date];
     });
-    setDateSearchTerm("");
+    setDatePickerValue("");
   };
 
   // 선택된 날짜 태그를 제거합니다.
@@ -112,24 +115,16 @@ function HistoryChart({ logs, isPreFerment }) {
           <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">Y축 비교 날짜 지정 ({activeSelectedDates.length})</label>
           <div className="space-y-2">
             <input
-              type="text"
-              value={dateSearchTerm}
-              onChange={(e) => setDateSearchTerm(e.target.value)}
-              placeholder="날짜 검색: 2026-05-20 또는 05/20"
+              type="date"
+              value={datePickerValue}
+              min={dateBounds.min}
+              max={dateBounds.max}
+              onChange={(e) => addSelectedDate(e.target.value)}
               className="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-[11px] font-mono font-bold outline-none shadow-inner focus:border-black"
             />
-            {filteredDateOptions.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 max-h-[72px] overflow-y-auto p-0.5 no-scrollbar">
-                {filteredDateOptions.map(date => (
-                  <button
-                    key={date}
-                    type="button"
-                    onClick={() => addSelectedDate(date)}
-                    className="px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-500 hover:border-black hover:text-black text-[11px] font-mono font-bold transition-all"
-                  >
-                    {date.split('-').slice(1).join('/')}
-                  </button>
-                ))}
+            {datePickerValue && !uniqueDates.includes(datePickerValue) && (
+              <div className="text-[10px] font-bold text-red-400 px-1">
+                해당 날짜에는 기록이 없습니다.
               </div>
             )}
             <div className="flex flex-wrap gap-1.5 max-h-[72px] overflow-y-auto p-0.5 no-scrollbar">
