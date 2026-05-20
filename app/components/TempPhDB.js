@@ -20,7 +20,7 @@ function HistoryChart({ logs, isPreFerment }) {
     if (activeSelectedDates.includes(date)) {
       setSelectedDates(activeSelectedDates.filter(d => d !== date));
     } else {
-      setSelectedDates(prev => [...(prev.length > 0 ? prev : activeSelectedDates), date].slice(-2));
+      setSelectedDates(prev => [...(prev.length > 0 ? prev : activeSelectedDates), date]);
     }
   };
   const activeChartData = useMemo(() => {
@@ -69,7 +69,7 @@ function HistoryChart({ logs, isPreFerment }) {
           </div>
         </div>
         <div>
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">Y축 비교 날짜 지정 ({activeSelectedDates.length}/2)</label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">Y축 비교 날짜 지정 ({activeSelectedDates.length})</label>
           <div className="flex flex-wrap gap-1.5 max-h-[72px] overflow-y-auto p-0.5 no-scrollbar">
             {uniqueDates.map(date => {
               const isChecked = activeSelectedDates.includes(date);
@@ -91,28 +91,28 @@ function HistoryChart({ logs, isPreFerment }) {
       ) : (
         <div>
           <div className="flex gap-4 text-[10px] font-black uppercase tracking-wider mb-2 justify-end">
-            <span className="flex items-center gap-1 text-amber-500">─ {selectedXField} 온도(°C)</span>
-            <span className="flex items-center gap-1 text-purple-600">─ {selectedXField} pH</span>
+            <span className="flex items-center gap-1 text-orange-600">─ {selectedXField} 온도(°C)</span>
+            <span className="flex items-center gap-1 text-teal-700">─ {selectedXField} pH</span>
           </div>
           <div className="relative w-full overflow-hidden">
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
               <line x1={padding} y1={padding} x2={width-padding} y2={padding} stroke="#f3f4f6" strokeDasharray="3" />
               <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="#f3f4f6" strokeDasharray="3" />
               <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#e5e7eb" />
-              {tempPath && <path d={tempPath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-              {phPath && <path d={phPath} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+              {tempPath && <path d={tempPath} fill="none" stroke="#ea580c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+              {phPath && <path d={phPath} fill="none" stroke="#0f766e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
               {renderedPoints.map((p, i) => (
                 <g key={i}>
                   {p.yTemp !== null && (
                     <>
-                      <circle cx={p.x} cy={p.yTemp} r="4" fill="#fff" stroke="#f59e0b" strokeWidth="2" />
-                      <text x={p.x} y={p.yTemp - 6} textAnchor="middle" className="text-[9px] font-mono font-bold fill-amber-600">{p.tVal}°</text>
+                      <circle cx={p.x} cy={p.yTemp} r="4" fill="#fff" stroke="#ea580c" strokeWidth="2" />
+                      <text x={p.x} y={p.yTemp - 6} textAnchor="middle" className="text-[9px] font-mono font-bold fill-orange-700">{p.tVal}°</text>
                     </>
                   )}
                   {p.yPh !== null && (
                     <>
-                      <circle cx={p.x} cy={p.yPh} r="4" fill="#fff" stroke="#7c3aed" strokeWidth="2" />
-                      <text x={p.x} y={p.yPh + 12} textAnchor="middle" className="text-[9px] font-mono font-bold fill-purple-700">{p.pVal}</text>
+                      <circle cx={p.x} cy={p.yPh} r="4" fill="#fff" stroke="#0f766e" strokeWidth="2" />
+                      <text x={p.x} y={p.yPh + 12} textAnchor="middle" className="text-[9px] font-mono font-bold fill-teal-800">{p.pVal}</text>
                     </>
                   )}
                   <text x={p.x} y={height - 6} textAnchor="middle" className="text-[8px] font-bold fill-gray-400 font-mono">{p.date.split('-').slice(1).join('/')}</text>
