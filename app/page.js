@@ -81,68 +81,71 @@ function LoginScreen({ onFreeStart }) {
 
   return (
     <main
-      className="min-h-screen px-4 py-8 md:px-8 flex items-center justify-center md:justify-end text-black bg-cover bg-center relative overflow-hidden"
+      className="min-h-screen px-4 py-8 md:px-8 text-black bg-cover bg-center relative overflow-hidden"
       style={{ backgroundImage: "url('/login-bg.jpg')" }}
     >
       <div className="absolute inset-0 bg-black/45" />
-      <div className="absolute left-5 top-5 md:left-8 md:top-8 z-10 text-white">
-        <p className="text-2xl md:text-4xl font-black tracking-tighter">
-          빵쟁이들 안녕?
-        </p>
-      </div>
-      <section className="relative z-10 w-full max-w-md bg-white/82 border border-white/35 rounded-2xl shadow-xl p-6 md:p-8 md:mr-8 backdrop-blur-md">
-        <div className="border-b-2 border-black pb-4 mb-6">
-          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Levain Lab</div>
-          <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">Sign In</h1>
+      <div className="relative z-10 min-h-[calc(100vh-4rem)] w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-[1fr_420px] gap-8 items-center">
+        <div className="text-white pt-2 md:self-start md:pt-0">
+          <p className="text-2xl md:text-4xl font-black tracking-tighter">
+            빵쟁이들 안녕?
+          </p>
         </div>
 
-        <div className="space-y-3">
-          <input
-            type="email"
-            placeholder="Email"
-            className="w-full bg-[#f7f6f3] border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            className="w-full bg-[#f7f6f3] border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
-          />
-          <button
-            type="button"
-            onClick={showComingSoon}
-            className="w-full bg-black text-white py-3 rounded-xl font-black text-sm uppercase tracking-tight"
-          >
-            로그인
-          </button>
-        </div>
+        <section className="w-full max-w-md justify-self-center md:justify-self-end bg-white/82 border border-white/35 rounded-2xl shadow-xl p-6 md:p-8 backdrop-blur-md">
+          <div className="border-b-2 border-black pb-4 mb-6">
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Levain Lab</div>
+            <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">Sign In</h1>
+          </div>
 
-        <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-gray-100" />
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">or</span>
-          <div className="h-px flex-1 bg-gray-100" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          {["Google", "Apple", "Kakao", "Naver"].map(provider => (
+          <div className="space-y-3">
+            <input
+              type="email"
+              placeholder="Email"
+              className="w-full bg-[#f7f6f3] border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              className="w-full bg-[#f7f6f3] border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
+            />
             <button
-              key={provider}
               type="button"
               onClick={showComingSoon}
-              className="bg-white border border-gray-200 py-2.5 rounded-xl text-xs font-black uppercase tracking-tight hover:border-black transition-all"
+              className="w-full bg-black text-white py-3 rounded-xl font-black text-sm uppercase tracking-tight"
             >
-              {provider}
+              로그인
             </button>
-          ))}
-        </div>
+          </div>
 
-        <button
-          type="button"
-          onClick={onFreeStart}
-          className="mt-6 w-full bg-[#f7f6f3] border border-gray-200 py-4 rounded-xl font-black text-sm uppercase tracking-tight hover:border-black transition-all"
-        >
-          무료로 사용하기
-        </button>
-      </section>
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-gray-100" />
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">or</span>
+            <div className="h-px flex-1 bg-gray-100" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {["Google", "Apple", "Kakao", "Naver"].map(provider => (
+              <button
+                key={provider}
+                type="button"
+                onClick={showComingSoon}
+                className="bg-white border border-gray-200 py-2.5 rounded-xl text-xs font-black uppercase tracking-tight hover:border-black transition-all"
+              >
+                {provider}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={onFreeStart}
+            className="mt-6 w-full bg-[#f7f6f3] border border-gray-200 py-4 rounded-xl font-black text-sm uppercase tracking-tight hover:border-black transition-all"
+          >
+            무료로 사용하기
+          </button>
+        </section>
+      </div>
     </main>
   );
 }
