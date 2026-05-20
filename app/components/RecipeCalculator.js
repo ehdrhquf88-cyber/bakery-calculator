@@ -83,6 +83,24 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
     };
   }, [currentRecipe, pfYields, flourWeight]);
 
+  const ingredientCosts = useMemo(() => {
+    if (!currentRecipe) return [];
+
+    const parsedFlour = parseFloat(String(flourWeight).replace(',', '.')) || 0;
+
+    return currentRecipe.ingredients.map(ing => {
+      const parsedPercent = parseFloat(String(ing.percent).replace(',', '.')) || 0;
+      const grams = Math.round(parsedFlour * (parsedPercent / 100));
+      const unitCost = parseFloat(String(ing.cost).replace(',', '.')) || 0;
+
+      return {
+        name: ing.name,
+        type: ing.type,
+        cost: Math.round((grams || 0) * unitCost),
+      };
+    });
+  }, [currentRecipe, flourWeight]);
+
   const handleDoughMultiplierChange = (value) => {
     const cleanValue = value.replace(',', '.');
     setDoughMultiplier(cleanValue); 
@@ -261,7 +279,6 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                   <th className="p-2 text-left">재료</th>
                   <th className="p-2 text-right">% (수정)</th>
                   <th className="p-2 text-right w-24 print-hidden-multipliers">g</th>
-                  <th className="p-2 text-right w-24">원가</th>
                   {/* 다중 배수 인쇄용 헤더 매핑 */}
                   {validPrintMultipliers.map((m, idx) => (
                     <th key={idx} className="p-2 text-right w-24 hidden print-visible-multipliers font-black text-black">
@@ -275,8 +292,6 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                   const parsedFlour = parseFloat(String(flourWeight).replace(',','.')) || 0;
                   const parsedPercent = parseFloat(String(ing.percent).replace(',','.')) || 0;
                   const computedGrams = Math.round(parsedFlour * (parsedPercent / 100));
-                  const unitCost = parseFloat(String(ing.cost).replace(',', '.')) || 0;
-                  const computedCost = computedGrams * unitCost;
                   return (
                     <tr key={idx} className="border-b border-gray-200">
                       <td className="p-2">
@@ -299,9 +314,6 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                       <td className="p-2 text-right font-bold text-gray-400 text-sm print-hidden-multipliers">
                         {(computedGrams || 0).toLocaleString()}g
                       </td>
-                      <td className="p-2 text-right font-bold text-gray-400 text-sm">
-                        {Math.round(computedCost || 0).toLocaleString()}
-                      </td>
                       {/* 인쇄용 다중 배수 컬럼 동적 계산 영역 */}
                       {validPrintMultipliers.map((m, mIdx) => {
                         const multipliedGrams = Math.round(computedGrams * m);
@@ -313,7 +325,7 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                       })}
                     </tr>
                   );
-                }) : <tr><td colSpan="4" className="p-12 text-center text-gray-400 text-xs tracking-widest uppercase">Select a recipe</td></tr>}
+                }) : <tr><td colSpan="3" className="p-12 text-center text-gray-400 text-xs tracking-widest uppercase">Select a recipe</td></tr>}
               </tbody>
             </table>
           </div>
@@ -345,6 +357,26 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                 </SummaryCard>
               )}
             </>
+          )}
+
+          {currentRecipe && (
+            <SummaryCard title="원가">
+              <div className="space-y-2">
+                {ingredientCosts.map((item, idx) => (
+                  <div key={`${item.name}-${idx}`} className="flex justify-between gap-3 border-b border-dashed border-black/10 pb-2 text-xs md:text-sm">
+                    <div className="min-w-0">
+                      <div className="text-[9px] text-gray-400 font-bold uppercase">{item.type}</div>
+                      <div className="font-bold truncate">{item.name}</div>
+                    </div>
+                    <span className="font-mono font-bold shrink-0">{item.cost.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 pt-3 border-t-2 border-black flex justify-between text-sm">
+                <span className="font-black uppercase tracking-tight">총 원가</span>
+                <span className="font-mono font-black">{Math.round(totals.totalCost).toLocaleString()}</span>
+              </div>
+            </SummaryCard>
           )}
 
           <div className="print:hidden">
