@@ -13,6 +13,7 @@ export default function Home() {
   const [recipes, setRecipes] = useState([]);
   const [costItems, setCostItems] = useState([]);
   const [tempLogs, setTempLogs] = useState([]);
+  const [accessMode, setAccessMode] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // 로컬스토리지 로드
@@ -22,9 +23,11 @@ export default function Home() {
       const savedRecipes = localStorage.getItem("bakery_recipes");
       const savedCostItems = localStorage.getItem("bakery_cost_items");
       const savedTempLogs = localStorage.getItem("bakery_temp_ph");
+      const savedAccessMode = localStorage.getItem("bakery_access_mode");
       if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
       if (savedCostItems) setCostItems(JSON.parse(savedCostItems));
       if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
+      if (savedAccessMode) setAccessMode(savedAccessMode);
     } catch (e) {
       console.error("로컬스토리지 데이터를 읽는 중 오류가 발생했습니다.", e);
     }
@@ -46,6 +49,10 @@ export default function Home() {
   }, [recipes, costItems, tempLogs, isLoaded]);
 
   if (!isLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
+  if (!accessMode) return <LoginScreen onFreeStart={() => {
+    localStorage.setItem("bakery_access_mode", "free");
+    setAccessMode("free");
+  }} />;
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
@@ -64,5 +71,69 @@ export default function Home() {
       </div>
       <ServiceWorkerUpdater />
     </div>
+  );
+}
+
+function LoginScreen({ onFreeStart }) {
+  const showComingSoon = () => {
+    alert("로그인 기능은 준비 중입니다. 지금은 무료로 사용하기를 선택해 주세요.");
+  };
+
+  return (
+    <main className="min-h-screen bg-[#f7f6f3] px-4 py-8 md:px-8 flex items-center justify-center text-black">
+      <section className="w-full max-w-md bg-white border border-gray-100 rounded-2xl shadow-sm p-6 md:p-8">
+        <div className="border-b-2 border-black pb-4 mb-6">
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Levain Lab</div>
+          <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">Sign In</h1>
+        </div>
+
+        <div className="space-y-3">
+          <input
+            type="email"
+            placeholder="Email"
+            className="w-full bg-[#f7f6f3] border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            className="w-full bg-[#f7f6f3] border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
+          />
+          <button
+            type="button"
+            onClick={showComingSoon}
+            className="w-full bg-black text-white py-3 rounded-xl font-black text-sm uppercase tracking-tight"
+          >
+            로그인
+          </button>
+        </div>
+
+        <div className="my-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-gray-100" />
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">or</span>
+          <div className="h-px flex-1 bg-gray-100" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {["Google", "Apple", "Kakao", "Naver"].map(provider => (
+            <button
+              key={provider}
+              type="button"
+              onClick={showComingSoon}
+              className="bg-white border border-gray-200 py-2.5 rounded-xl text-xs font-black uppercase tracking-tight hover:border-black transition-all"
+            >
+              {provider}
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={onFreeStart}
+          className="mt-6 w-full bg-[#f7f6f3] border border-gray-200 py-4 rounded-xl font-black text-sm uppercase tracking-tight hover:border-black transition-all"
+        >
+          무료로 사용하기
+        </button>
+      </section>
+    </main>
   );
 }
