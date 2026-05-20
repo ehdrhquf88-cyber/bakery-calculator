@@ -261,6 +261,7 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                   <th className="p-2 text-left">재료</th>
                   <th className="p-2 text-right">% (수정)</th>
                   <th className="p-2 text-right w-24 print-hidden-multipliers">g</th>
+                  <th className="p-2 text-right w-24">원가</th>
                   {/* 다중 배수 인쇄용 헤더 매핑 */}
                   {validPrintMultipliers.map((m, idx) => (
                     <th key={idx} className="p-2 text-right w-24 hidden print-visible-multipliers font-black text-black">
@@ -274,6 +275,8 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                   const parsedFlour = parseFloat(String(flourWeight).replace(',','.')) || 0;
                   const parsedPercent = parseFloat(String(ing.percent).replace(',','.')) || 0;
                   const computedGrams = Math.round(parsedFlour * (parsedPercent / 100));
+                  const unitCost = parseFloat(String(ing.cost).replace(',', '.')) || 0;
+                  const computedCost = computedGrams * unitCost;
                   return (
                     <tr key={idx} className="border-b border-gray-200">
                       <td className="p-2">
@@ -296,18 +299,21 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                       <td className="p-2 text-right font-bold text-gray-400 text-sm print-hidden-multipliers">
                         {(computedGrams || 0).toLocaleString()}g
                       </td>
+                      <td className="p-2 text-right font-bold text-gray-400 text-sm">
+                        {Math.round(computedCost || 0).toLocaleString()}
+                      </td>
                       {/* 인쇄용 다중 배수 컬럼 동적 계산 영역 */}
                       {validPrintMultipliers.map((m, mIdx) => {
                         const multipliedGrams = Math.round(computedGrams * m);
                         return (
-                          <table-cell key={mIdx} className="p-2 text-right font-black text-black text-sm hidden print-visible-multipliers font-mono">
+                          <td key={mIdx} className="p-2 text-right font-black text-black text-sm hidden print-visible-multipliers font-mono">
                             {(multipliedGrams || 0).toLocaleString()}g
-                          </table-cell>
+                          </td>
                         );
                       })}
                     </tr>
                   );
-                }) : <tr><td colSpan="3" className="p-12 text-center text-gray-400 text-xs tracking-widest uppercase">Select a recipe</td></tr>}
+                }) : <tr><td colSpan="4" className="p-12 text-center text-gray-400 text-xs tracking-widest uppercase">Select a recipe</td></tr>}
               </tbody>
             </table>
           </div>
