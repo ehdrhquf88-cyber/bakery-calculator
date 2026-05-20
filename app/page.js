@@ -92,7 +92,7 @@ function LoginScreen({ onFreeStart }) {
           </p>
         </div>
 
-        <section className="w-full max-w-md justify-self-center md:justify-self-end bg-white/58 md:bg-white/82 border border-white/25 md:border-white/35 rounded-2xl shadow-lg md:shadow-xl p-5 md:p-8 backdrop-blur-lg md:backdrop-blur-md">
+        <section className="w-full max-w-md justify-self-center md:justify-self-end bg-white/42 md:bg-white/82 border border-white/20 md:border-white/35 rounded-2xl shadow-lg md:shadow-xl p-5 md:p-8 backdrop-blur-lg md:backdrop-blur-md">
           <div className="border-b-2 border-black/80 pb-4 mb-6">
             <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Levain Lab</div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">Sign In</h1>
@@ -102,12 +102,12 @@ function LoginScreen({ onFreeStart }) {
             <input
               type="email"
               placeholder="Email"
-              className="w-full bg-white/70 md:bg-[#f7f6f3] border border-white/40 md:border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
+              className="w-full bg-white/58 md:bg-[#f7f6f3] border border-white/35 md:border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
             />
             <input
               type="password"
               placeholder="Password"
-              className="w-full bg-white/70 md:bg-[#f7f6f3] border border-white/40 md:border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
+              className="w-full bg-white/58 md:bg-[#f7f6f3] border border-white/35 md:border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
             />
             <button
               type="button"
@@ -130,7 +130,7 @@ function LoginScreen({ onFreeStart }) {
                 key={provider}
                 type="button"
                 onClick={showComingSoon}
-                className="bg-white/72 md:bg-white border border-white/40 md:border-gray-200 py-2.5 rounded-xl text-xs font-black uppercase tracking-tight hover:border-black transition-all"
+                className="bg-white/56 md:bg-white border border-white/35 md:border-gray-200 py-2.5 rounded-xl text-xs font-black uppercase tracking-tight hover:border-black transition-all"
               >
                 {provider}
               </button>
@@ -140,7 +140,7 @@ function LoginScreen({ onFreeStart }) {
           <button
             type="button"
             onClick={onFreeStart}
-            className="mt-6 w-full bg-white/70 md:bg-[#f7f6f3] border border-white/40 md:border-gray-200 py-4 rounded-xl font-black text-sm uppercase tracking-tight hover:border-black transition-all"
+            className="mt-6 w-full bg-white/58 md:bg-[#f7f6f3] border border-white/35 md:border-gray-200 py-4 rounded-xl font-black text-sm uppercase tracking-tight hover:border-black transition-all"
           >
             무료로 사용하기
           </button>
