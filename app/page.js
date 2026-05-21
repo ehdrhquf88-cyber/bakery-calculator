@@ -134,7 +134,7 @@ export default function Home() {
         {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={setRecipes} tempLogs={tempLogs} setTempLogs={setTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
         {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={setRecipes} costItems={costItems} setCostItems={setCostItems} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={setCostItems} />}
-        {view === "temp_db" && <TempPhDB tempLogs={tempLogs} setTempLogs={setTempLogs} />}
+        {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
         {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} />}
       </div>
       {leaveCheckStep && (
@@ -147,7 +147,7 @@ export default function Home() {
           onConfirm={confirmLeaveCheck}
         />
       )}
-      <ServiceWorkerUpdater />
+      <ServiceWorkerUpdater t={t} />
     </div>
   );
 }

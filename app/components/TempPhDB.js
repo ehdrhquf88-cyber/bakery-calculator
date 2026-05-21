@@ -1,9 +1,39 @@
 import { useState, useMemo } from "react";
 
+const ITEM_LABEL_KEYS = {
+  "날짜": "itemDate",
+  "르방": "itemLevain",
+  "밀": "itemFlour",
+  "물": "itemWater",
+  "결과": "itemResult",
+  "오토리즈": "itemAutolyse",
+  "오토리즈완료": "itemAutolyseDone",
+  "반죽완료": "itemMixDone",
+  "하바1": "itemFold1",
+  "하바2": "itemFold2",
+  "하바3": "itemFold3",
+  "하바4": "itemFold4",
+  "분할": "itemDivide",
+  "성형": "itemShape",
+  "굽기": "itemBake",
+  "수분": "typeWater",
+  "사용시점": "itemUsePoint",
+  "정점": "itemPeak",
+};
+
+const LOG_TYPE_LABEL_KEYS = {
+  "1차 저온": "firstCold",
+  "2차 저온": "secondCold",
+  "사전반죽 기록": "prefermentRecord",
+};
+
+function labelFromMap(t, map, value) {
+  return map[value] ? t(map[value]) : value;
+}
 
 
 // 제품별 온도/pH 기록을 날짜 기준으로 비교하는 미니 차트 컴포넌트입니다.
-function HistoryChart({ logs, isPreFerment }) {
+function HistoryChart({ t, logs, isPreFerment }) {
   // 일반 반죽과 사전반죽은 기록 항목이 달라서, 모드에 맞는 X축 후보를 나눕니다.
   const availableFields = useMemo(() => isPreFerment 
     ? ["르방", "수분", "밀", "결과", "사용시점", "정점"]
@@ -104,15 +134,15 @@ function HistoryChart({ logs, isPreFerment }) {
     <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-100 shadow-sm mb-6 space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-gray-100 pb-4 text-xs">
         <div>
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">X축 항목 선택</label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">{t("xAxisField")}</label>
           <div className="flex flex-wrap gap-1">
             {availableFields.map(f => (
-              <button key={f} onClick={() => setSelectedXField(f)} className={`px-2.5 py-1 rounded-md font-bold transition-all text-[11px] ${selectedXField === f ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>{f}</button>
+              <button key={f} onClick={() => setSelectedXField(f)} className={`px-2.5 py-1 rounded-md font-bold transition-all text-[11px] ${selectedXField === f ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>{labelFromMap(t, ITEM_LABEL_KEYS, f)}</button>
             ))}
           </div>
         </div>
         <div>
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">Y축 비교 날짜 지정 ({activeSelectedDates.length})</label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">{t("yAxisDates")} ({activeSelectedDates.length})</label>
           <div className="space-y-2">
             <input
               type="date"
@@ -124,7 +154,7 @@ function HistoryChart({ logs, isPreFerment }) {
             />
             {datePickerValue && !uniqueDates.includes(datePickerValue) && (
               <div className="text-[10px] font-bold text-red-400 px-1">
-                해당 날짜에는 기록이 없습니다.
+                {t("noRecordOnDate")}
               </div>
             )}
             <div className="flex flex-wrap gap-1.5 max-h-[72px] overflow-y-auto p-0.5 no-scrollbar">
@@ -146,14 +176,14 @@ function HistoryChart({ logs, isPreFerment }) {
 
       {/* 선택 날짜와 데이터 유무에 따라 안내 문구 또는 차트를 보여줍니다. */}
       {activeSelectedDates.length < 2 ? (
-        <div className="h-36 flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center"><span> 비교 분석을 위해 날짜를 최소 2개 이상 체크해 주세요.</span></div>
+        <div className="h-36 flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center"><span>{t("needTwoDates")}</span></div>
       ) : renderedPoints.length === 0 || (!renderedPoints.some(p => p.tVal !== null) && !renderedPoints.some(p => p.pVal !== null)) ? (
-        <div className="h-36 flex items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center"><span>선택한 항목 [{selectedXField}]에 등록된 온도/pH 결과값이 없습니다.</span></div>
+        <div className="h-36 flex items-center justify-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-[11px] text-gray-400 font-bold p-4 text-center"><span>{t("noChartValue")}</span></div>
       ) : (
         <div>
           <div className="flex gap-4 text-[10px] font-black uppercase tracking-wider mb-2 justify-end">
-            <span className="flex items-center gap-1 text-orange-600">─ {selectedXField} 온도(°C)</span>
-            <span className="flex items-center gap-1 text-teal-700">─ {selectedXField} pH</span>
+            <span className="flex items-center gap-1 text-orange-600">- {labelFromMap(t, ITEM_LABEL_KEYS, selectedXField)} {t("temperature")}(°C)</span>
+            <span className="flex items-center gap-1 text-teal-700">- {labelFromMap(t, ITEM_LABEL_KEYS, selectedXField)} pH</span>
           </div>
           <div className="relative w-full overflow-hidden">
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
@@ -188,7 +218,7 @@ function HistoryChart({ logs, isPreFerment }) {
 }
 
 // 온도/pH 기록 전체를 제품별, 날짜별로 묶어 보여주는 히스토리 화면입니다.
-export default function TempPhDB({ tempLogs, setTempLogs }) {
+export default function TempPhDB({ t, tempLogs, setTempLogs }) {
   // 일반 반죽 기록에 표시할 공정 단계 목록입니다.
   const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   // 사전반죽 기록에 표시할 항목 목록입니다.
@@ -243,8 +273,8 @@ export default function TempPhDB({ tempLogs, setTempLogs }) {
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-8 gap-4">
-        <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">History</h1>
-        <input type="text" placeholder="Search product..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-64 bg-white border border-gray-200 rounded-full px-4 py-2 text-sm outline-none shadow-inner" />
+        <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">{t("historyTitle")}</h1>
+        <input type="text" placeholder={t("searchProduct")} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-64 bg-white border border-gray-200 rounded-full px-4 py-2 text-sm outline-none shadow-inner" />
       </div>
       
       <div className="space-y-4">
@@ -252,7 +282,7 @@ export default function TempPhDB({ tempLogs, setTempLogs }) {
           // 제품 안에서 다시 날짜별로 기록을 묶어 접고 펼칠 수 있게 만듭니다.
           const dateGroups = {};
           logs.forEach(log => {
-            const dateKey = log.timestamp || "날짜 미지정";
+            const dateKey = log.timestamp || t("noDate");
             if (!dateGroups[dateKey]) dateGroups[dateKey] = [];
             dateGroups[dateKey].push(log);
           });
@@ -264,7 +294,7 @@ export default function TempPhDB({ tempLogs, setTempLogs }) {
             <div key={productName} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
               <div onClick={() => { setExpandedProduct(expandedProduct === productName ? null : productName); setExpandedDate(null); }} className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50">
                 <div>
-                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product</div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("product")}</div>
                   <div className="text-xl font-black tracking-tighter uppercase">{productName}</div>
                 </div>
                 <span className="text-xs">{expandedProduct === productName ? "▲" : "▼"}</span>
@@ -273,8 +303,8 @@ export default function TempPhDB({ tempLogs, setTempLogs }) {
               {expandedProduct === productName && (
                 <div className="px-5 pb-5 bg-[#fcfcfb]">
                   <div className="pt-4">
-                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Trend Chart</div>
-                    <HistoryChart logs={logs} isPreFerment={isPreFerment} />
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{t("trendChart")}</div>
+                    <HistoryChart t={t} logs={logs} isPreFerment={isPreFerment} />
                   </div>
 
                   {Object.entries(dateGroups).map(([date, dateLogs]) => {
@@ -289,11 +319,11 @@ export default function TempPhDB({ tempLogs, setTempLogs }) {
                         className="w-full bg-white p-4 rounded-xl border border-gray-100 flex justify-between items-center text-left hover:border-black transition-all"
                       >
                         <div>
-                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</div>
+                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("date")}</div>
                           <div className="text-sm font-black tracking-tight">{date}</div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{dateLogs.length} records</span>
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{dateLogs.length} {t("records")}</span>
                           <span className="text-xs">{isDateExpanded ? "▲" : "▼"}</span>
                         </div>
                       </button>
@@ -315,18 +345,18 @@ export default function TempPhDB({ tempLogs, setTempLogs }) {
                                   <div className="flex justify-between items-center mb-2">
                                     {log.type !== "사전반죽 기록" ? (
                                       <select value={inlineType} onChange={(e) => setInlineType(e.target.value)} className="bg-transparent font-black text-[10px] uppercase border-b border-black outline-none font-sans">
-                                        <option>1차 저온</option><option>2차 저온</option>
+                                        <option value="1차 저온">{t("firstCold")}</option><option value="2차 저온">{t("secondCold")}</option>
                                       </select>
-                                    ) : <span className="text-[9px] font-black text-gray-400 uppercase">Pre-Ferment</span>}
+                                    ) : <span className="text-[9px] font-black text-gray-400 uppercase">{t("preFerment")}</span>}
                                     <div className="flex gap-2">
-                                      <button onClick={() => setInlineEditId(null)} className="text-[10px] font-bold text-gray-400 uppercase underline">Cancel</button>
-                                      <button onClick={() => saveInlineEdit(log.id)} className="text-[10px] font-black text-black uppercase underline">Save</button>
+                                      <button onClick={() => setInlineEditId(null)} className="text-[10px] font-bold text-gray-400 uppercase underline">{t("cancel")}</button>
+                                      <button onClick={() => saveInlineEdit(log.id)} className="text-[10px] font-black text-black uppercase underline">{t("save")}</button>
                                     </div>
                                   </div>
                                   <div className="space-y-1 max-h-[220px] overflow-y-auto pr-1 no-scrollbar">
                                     {activeItems.map(item => (
                                       <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1 text-[11px]">
-                                        <span className="font-bold uppercase text-gray-400">{item}</span>
+                                        <span className="font-bold uppercase text-gray-400">{labelFromMap(t, ITEM_LABEL_KEYS, item)}</span>
                                         {item === "날짜" ? (
                                           <input type="date" value={inlineData["날짜"]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px] border border-transparent" onChange={(e) => setInlineData({ ...inlineData, [item]: { t: e.target.value } })} />
                                         ) : log.type === "사전반죽 기록" && (item === "사용시점" || item === "정점") ? (
@@ -352,20 +382,20 @@ export default function TempPhDB({ tempLogs, setTempLogs }) {
                                       </div>
                                     ))}
                                   </div>
-                                  <textarea value={inlineMemo} onChange={(e) => setInlineMemo(e.target.value)} className="w-full bg-gray-50 border-none rounded-lg p-2 text-[10px] leading-4 resize-none h-14 outline-none" placeholder="Memo..." />
+                                  <textarea value={inlineMemo} onChange={(e) => setInlineMemo(e.target.value)} className="w-full bg-gray-50 border-none rounded-lg p-2 text-[10px] leading-4 resize-none h-14 outline-none" placeholder={t("memo")} />
                                 </div>
                               ) : (
                                 // 보기 모드: 저장된 값만 요약해서 보여주고, 카드를 누르면 편집 모드로 전환합니다.
                                 <div onClick={() => startInlineEdit(log)} className="cursor-pointer group">
-                                  <div className="absolute top-2 right-2 text-[8px] font-black text-gray-200 group-hover:text-black uppercase tracking-tighter transition-colors">Edit </div>
+                                  <div className="absolute top-2 right-2 text-[8px] font-black text-gray-200 group-hover:text-black uppercase tracking-tighter transition-colors">{t("edit")}</div>
                                   <div className="mb-4 flex justify-between">
-                                    <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{log.type}</span>
-                                    <button onClick={(e) => { e.stopPropagation(); if (confirm("삭제하시겠습니까?")) setTempLogs(prev => prev.filter(l => l.id !== log.id)); }} className="text-gray-300 hover:text-red-500 text-xs">x</button>
+                                    <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded">{labelFromMap(t, LOG_TYPE_LABEL_KEYS, log.type)}</span>
+                                    <button onClick={(e) => { e.stopPropagation(); if (confirm(t("deleteConfirm"))) setTempLogs(prev => prev.filter(l => l.id !== log.id)); }} className="text-gray-300 hover:text-red-500 text-xs">x</button>
                                   </div>
                                   <div className="space-y-1">
                                     {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].h || log.data[item].v) ? (
                                       <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
-                                        <span className="font-bold text-gray-400 uppercase">{item}</span>
+                                        <span className="font-bold text-gray-400 uppercase">{labelFromMap(t, ITEM_LABEL_KEYS, item)}</span>
                                         <span className="font-mono text-black">
                                           {log.data[item].t}
                                           {log.data[item].p ? ` / ${log.data[item].p}pH` : ""}
