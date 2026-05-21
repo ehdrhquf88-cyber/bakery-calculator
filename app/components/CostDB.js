@@ -2,6 +2,50 @@ import { useMemo, useState } from "react";
 
 import { InputField } from "./common";
 
+function parseNumber(value) {
+  const rawValue = String(value || "").trim();
+  const normalizedValue = rawValue.includes(".")
+    ? rawValue.replace(/,/g, "")
+    : rawValue.replace(/,(\d{3})\b/g, "$1").replace(",", ".");
+
+  return parseFloat(normalizedValue.replace(/[^\d.]/g, ""));
+}
+
+function formatCurrency(value) {
+  const amount = parseNumber(value);
+  if (!amount) return "";
+
+  return amount.toLocaleString("ko-KR");
+}
+
+function getUnitBase(unit) {
+  if (unit === "kg") return 1000;
+  if (unit === "L") return 1000;
+  return 1;
+}
+
+function splitPackageUnit(unit) {
+  const rawValue = String(unit || "1g").trim();
+  const unitMatch = rawValue.match(/(kg|ml|g|l|ea|개)$/i);
+  const packageUnit = unitMatch?.[0] || "g";
+  const normalizedUnit = packageUnit.toLowerCase() === "l" ? "L" : packageUnit;
+  const packageAmount = rawValue.replace(/(kg|ml|g|l|ea|개)$/i, "") || "1";
+
+  return {
+    packageAmount,
+    packageUnit: normalizedUnit === "개" ? "ea" : normalizedUnit,
+  };
+}
+
+function formatUnitCost(purchasePrice, packageAmount, packageUnit) {
+  const price = parseNumber(purchasePrice);
+  const amount = parseNumber(packageAmount);
+  const baseAmount = amount * getUnitBase(packageUnit);
+  if (!price || !baseAmount) return "";
+
+  return String(Number((price / baseAmount).toFixed(4)));
+}
+
 export default function CostDB({ costItems, setCostItems }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -80,7 +124,9 @@ export default function CostDB({ costItems, setCostItems }) {
                           <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{item.category}</div>
                           <div className="text-xl font-black tracking-tighter uppercase truncate">{item.name}</div>
                           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-bold text-gray-400 uppercase tracking-tight">
-                            <span className="font-mono text-black">{item.cost || 0} / {item.unit}</span>
+                            <span className="font-mono text-black">{item.cost || 0}원 / g</span>
+                            {item.purchasePrice && <span>구매가격 {formatCurrency(item.purchasePrice)}원</span>}
+                            <span>{item.unit}</span>
                             {item.supplier && <span>{item.supplier}</span>}
                             {item.updatedAt && <span>{item.updatedAt}</span>}
                           </div>
@@ -114,20 +160,24 @@ export default function CostDB({ costItems, setCostItems }) {
 }
 
 function CostModal({ initialData, onSave, onClose }) {
+  const initialUnit = splitPackageUnit(initialData?.unit);
   const [category, setCategory] = useState(initialData?.category || "밀가루");
   const [name, setName] = useState(initialData?.name || "");
-  const [cost, setCost] = useState(initialData?.cost || "");
-  const [unit, setUnit] = useState(initialData?.unit || "g");
+  const [purchasePrice, setPurchasePrice] = useState(initialData?.purchasePrice || "");
+  const [packageAmount, setPackageAmount] = useState(initialUnit.packageAmount);
+  const [packageUnit, setPackageUnit] = useState(initialUnit.packageUnit);
   const [supplier, setSupplier] = useState(initialData?.supplier || "");
   const [memo, setMemo] = useState(initialData?.memo || "");
+  const cost = formatUnitCost(purchasePrice, packageAmount, packageUnit) || initialData?.cost || "";
 
   const handleSubmit = () => {
     if (!name.trim()) return;
     onSave({
       category,
       name: name.trim(),
-      cost: cost.replace(',', '.'),
-      unit,
+      purchasePrice: String(purchasePrice).replace(/,/g, ""),
+      unit: `${packageAmount || 1}${packageUnit}`,
+      cost,
       supplier: supplier.trim(),
       memo,
     });
@@ -141,7 +191,7 @@ function CostModal({ initialData, onSave, onClose }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <InputField label="분류">
-            <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold">
+            <select value={category} onChange={e => setCategory(e.target.value)} className="w-full h-10 bg-transparent border-b-2 border-black py-2 outline-none font-bold leading-normal">
               <option>미등록</option>
               <option>밀가루</option>
               <option>유제품</option>
@@ -158,17 +208,28 @@ function CostModal({ initialData, onSave, onClose }) {
           <InputField label="재료명">
             <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" />
           </InputField>
-          <InputField label="원가">
-            <input value={cost} onChange={e => setCost(e.target.value.replace(',', '.'))} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-mono font-bold text-right" type="text" inputMode="decimal" placeholder="0" />
+          <InputField label="구매가격">
+            <div className="flex items-end gap-2 border-b-2 border-black">
+              <input value={formatCurrency(purchasePrice)} onChange={e => setPurchasePrice(e.target.value.replace(/[^\d,]/g, ""))} className="w-full bg-transparent py-2 outline-none font-mono font-bold text-right" type="text" inputMode="numeric" placeholder="6,000" />
+              <span className="py-2 text-xs font-black text-gray-400">원</span>
+            </div>
           </InputField>
           <InputField label="단위">
-            <select value={unit} onChange={e => setUnit(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold">
-              <option>g</option>
-              <option>kg</option>
-              <option>ml</option>
-              <option>L</option>
-              <option>ea</option>
-            </select>
+            <div className="grid grid-cols-[1fr_88px] gap-2">
+              <input value={packageAmount} onChange={e => setPackageAmount(e.target.value.replace(/[^\d,.]/g, ""))} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-mono font-bold text-right" type="text" inputMode="decimal" placeholder="25" />
+              <select value={packageUnit} onChange={e => setPackageUnit(e.target.value)} className="w-full h-10 bg-transparent border-b-2 border-black py-2 outline-none font-bold leading-normal">
+                <option>g</option>
+                <option>kg</option>
+                <option>ml</option>
+                <option>L</option>
+                <option>ea</option>
+              </select>
+            </div>
+          </InputField>
+          <InputField label="원가">
+            <div className="flex items-end gap-2 border-b-2 border-black/20 bg-black/5 px-2">
+              <input value={cost ? `${cost}원 / g` : ""} readOnly className="w-full bg-transparent py-2 outline-none font-mono font-bold text-right text-gray-500 cursor-not-allowed" type="text" placeholder="자동계산" />
+            </div>
           </InputField>
           <InputField label="구매처">
             <input value={supplier} onChange={e => setSupplier(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" />

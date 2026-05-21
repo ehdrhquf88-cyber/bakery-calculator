@@ -4,7 +4,7 @@ import { InputField } from "./common";
 
 
 
-export default function RecipeDB({ recipes, setRecipes, costItems, setCostItems }) {
+export default function RecipeDB({ recipes, setRecipes, costItems }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingRecipe, setEditingRecipe] = useState(null);
@@ -32,7 +32,7 @@ export default function RecipeDB({ recipes, setRecipes, costItems, setCostItems 
           </div>
         ))}
       </div>
-      {isModalOpen && <RecipeModal initialData={editingRecipe} costItems={costItems} setCostItems={setCostItems} onSave={(data) => {
+      {isModalOpen && <RecipeModal initialData={editingRecipe} costItems={costItems} onSave={(data) => {
         if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id } : r));
         else setRecipes(prev => [...prev, { ...data, id: Date.now() }]);
         setIsModalOpen(false);
@@ -41,14 +41,14 @@ export default function RecipeDB({ recipes, setRecipes, costItems, setCostItems 
   );
 }
 
-function RecipeModal({ initialData, costItems, setCostItems, onSave, onClose }) {
+function RecipeModal({ initialData, costItems, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
   const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => {
     if (idx !== i) return ing;
 
-    const nextValue = (f === "percent" || f === "cost") ? v.replace(',', '.') : v;
+    const nextValue = f === "percent" ? v.replace(',', '.') : v;
     const nextIng = { ...ing, [f]: nextValue };
 
     if (f === "name") {
@@ -68,11 +68,9 @@ function RecipeModal({ initialData, costItems, setCostItems, onSave, onClose }) 
     } : ing));
   };
   const saveRecipe = () => {
-    const today = new Date().toISOString().slice(0, 10);
     const knownItems = [...costItems];
-    const newCostItems = [];
 
-    const nextIngredients = ingredients.map((ing, index) => {
+    const nextIngredients = ingredients.map((ing) => {
       const trimmedName = ing.name.trim();
       if (!trimmedName) return ing;
 
@@ -97,32 +95,13 @@ function RecipeModal({ initialData, costItems, setCostItems, onSave, onClose }) 
         };
       }
 
-      const newItem = {
-        id: Date.now() + index,
-        category: "미등록",
-        name: trimmedName,
-        cost: ing.cost || "",
-        unit: ing.costUnit || "g",
-        supplier: "",
-        memo: "레시피 DB에서 자동 등록",
-        updatedAt: today,
-      };
-
-      knownItems.push(newItem);
-      newCostItems.push(newItem);
-
       return {
         ...ing,
-        ingredientId: newItem.id,
-        name: newItem.name,
-        cost: newItem.cost,
-        costUnit: newItem.unit,
+        name: trimmedName,
+        cost: "",
+        costUnit: "g",
       };
     });
-
-    if (newCostItems.length > 0) {
-      setCostItems(prev => [...prev, ...newCostItems]);
-    }
 
     onSave({ category, productName, ingredients: nextIngredients });
   };
@@ -132,13 +111,14 @@ function RecipeModal({ initialData, costItems, setCostItems, onSave, onClose }) 
         <button onClick={onClose} className="absolute top-6 right-6 text-xl">x</button>
         <h2 className="text-2xl md:text-3xl font-black tracking-tighter mb-8 uppercase">Recipe Editor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <InputField label="분류"><select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold"><option value="하드계열">하드계열</option><option value="소프트계열">소프트계열</option><option value="사전반죽">사전반죽</option></select></InputField>
+          <InputField label="분류"><select value={category} onChange={e => setCategory(e.target.value)} className="w-full h-10 bg-transparent border-b-2 border-black py-2 outline-none font-bold leading-normal"><option value="하드계열">하드계열</option><option value="소프트계열">소프트계열</option><option value="사전반죽">사전반죽</option></select></InputField>
           <InputField label="제품명"><input value={productName} onChange={e => setProductName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" /></InputField>
         </div>
         <div className="space-y-3">
           {ingredients.map((ing, i) => {
             const linkedCostItem = costItems.find(item => item.id === ing.ingredientId);
             const displayCost = linkedCostItem ? linkedCostItem.cost : ing.cost;
+            const isCostLinked = Boolean(linkedCostItem || displayCost);
 
             return (
               <div key={i} className="grid grid-cols-2 md:grid-cols-[120px_1fr_80px_100px_40px] gap-2 md:gap-4 items-center bg-white p-3 md:p-4 rounded-xl shadow-sm">
@@ -152,14 +132,12 @@ function RecipeModal({ initialData, costItems, setCostItems, onSave, onClose }) 
                 />
                 <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="%" type="text" inputMode="decimal" />
                 <input
-                  value={displayCost}
-                  onChange={e => updateIng(i, "cost", e.target.value)}
-                  readOnly={Boolean(linkedCostItem)}
-                  title={linkedCostItem ? "원가는 원가 리스트 DB에서 수정하세요." : ""}
-                  className={`bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold ${linkedCostItem ? "text-gray-400 cursor-not-allowed" : ""}`}
-                  placeholder="Cost"
+                  value={displayCost ? `${displayCost}원 / g` : ""}
+                  readOnly
+                  title="원가는 원가 리스트 DB에서 자동으로 연결됩니다."
+                  className={`bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold text-gray-400 cursor-not-allowed ${isCostLinked ? "" : "placeholder:text-gray-300"}`}
+                  placeholder="원가 미등록"
                   type="text"
-                  inputMode="decimal"
                 />
                 <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))} className="text-red-300 font-bold">x</button>
               </div>
@@ -200,7 +178,7 @@ function IngredientNameInput({ value, costItems, selectedIngredientId, onChange,
       />
       {selectedItem && (
         <div className="mt-1 text-[9px] font-black text-gray-400 uppercase tracking-tight">
-          Cost DB 연결됨 · {selectedItem.cost} / {selectedItem.unit}
+          Cost DB 연결됨 · {selectedItem.cost || 0}원 / g
         </div>
       )}
       {shouldShowMatches && (
@@ -216,7 +194,7 @@ function IngredientNameInput({ value, costItems, selectedIngredientId, onChange,
               <div className="text-xs font-black tracking-tight">{item.name}</div>
               <div className="mt-0.5 flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-tight">
                 <span>{item.category}</span>
-                <span className="font-mono text-black">{item.cost || 0} / {item.unit}</span>
+                <span className="font-mono text-black">{item.cost || 0}원 / g</span>
               </div>
             </button>
           ))}
