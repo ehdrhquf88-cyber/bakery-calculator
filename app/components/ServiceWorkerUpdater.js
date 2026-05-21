@@ -6,17 +6,36 @@ export default function ServiceWorkerUpdater({ t }) {
   const [waitingWorker, setWaitingWorker] = useState(null);
   const [isBannerVisible, setIsBannerVisible] = useState(false);
   const isRefreshing = useRef(false);
+  const registrationRef = useRef(null);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
-    const handleControllerChange = () => {
+    const refreshForUpdate = () => {
       if (isRefreshing.current) return;
       isRefreshing.current = true;
       window.location.reload();
     };
 
-    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+    const handleMessage = (event) => {
+      if (event.data?.type === "SW_ACTIVATED") {
+        refreshForUpdate();
+      }
+    };
+
+    const checkForUpdate = () => {
+      registrationRef.current?.update().catch((error) => {
+        console.error("Service Worker update check failed.", error);
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") checkForUpdate();
+    };
+
+    navigator.serviceWorker.addEventListener("controllerchange", refreshForUpdate);
+    navigator.serviceWorker.addEventListener("message", handleMessage);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     const registerServiceWorker = async () => {
       try {
@@ -24,6 +43,7 @@ export default function ServiceWorkerUpdater({ t }) {
           scope: "/",
           updateViaCache: "none",
         });
+        registrationRef.current = registration;
 
         if (registration.waiting && navigator.serviceWorker.controller) {
           setWaitingWorker(registration.waiting);
@@ -41,6 +61,8 @@ export default function ServiceWorkerUpdater({ t }) {
             }
           });
         });
+
+        checkForUpdate();
       } catch (error) {
         console.error("Service Worker registration failed.", error);
       }
@@ -49,12 +71,26 @@ export default function ServiceWorkerUpdater({ t }) {
     registerServiceWorker();
 
     return () => {
-      navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+      navigator.serviceWorker.removeEventListener("controllerchange", refreshForUpdate);
+      navigator.serviceWorker.removeEventListener("message", handleMessage);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
   const handleUpdate = () => {
-    waitingWorker?.postMessage({ type: "SKIP_WAITING" });
+    setIsBannerVisible(false);
+
+    if (waitingWorker) {
+      waitingWorker.postMessage({ type: "SKIP_WAITING" });
+      window.setTimeout(() => {
+        if (isRefreshing.current) return;
+        isRefreshing.current = true;
+        window.location.reload();
+      }, 1500);
+      return;
+    }
+
+    registrationRef.current?.update();
   };
 
   if (!isBannerVisible) return null;

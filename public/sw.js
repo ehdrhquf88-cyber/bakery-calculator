@@ -1,5 +1,5 @@
 const CACHE_PREFIXES = ["bread-people-", "bakery-app-"];
-const CACHE_NAME = "bread-people-v3";
+const CACHE_NAME = "bread-people-v4";
 const APP_SHELL = [
   "/",
   "/manifest.webmanifest",
@@ -22,13 +22,18 @@ self.addEventListener("activate", (event) => {
           .filter((key) => CACHE_PREFIXES.some((prefix) => key.startsWith(prefix)) && key !== CACHE_NAME)
           .map((key) => caches.delete(key))
       )
-    ).then(() => self.clients.claim())
+    )
+      .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: "window" }))
+      .then((clients) => {
+        clients.forEach((client) => client.postMessage({ type: "SW_ACTIVATED" }));
+      })
   );
 });
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
-    self.skipWaiting();
+    event.waitUntil(self.skipWaiting());
   }
 });
 
