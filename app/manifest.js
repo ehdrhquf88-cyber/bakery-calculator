@@ -1,8 +1,8 @@
 export default function manifest() {
   return {
-    name: "Bakery App",
-    short_name: "Bakery",
-    description: "Bakery recipe calculator and fermentation log",
+    name: "빵쟁이들",
+    short_name: "빵쟁이들",
+    description: "빵쟁이들을 위한 레시피 계산기와 발효 기록",
     start_url: "/",
     scope: "/",
     display: "standalone",
