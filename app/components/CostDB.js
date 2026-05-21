@@ -175,7 +175,7 @@ function CostModal({ initialData, onSave, onClose }) {
     onSave({
       category,
       name: name.trim(),
-      purchasePrice: String(purchasePrice).replace(/,/g, ""),
+      purchasePrice: String(purchasePrice).replace(/\D/g, ""),
       unit: `${packageAmount || 1}${packageUnit}`,
       cost,
       supplier: supplier.trim(),
@@ -210,7 +210,7 @@ function CostModal({ initialData, onSave, onClose }) {
           </InputField>
           <InputField label="구매가격">
             <div className="flex items-end gap-2 border-b-2 border-black">
-              <input value={formatCurrency(purchasePrice)} onChange={e => setPurchasePrice(e.target.value.replace(/[^\d,]/g, ""))} className="w-full bg-transparent py-2 outline-none font-mono font-bold text-right" type="text" inputMode="numeric" placeholder="6,000" />
+              <input value={formatCurrency(purchasePrice)} onChange={e => setPurchasePrice(e.target.value.replace(/\D/g, ""))} className="w-full bg-transparent py-2 outline-none font-mono font-bold text-right" type="text" inputMode="numeric" placeholder="6,000" />
               <span className="py-2 text-xs font-black text-gray-400">원</span>
             </div>
           </InputField>
