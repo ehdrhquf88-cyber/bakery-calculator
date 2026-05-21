@@ -15,6 +15,10 @@ export default function Home() {
   const [tempLogs, setTempLogs] = useState([]);
   const [accessMode, setAccessMode] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [skipCalcLeaveCheck, setSkipCalcLeaveCheck] = useState(false);
+  const [pendingView, setPendingView] = useState(null);
+  const [leaveCheckStep, setLeaveCheckStep] = useState(null);
+  const [hideLeaveCheck, setHideLeaveCheck] = useState(false);
 
   // 로컬스토리지 로드
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -23,9 +27,11 @@ export default function Home() {
       const savedRecipes = localStorage.getItem("bakery_recipes");
       const savedCostItems = localStorage.getItem("bakery_cost_items");
       const savedTempLogs = localStorage.getItem("bakery_temp_ph");
+      const savedSkipCalcLeaveCheck = localStorage.getItem("bakery_skip_calc_leave_check");
       if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
       if (savedCostItems) setCostItems(JSON.parse(savedCostItems));
       if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
+      if (savedSkipCalcLeaveCheck === "true") setSkipCalcLeaveCheck(true);
     } catch (e) {
       console.error("로컬스토리지 데이터를 읽는 중 오류가 발생했습니다.", e);
     }
@@ -46,16 +52,53 @@ export default function Home() {
     }
   }, [recipes, costItems, tempLogs, isLoaded]);
 
+  const saveLeaveCheckPreference = () => {
+    if (!hideLeaveCheck) return;
+    localStorage.setItem("bakery_skip_calc_leave_check", "true");
+    setSkipCalcLeaveCheck(true);
+  };
+
+  const closeLeaveCheck = () => {
+    setPendingView(null);
+    setLeaveCheckStep(null);
+    setHideLeaveCheck(false);
+  };
+
+  const moveToView = (nextView) => {
+    if (nextView === view) return;
+
+    if (view === "calc" && nextView !== "calc" && !skipCalcLeaveCheck) {
+      setPendingView(nextView);
+      setLeaveCheckStep("salt");
+      setHideLeaveCheck(false);
+      return;
+    }
+
+    setView(nextView);
+  };
+
+  const confirmLeaveCheck = () => {
+    saveLeaveCheckPreference();
+
+    if (leaveCheckStep === "salt") {
+      setLeaveCheckStep("yeast");
+      return;
+    }
+
+    if (pendingView) setView(pendingView);
+    closeLeaveCheck();
+  };
+
   if (!isLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
   if (!accessMode) return <LoginScreen onFreeStart={() => setAccessMode("free")} />;
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
       <nav className="sticky top-0 z-40 flex gap-4 md:gap-8 p-4 md:p-6 bg-white/80 backdrop-blur-md border-b border-gray-200 justify-start md:justify-center overflow-x-auto whitespace-nowrap shadow-sm no-scrollbar print:hidden">
-        <NavButton active={view === "calc"} onClick={() => setView("calc")}>레시피 계산기</NavButton>
-        <NavButton active={view === "db"} onClick={() => setView("db")}>레시피 DB</NavButton>
-        <NavButton active={view === "cost_db"} onClick={() => setView("cost_db")}>원가 리스트 DB</NavButton>
-        <NavButton active={view === "temp_db"} onClick={() => setView("temp_db")}>온도/pH 히스토리</NavButton>
+        <NavButton active={view === "calc"} onClick={() => moveToView("calc")}>레시피 계산기</NavButton>
+        <NavButton active={view === "db"} onClick={() => moveToView("db")}>레시피 DB</NavButton>
+        <NavButton active={view === "cost_db"} onClick={() => moveToView("cost_db")}>원가 리스트 DB</NavButton>
+        <NavButton active={view === "temp_db"} onClick={() => moveToView("temp_db")}>온도/pH 히스토리</NavButton>
       </nav>
 
       <div className="py-4 md:py-8 print:py-0">
@@ -64,7 +107,43 @@ export default function Home() {
         {view === "cost_db" && <CostDB costItems={costItems} setCostItems={setCostItems} />}
         {view === "temp_db" && <TempPhDB tempLogs={tempLogs} setTempLogs={setTempLogs} />}
       </div>
+      {leaveCheckStep && (
+        <LeaveCheckModal
+          message={leaveCheckStep === "salt" ? "소금 넣었어??" : "이스트도?"}
+          hideLeaveCheck={hideLeaveCheck}
+          setHideLeaveCheck={setHideLeaveCheck}
+          onCancel={closeLeaveCheck}
+          onConfirm={confirmLeaveCheck}
+        />
+      )}
       <ServiceWorkerUpdater />
+    </div>
+  );
+}
+
+function LeaveCheckModal({ message, hideLeaveCheck, setHideLeaveCheck, onCancel, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-sm p-4 print:hidden">
+      <section className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-black/10 text-black">
+        <h2 className="text-2xl font-black tracking-tighter">{message}</h2>
+        <label className="mt-6 flex items-center gap-3 text-xs font-bold text-gray-500">
+          <input
+            type="checkbox"
+            checked={hideLeaveCheck}
+            onChange={e => setHideLeaveCheck(e.target.checked)}
+            className="h-4 w-4 accent-black"
+          />
+          다음부터 이 창 보이지 않기
+        </label>
+        <div className="mt-6 grid grid-cols-2 gap-2">
+          <button type="button" onClick={onCancel} className="rounded-xl border border-gray-200 bg-white py-3 text-sm font-black uppercase tracking-tight">
+            취소
+          </button>
+          <button type="button" onClick={onConfirm} className="rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white">
+            확인
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
