@@ -7,6 +7,7 @@ import RecipeCalculator from "./components/RecipeCalculator";
 import RecipeDB from "./components/RecipeDB";
 import ServiceWorkerUpdater from "./components/ServiceWorkerUpdater";
 import TempPhDB from "./components/TempPhDB";
+import { DEFAULT_LANGUAGE, LANGUAGES, getTranslator } from "./i18n";
 
 export default function Home() {
   const [view, setView] = useState("calc");
@@ -20,6 +21,8 @@ export default function Home() {
   const [pendingCalcAction, setPendingCalcAction] = useState(null);
   const [leaveCheckStep, setLeaveCheckStep] = useState(null);
   const [hideLeaveCheck, setHideLeaveCheck] = useState(false);
+  const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
+  const t = getTranslator(language);
 
   // 로컬스토리지 로드
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -29,10 +32,12 @@ export default function Home() {
       const savedCostItems = localStorage.getItem("bakery_cost_items");
       const savedTempLogs = localStorage.getItem("bakery_temp_ph");
       const savedSkipCalcLeaveCheck = localStorage.getItem("bakery_skip_calc_leave_check");
+      const savedLanguage = localStorage.getItem("bakery_language");
       if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
       if (savedCostItems) setCostItems(JSON.parse(savedCostItems));
       if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
       if (savedSkipCalcLeaveCheck === "true") setSkipCalcLeaveCheck(true);
+      if (LANGUAGES.some(lang => lang.code === savedLanguage)) setLanguage(savedLanguage);
     } catch (e) {
       console.error("로컬스토리지 데이터를 읽는 중 오류가 발생했습니다.", e);
     }
@@ -94,6 +99,11 @@ export default function Home() {
     setSkipCalcLeaveCheck(false);
   };
 
+  const changeLanguage = (nextLanguage) => {
+    setLanguage(nextLanguage);
+    localStorage.setItem("bakery_language", nextLanguage);
+  };
+
   const confirmLeaveCheck = () => {
     saveLeaveCheckPreference();
 
@@ -108,53 +118,72 @@ export default function Home() {
   };
 
   if (!isLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
-  if (!accessMode) return <LoginScreen onFreeStart={() => setAccessMode("free")} />;
+  if (!accessMode) return <LoginScreen t={t} onFreeStart={() => setAccessMode("free")} />;
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
       <nav className="sticky top-0 z-40 flex gap-4 md:gap-8 p-4 md:p-6 bg-white/80 backdrop-blur-md border-b border-gray-200 justify-start md:justify-center overflow-x-auto whitespace-nowrap shadow-sm no-scrollbar print:hidden">
-        <NavButton active={view === "calc"} onClick={() => moveToView("calc")}>레시피 계산기</NavButton>
-        <NavButton active={view === "db"} onClick={() => moveToView("db")}>레시피 DB</NavButton>
-        <NavButton active={view === "cost_db"} onClick={() => moveToView("cost_db")}>원가 리스트 DB</NavButton>
-        <NavButton active={view === "temp_db"} onClick={() => moveToView("temp_db")}>온도/pH 히스토리</NavButton>
-        <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>설정</NavButton>
+        <NavButton active={view === "calc"} onClick={() => moveToView("calc")}>{t("navRecipeCalculator")}</NavButton>
+        <NavButton active={view === "db"} onClick={() => moveToView("db")}>{t("navRecipeDb")}</NavButton>
+        <NavButton active={view === "cost_db"} onClick={() => moveToView("cost_db")}>{t("navCostDb")}</NavButton>
+        <NavButton active={view === "temp_db"} onClick={() => moveToView("temp_db")}>{t("navTempPh")}</NavButton>
+        <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>{t("navSettings")}</NavButton>
       </nav>
 
       <div className="py-4 md:py-8 print:py-0">
-        {view === "calc" && <RecipeCalculator recipes={recipes} setRecipes={setRecipes} tempLogs={tempLogs} setTempLogs={setTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
-        {view === "db" && <RecipeDB recipes={recipes} setRecipes={setRecipes} costItems={costItems} setCostItems={setCostItems} />}
-        {view === "cost_db" && <CostDB costItems={costItems} setCostItems={setCostItems} />}
-        {view === "temp_db" && <TempPhDB tempLogs={tempLogs} setTempLogs={setTempLogs} />}
-        {view === "settings" && <SettingsPanel skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} />}
+        {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={setRecipes} tempLogs={tempLogs} setTempLogs={setTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
+        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={setRecipes} costItems={costItems} setCostItems={setCostItems} />}
+        {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={setCostItems} />}
+        {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} />}
       </div>
       {leaveCheckStep && (
         <LeaveCheckModal
-          message={leaveCheckStep === "salt" ? "소금 넣었어??" : "이스트도?"}
+          message={leaveCheckStep === "salt" ? t("saltCheck") : t("yeastCheck")}
+          t={t}
           hideLeaveCheck={hideLeaveCheck}
           setHideLeaveCheck={setHideLeaveCheck}
           onCancel={closeLeaveCheck}
           onConfirm={confirmLeaveCheck}
         />
       )}
-      <ServiceWorkerUpdater />
+      <ServiceWorkerUpdater t={t} />
     </div>
   );
 }
 
-function SettingsPanel({ skipCalcLeaveCheck, onRestoreCalcLeaveCheck }) {
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck }) {
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-8 text-black">
       <div className="border-b-2 border-black pb-4 mb-6">
-        <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">Settings</h1>
+        <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">{t("settingsTitle")}</h1>
       </div>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("languageSetting")}</div>
+            <p className="mt-2 text-xs font-bold text-gray-400">{t("languageDescription")}</p>
+          </div>
+          <select
+            value={language}
+            onChange={e => onLanguageChange(e.target.value)}
+            className="w-full md:w-48 h-11 bg-[#f7f6f3] border border-gray-200 rounded-xl px-3 text-sm font-black outline-none"
+          >
+            {LANGUAGES.map(lang => (
+              <option key={lang.code} value={lang.code}>{lang.label}</option>
+            ))}
+          </select>
+        </div>
+      </section>
 
       <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">레시피 계산기 알림</div>
-            <h2 className="mt-1 text-xl font-black tracking-tighter">소금/이스트 확인창</h2>
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("calculatorNotice")}</div>
+            <h2 className="mt-1 text-xl font-black tracking-tighter">{t("saltYeastConfirm")}</h2>
             <p className="mt-2 text-xs font-bold text-gray-400">
-              현재 상태: {skipCalcLeaveCheck ? "숨김" : "표시"}
+              {t("currentStatus")}: {skipCalcLeaveCheck ? t("statusHidden") : t("statusVisible")}
             </p>
           </div>
           <button
@@ -163,7 +192,7 @@ function SettingsPanel({ skipCalcLeaveCheck, onRestoreCalcLeaveCheck }) {
             className="bg-black text-white px-5 py-3 rounded-xl text-sm font-black uppercase tracking-tight disabled:bg-gray-300 disabled:cursor-not-allowed"
             disabled={!skipCalcLeaveCheck}
           >
-            알림 다시 보기
+            {t("restoreNotifications")}
           </button>
         </div>
       </section>
@@ -171,7 +200,7 @@ function SettingsPanel({ skipCalcLeaveCheck, onRestoreCalcLeaveCheck }) {
   );
 }
 
-function LeaveCheckModal({ message, hideLeaveCheck, setHideLeaveCheck, onCancel, onConfirm }) {
+function LeaveCheckModal({ message, t, hideLeaveCheck, setHideLeaveCheck, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-sm p-4 print:hidden">
       <section className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-black/10 text-black">
@@ -183,14 +212,14 @@ function LeaveCheckModal({ message, hideLeaveCheck, setHideLeaveCheck, onCancel,
             onChange={e => setHideLeaveCheck(e.target.checked)}
             className="h-4 w-4 accent-black"
           />
-          다음부터 이 창 보이지 않기
+          {t("hideNextTime")}
         </label>
         <div className="mt-6 grid grid-cols-2 gap-2">
           <button type="button" onClick={onCancel} className="rounded-xl border border-gray-200 bg-white py-3 text-sm font-black uppercase tracking-tight">
-            취소
+            {t("cancel")}
           </button>
           <button type="button" onClick={onConfirm} className="rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white">
-            확인
+            {t("confirm")}
           </button>
         </div>
       </section>
@@ -198,9 +227,9 @@ function LeaveCheckModal({ message, hideLeaveCheck, setHideLeaveCheck, onCancel,
   );
 }
 
-function LoginScreen({ onFreeStart }) {
+function LoginScreen({ t, onFreeStart }) {
   const showComingSoon = () => {
-    alert("로그인 기능은 준비 중입니다. 지금은 무료로 사용하기를 선택해 주세요.");
+    alert(t("loginComingSoon"));
   };
 
   return (
@@ -212,25 +241,25 @@ function LoginScreen({ onFreeStart }) {
       <div className="relative z-10 min-h-[calc(100vh-4rem)] w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-[1fr_420px] gap-8 items-center">
         <div className="text-white pt-10 md:self-start md:pt-16">
           <p className="text-3xl md:text-5xl font-black tracking-tighter drop-shadow-[0_3px_10px_rgba(0,0,0,0.85)]">
-            빵쟁이들 안녕?
+            {t("loginGreeting")}
           </p>
         </div>
 
         <section className="w-full max-w-md justify-self-center md:justify-self-end bg-white/42 md:bg-white/82 border border-white/20 md:border-white/35 rounded-2xl shadow-lg md:shadow-xl p-5 md:p-8 backdrop-blur-lg md:backdrop-blur-md">
           <div className="border-b-2 border-black/80 pb-4 mb-6">
             <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Levain Lab</div>
-            <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">Sign In</h1>
+            <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">{t("signIn")}</h1>
           </div>
 
           <div className="space-y-3">
             <input
               type="email"
-              placeholder="Email"
+              placeholder={t("email")}
               className="w-full bg-white/58 md:bg-[#f7f6f3] border border-white/35 md:border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
             />
             <input
               type="password"
-              placeholder="Password"
+              placeholder={t("password")}
               className="w-full bg-white/58 md:bg-[#f7f6f3] border border-white/35 md:border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
             />
             <button
@@ -238,13 +267,13 @@ function LoginScreen({ onFreeStart }) {
               onClick={showComingSoon}
               className="w-full bg-black text-white py-3 rounded-xl font-black text-sm uppercase tracking-tight"
             >
-              로그인
+              {t("login")}
             </button>
           </div>
 
           <div className="my-6 flex items-center gap-3">
             <div className="h-px flex-1 bg-gray-100" />
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">or</span>
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("or")}</span>
             <div className="h-px flex-1 bg-gray-100" />
           </div>
 
@@ -266,7 +295,7 @@ function LoginScreen({ onFreeStart }) {
             onClick={onFreeStart}
             className="mt-6 w-full bg-white/58 md:bg-[#f7f6f3] border border-white/35 md:border-gray-200 py-4 rounded-xl font-black text-sm uppercase tracking-tight hover:border-black transition-all"
           >
-            무료로 사용하기
+            {t("freeStart")}
           </button>
         </section>
       </div>

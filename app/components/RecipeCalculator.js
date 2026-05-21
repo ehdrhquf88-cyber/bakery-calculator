@@ -2,9 +2,46 @@ import { useState, useMemo, useCallback } from "react";
 
 import { InputField, SummaryCard, SummaryRow } from "./common";
 
+const TYPE_LABEL_KEYS = {
+  "밀": "typeFlour",
+  "수분": "typeWater",
+  "사전반죽": "typePreferment",
+  "소금": "typeSalt",
+  "기타": "typeOther",
+};
 
+const ITEM_LABEL_KEYS = {
+  "날짜": "itemDate",
+  "르방": "itemLevain",
+  "밀": "itemFlour",
+  "물": "itemWater",
+  "결과": "itemResult",
+  "오토리즈": "itemAutolyse",
+  "오토리즈완료": "itemAutolyseDone",
+  "반죽완료": "itemMixDone",
+  "하바1": "itemFold1",
+  "하바2": "itemFold2",
+  "하바3": "itemFold3",
+  "하바4": "itemFold4",
+  "분할": "itemDivide",
+  "성형": "itemShape",
+  "굽기": "itemBake",
+  "수분": "typeWater",
+  "사용시점": "itemUsePoint",
+  "정점": "itemPeak",
+};
 
-export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs, requestSafetyCheck }) {
+const LOG_TYPE_LABEL_KEYS = {
+  "1차 저온": "firstCold",
+  "2차 저온": "secondCold",
+  "사전반죽 기록": "prefermentRecord",
+};
+
+function labelFromMap(t, map, value) {
+  return map[value] ? t(map[value]) : value;
+}
+
+export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, setTempLogs, requestSafetyCheck }) {
   const [category, setCategory] = useState("하드계열");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const [totalDough, setTotalDough] = useState("");
@@ -210,36 +247,36 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
         <section className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 order-1 print:bg-white print:shadow-none print:border-none print:p-0">
           <div className="border-b-2 border-black pb-3 mb-6 flex justify-between items-end">
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter truncate uppercase print:text-2xl">
-              {currentRecipe ? currentRecipe.productName : "CALCULATOR"}
+              {currentRecipe ? currentRecipe.productName : t("calculatorTitle")}
             </h1>
             {currentRecipe && (
               <button 
                 onClick={handlePrintPDF}
                 className="bg-black text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-tight hover:bg-gray-800 transition-all shadow-md print:hidden flex items-center gap-1"
               >
-                PDF 저장 / 인쇄
+                {t("printPdf")}
               </button>
             )}
           </div>
           
           <div className="grid grid-cols-2 gap-4 mb-8 text-sm print:mb-4 print:gap-2">
-            <InputField label="제품 분류">
+            <InputField label={t("productCategory")}>
               <select value={category} onChange={(e) => { setCategory(e.target.value); resetRecipeSelection(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
-                <option value="하드계열">하드계열</option>
-                <option value="소프트계열">소프트계열</option>
-                <option value="사전반죽">사전반죽</option>
+                <option value="하드계열">{t("hardCategory")}</option>
+                <option value="소프트계열">{t("softCategory")}</option>
+                <option value="사전반죽">{t("prefermentCategory")}</option>
               </select>
             </InputField>
           
-            <InputField label="제품명 선택">
+            <InputField label={t("productSelect")}>
               <select value={selectedRecipeId} onChange={(e) => handleRecipeSelectionChange(e.target.value)} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
-                <option value="">선택하세요</option>
+                <option value="">{t("selectRecipe")}</option>
                 {filteredRecipes.map(r => <option key={r.id} value={r.id}>{r.productName}</option>)}
               </select>
             </InputField>
             
             <div className="flex flex-col justify-between">
-              <InputField label="총 반죽량 (g)">
+              <InputField label={t("totalDough")}>
                 <input type="text" inputMode="decimal" value={totalDough} onChange={(e) => {
                   const val = e.target.value.replace(',', '.');
                   setTotalDough(val);
@@ -251,17 +288,17 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
               </InputField>
               {currentRecipe && (
                 <div className="flex items-center gap-1.5 mt-2 print:hidden">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">총반죽 기준:</span>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">{t("doughBase")}</span>
                   <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
                     <input type="text" inputMode="decimal" value={doughMultiplier} onChange={(e) => handleDoughMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5" />
-                    <span className="text-[10px] font-bold text-gray-400 px-0.5">배</span>
+                    <span className="text-[10px] font-bold text-gray-400 px-0.5">{t("multiplierSuffix")}</span>
                   </div>
                 </div>
               )}
             </div>
 
             <div className="flex flex-col justify-between">
-              <InputField label="밀가루량 (g)">
+              <InputField label={t("flourWeight")}>
                 <input type="text" inputMode="decimal" value={flourWeight} onChange={(e) => {
                   const val = e.target.value.replace(',', '.');
                   setFlourWeight(val);
@@ -273,10 +310,10 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
               </InputField>
               {currentRecipe && (
                 <div className="flex items-center gap-1.5 mt-2 print:hidden">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">밀가루 기준:</span>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">{t("flourBase")}</span>
                   <div className="flex items-center border-b border-black/20 focus-within:border-black transition-colors">
                     <input type="text" inputMode="decimal" value={flourMultiplier} onChange={(e) => handleFlourMultiplierChange(e.target.value)} placeholder="1.0" className="w-12 bg-transparent text-center font-mono text-[11px] font-bold outline-none pb-0.5" />
-                    <span className="text-[10px] font-bold text-gray-400 px-0.5">배</span>
+                    <span className="text-[10px] font-bold text-gray-400 px-0.5">{t("multiplierSuffix")}</span>
                   </div>
                 </div>
               )}
@@ -287,13 +324,13 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
             <table className="w-full mt-4 min-w-[300px] print:mt-2">
               <thead>
                 <tr className="border-y border-black text-[10px] text-gray-400 uppercase tracking-widest">
-                  <th className="p-2 text-left">재료</th>
-                  <th className="p-2 text-right">% (수정)</th>
+                  <th className="p-2 text-left">{t("ingredient")}</th>
+                  <th className="p-2 text-right">{t("percentEdit")}</th>
                   <th className="p-2 text-right w-24 print-hidden-multipliers">g</th>
                   {/* 다중 배수 인쇄용 헤더 매핑 */}
                   {validPrintMultipliers.map((m, idx) => (
                     <th key={idx} className="p-2 text-right w-24 hidden print-visible-multipliers font-black text-black">
-                      {m}배 (g)
+                      {m}{t("multiplierSuffix")} (g)
                     </th>
                   ))}
                 </tr>
@@ -306,7 +343,7 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                   return (
                     <tr key={idx} className="border-b border-gray-200">
                       <td className="p-2">
-                          <div className="text-[9px] text-gray-400 font-bold uppercase">{ing.type}</div>
+                          <div className="text-[9px] text-gray-400 font-bold uppercase">{labelFromMap(t, TYPE_LABEL_KEYS, ing.type)}</div>
                           <div className="font-black text-sm">{ing.name}</div>
                       </td>
                       <td className="p-2 text-right">
@@ -336,7 +373,7 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                       })}
                     </tr>
                   );
-                }) : <tr><td colSpan="3" className="p-12 text-center text-gray-400 text-xs tracking-widest uppercase">Select a recipe</td></tr>}
+                }) : <tr><td colSpan="3" className="p-12 text-center text-gray-400 text-xs tracking-widest uppercase">{t("selectRecipeFirst")}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -345,15 +382,15 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
         <div className="space-y-6 order-2 print:block print:space-y-4">
           {category !== "사전반죽" && (
             <>
-              <SummaryCard title="SUMMARY">
-                <SummaryRow label="사전반죽 포함 수율" value={`${totals.finalYield.toFixed(1)}%`} />
-                <SummaryRow label="사전반죽 포함 소금" value={`${totals.totalSaltPercent}%`} />
-                <SummaryRow label="총 반죽량" value={`${(Math.round(parseFloat(String(totalDough).replace(',', '.'))) || 0).toLocaleString()}g`} />
-                <SummaryRow label="총 원가" value={`${Math.round(totals.totalCost).toLocaleString()}`} />
+              <SummaryCard title={t("summary")}>
+                <SummaryRow label={t("finalYieldWithPreferment")} value={`${totals.finalYield.toFixed(1)}%`} />
+                <SummaryRow label={t("saltWithPreferment")} value={`${totals.totalSaltPercent}%`} />
+                <SummaryRow label={t("totalDough")} value={`${(Math.round(parseFloat(String(totalDough).replace(',', '.'))) || 0).toLocaleString()}g`} />
+                <SummaryRow label={t("totalCost")} value={`${Math.round(totals.totalCost).toLocaleString()}`} />
               </SummaryCard>
 
               {preFerments.length > 0 && (
-                <SummaryCard title="사전반죽 수율">
+                <SummaryCard title={t("prefermentYield")}>
                   <div className="space-y-3">
                     {preFerments.map(pf => (
                       <div key={pf.name} className="flex justify-between items-center border-b border-black/5 pb-2">
@@ -371,12 +408,12 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
           )}
 
           {currentRecipe && (
-            <SummaryCard title="원가">
+            <SummaryCard title={t("cost")}>
               <div className="space-y-2">
                 {ingredientCosts.map((item, idx) => (
                   <div key={`${item.name}-${idx}`} className="flex justify-between gap-3 border-b border-dashed border-black/10 pb-2 text-xs md:text-sm">
                     <div className="min-w-0">
-                      <div className="text-[9px] text-gray-400 font-bold uppercase">{item.type}</div>
+                      <div className="text-[9px] text-gray-400 font-bold uppercase">{labelFromMap(t, TYPE_LABEL_KEYS, item.type)}</div>
                       <div className="font-bold truncate">{item.name}</div>
                     </div>
                     <span className="font-mono font-bold shrink-0">{item.cost.toLocaleString()}</span>
@@ -384,14 +421,14 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
                 ))}
               </div>
               <div className="mt-4 pt-3 border-t-2 border-black flex justify-between text-sm">
-                <span className="font-black uppercase tracking-tight">총 원가</span>
+                <span className="font-black uppercase tracking-tight">{t("totalCost")}</span>
                 <span className="font-mono font-black">{Math.round(totals.totalCost).toLocaleString()}</span>
               </div>
             </SummaryCard>
           )}
 
           <div className="print:hidden">
-            <QuickTempEntry tempLogs={tempLogs} setTempLogs={setTempLogs} currentProductName={currentRecipe?.productName} memo={memo} setMemo={setMemo} isPreFermentMode={category === "사전반죽"} />
+            <QuickTempEntry t={t} tempLogs={tempLogs} setTempLogs={setTempLogs} currentProductName={currentRecipe?.productName} memo={memo} setMemo={setMemo} isPreFermentMode={category === "사전반죽"} />
           </div>
         </div>
       </div>
@@ -403,6 +440,7 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
           setMultipliers={setPrintMultipliers} 
           onClose={() => setIsPrintModalOpen(false)} 
           onPrint={executePrint}
+          t={t}
         />
       )}
     </main>
@@ -411,7 +449,7 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
 
 // 다중 배수 입력 모달 컴포넌트 추가
 
-function PrintMultiplierModal({ multipliers, setMultipliers, onClose, onPrint }) {
+function PrintMultiplierModal({ multipliers, setMultipliers, onClose, onPrint, t }) {
   const handleInputChange = (index, value) => {
     const cleanValue = value.replace(',', '.');
     setMultipliers(prev => prev.map((m, idx) => idx === index ? cleanValue : m));
@@ -420,23 +458,23 @@ function PrintMultiplierModal({ multipliers, setMultipliers, onClose, onPrint })
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4 print:hidden">
       <div className="bg-[#f7f6f3] w-full max-w-md rounded-[2rem] p-6 shadow-2xl border border-white">
-        <h2 className="text-xl md:text-2xl font-black tracking-tighter mb-2 uppercase">PRINT OPTIONS</h2>
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-tight mb-6">인쇄 또는 PDF 저장 시 출력할 배수를 입력하세요 (최대 4개)</p>
+        <h2 className="text-xl md:text-2xl font-black tracking-tighter mb-2 uppercase">{t("printOptions")}</h2>
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-tight mb-6">{t("printOptionsDescription")}</p>
         
         <div className="grid grid-cols-2 gap-4 mb-8">
           {multipliers.map((mult, i) => (
             <div key={i} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
-              <span className="text-[9px] font-black text-gray-400 tracking-wider mb-1 uppercase">배수 슬롯 {i + 1}</span>
+              <span className="text-[9px] font-black text-gray-400 tracking-wider mb-1 uppercase">{t("multiplierSlot")} {i + 1}</span>
               <div className="flex items-center border-b border-black/10 focus-within:border-black transition-colors">
                 <input 
                   type="text" 
                   inputMode="decimal" 
                   value={mult} 
                   onChange={(e) => handleInputChange(i, e.target.value)} 
-                  placeholder={i === 0 ? "1.0" : "미지정"} 
+                  placeholder={i === 0 ? "1.0" : t("unspecified")} 
                   className="w-full bg-transparent font-mono font-bold text-sm outline-none pb-1"
                 />
-                <span className="text-xs font-black text-gray-400 px-1">배</span>
+                <span className="text-xs font-black text-gray-400 px-1">{t("multiplierSuffix")}</span>
               </div>
             </div>
           ))}
@@ -447,13 +485,13 @@ function PrintMultiplierModal({ multipliers, setMultipliers, onClose, onPrint })
             onClick={onClose} 
             className="flex-1 bg-white border border-gray-200 py-3 rounded-xl font-bold text-xs uppercase tracking-tighter"
           >
-            취소
+            {t("cancel")}
           </button>
           <button 
             onClick={onPrint} 
             className="flex-1 bg-black text-white py-3 rounded-xl font-bold text-xs uppercase tracking-tighter shadow-md"
           >
-            출력하기
+            {t("printNow")}
           </button>
         </div>
       </div>
@@ -461,7 +499,7 @@ function PrintMultiplierModal({ multipliers, setMultipliers, onClose, onPrint })
   );
 }
 
-function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMemo, isPreFermentMode }) {
+function QuickTempEntry({ t, tempLogs, setTempLogs, currentProductName, memo, setMemo, isPreFermentMode }) {
   const [isEntryMode, setIsEntryMode] = useState(false);
   const [logType, setLogType] = useState("1차 저온");
   const [currentEntry, setCurrentEntry] = useState({});
@@ -494,7 +532,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
         }
         return log;
       }));
-      alert("데이터가 수정되었습니다.");
+      alert(t("dataUpdated"));
     } else {
       const now = new Date();
       const newLog = { 
@@ -507,7 +545,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
         memo: memo 
       };
       setTempLogs(prev => [newLog, ...prev]);
-      alert("데이터베이스에 저장되었습니다.");
+      alert(t("dataSaved"));
     }
 
     setIsEntryMode(false);
@@ -516,25 +554,25 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
     setEditingLogId(null);
   };
   if (!currentProductName) return (
-    <SummaryCard title="TEMP / pH / MEMO">
-        <p className="text-center py-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">Select a recipe first</p>
+    <SummaryCard title={t("tempMemoTitle")}>
+        <p className="text-center py-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">{t("selectRecipeFirst")}</p>
     </SummaryCard>
   );
   return (
-    <SummaryCard title="TEMP / pH / MEMO">
+    <SummaryCard title={t("tempMemoTitle")}>
       <div className="flex justify-between items-center mb-4">
         {!isPreFermentMode ? (
           <select value={logType} onChange={(e) => setLogType(e.target.value)} className="bg-transparent font-black text-[10px] uppercase border-b border-black outline-none">
-            <option>1차 저온</option><option>2차 저온</option>
+            <option value="1차 저온">{t("firstCold")}</option><option value="2차 저온">{t("secondCold")}</option>
           </select>
         ) : (
-          <span className="font-black text-[10px] uppercase text-gray-400">사전반죽 수율 Log</span>
+          <span className="font-black text-[10px] uppercase text-gray-400">{t("prefermentLog")}</span>
         )}
         <button onClick={() => { 
           setIsEntryMode(!isEntryMode); 
           if(isEntryMode) { setCurrentEntry({}); setMemo(""); setEditingLogId(null); }
         }} className="text-[10px] font-black underline uppercase">
-          {isEntryMode ? "Close" : "+ Add"}
+          {isEntryMode ? t("close") : t("add")}
         </button>
       </div>
 
@@ -543,7 +581,7 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
           <div className="space-y-2">
             {items.map(item => (
               <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1">
-                <span className="text-[11px] font-bold uppercase">{item}</span>
+                <span className="text-[11px] font-bold uppercase">{labelFromMap(t, ITEM_LABEL_KEYS, item)}</span>
                 <div className="grid grid-cols-2 gap-1">
                   {item === "날짜" ? (
                     <input type="date" value={currentEntry["날짜"]?.t || ""} className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100 outline-none"
@@ -582,11 +620,11 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
             ))}
           </div>
           <div className="pt-2">
-            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block tracking-widest">Memo</label>
-            <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-white/50 border border-black/5 rounded-lg p-3 text-xs leading-5 resize-none h-24 outline-none font-medium" placeholder="Notes..." />
+            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block tracking-widest">{t("memo")}</label>
+            <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-white/50 border border-black/5 rounded-lg p-3 text-xs leading-5 resize-none h-24 outline-none font-medium" placeholder={t("notes")} />
           </div>
           <button onClick={handleSave} className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs mt-2 uppercase shadow-lg">
-            {editingLogId ? "Update Record" : "Save to DB"}
+            {editingLogId ? t("updateRecord") : t("saveToDb")}
           </button>
         </div>
       ) : (
@@ -596,17 +634,17 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
               <div onClick={() => handleEditActive(latestLog)} className="bg-white/50 p-3 rounded-lg border border-white text-[10px] cursor-pointer hover:border-black/30 transition-all group relative">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2 border-b border-black/5 pb-1.5 font-bold text-gray-400 uppercase tracking-tighter">
                   <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                    <span className="text-black shrink-0">LATEST ({latestLog.type})</span>
+                    <span className="text-black shrink-0">{t("latest")} ({labelFromMap(t, LOG_TYPE_LABEL_KEYS, latestLog.type)})</span>
                     <span className="font-mono text-gray-400 truncate">{latestLog.timestamp}</span>
                   </div>
                   <div className="text-[8px] font-black text-gray-300 group-hover:text-black uppercase tracking-tighter transition-colors shrink-0 sm:text-right">
-                    Click to Edit 
+                    {t("clickToEdit")}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                   {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p || latestLog.data[item].h || latestLog.data[item].v) ? (
                     <div key={item} className="flex justify-between border-b border-gray-50/50 min-w-0">
-                      <span className="text-gray-400 font-bold uppercase shrink-0 mr-1">{item}</span>
+                      <span className="text-gray-400 font-bold uppercase shrink-0 mr-1">{labelFromMap(t, ITEM_LABEL_KEYS, item)}</span>
                       <span className="font-mono truncate text-right">
                         {latestLog.data[item].t && `${latestLog.data[item].t}`}
                         {latestLog.data[item].p && ` / ${latestLog.data[item].p}pH`}
@@ -619,13 +657,13 @@ function QuickTempEntry({ tempLogs, setTempLogs, currentProductName, memo, setMe
               </div>
               {latestLog.memo && <div onClick={() => handleEditActive(latestLog)} className="bg-white/30 p-3 rounded-lg border-l-2 border-black/10 text-[11px] font-medium text-gray-600 leading-relaxed cursor-pointer hover:bg-white/50">{latestLog.memo}</div>}
               <div className="pt-2 border-t border-dashed border-black/10">
-                <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-16 font-medium" placeholder="Quick memo..." />
+                <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-16 font-medium" placeholder={t("quickMemo")} />
               </div>
             </>
           ) : (
             <>
-              <p className="text-center py-2 text-[10px] text-gray-400 font-bold uppercase tracking-widest border-b border-dashed border-black/10 mb-2">No records</p>
-              <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-24 font-medium" placeholder="Write notes here..." />
+              <p className="text-center py-2 text-[10px] text-gray-400 font-bold uppercase tracking-widest border-b border-dashed border-black/10 mb-2">{t("noRecords")}</p>
+              <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full bg-transparent border-none outline-none text-[11px] leading-5 resize-none h-24 font-medium" placeholder={t("writeNotesHere")} />
             </>
           )}
         </div>
