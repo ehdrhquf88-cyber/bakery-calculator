@@ -166,7 +166,7 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
   const handleRecipeSelectionChange = (recipeId) => {
     if (recipeId === selectedRecipeId) return;
 
-    if (selectedRecipeId && requestSafetyCheck) {
+    if (selectedRecipeId && recipeId && requestSafetyCheck) {
       requestSafetyCheck(() => resetRecipeSelection(recipeId));
       return;
     }
