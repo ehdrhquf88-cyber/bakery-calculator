@@ -3,6 +3,13 @@ import { useState, useMemo, useCallback } from "react";
 import { InputField, SummaryCard, SummaryRow } from "./common";
 import { INGREDIENT_TYPE_LABEL_KEYS, LOG_TYPE_LABEL_KEYS, TEMP_FIELD_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
+const formatCurrency = (value) => new Intl.NumberFormat("ko-KR", {
+  style: "currency",
+  currency: "KRW",
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+}).format(value || 0);
+
 export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [], tempLogs, setTempLogs, requestSafetyCheck }) {
   const [category, setCategory] = useState("하드계열");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
@@ -110,7 +117,8 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
       return {
         name: ing.name,
         type: ing.type,
-        cost: Math.round((grams || 0) * unitCost),
+        cost: (grams || 0) * unitCost,
+        unitCost,
       };
     });
   }, [currentRecipe, flourWeight, getIngredientUnitCost]);
@@ -406,14 +414,15 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
                     <div className="min-w-0">
                       <div className="text-[9px] text-gray-400 font-bold uppercase">{labelFromMap(t, INGREDIENT_TYPE_LABEL_KEYS, item.type)}</div>
                       <div className="font-bold truncate">{item.name}</div>
+                      <div className="mt-1 font-mono text-[10px] font-bold text-gray-400">{formatCurrency(item.unitCost)} / g</div>
                     </div>
-                    <span className="font-mono font-bold shrink-0">{item.cost.toLocaleString()}</span>
+                    <span className="font-mono font-bold shrink-0">{formatCurrency(item.cost)}</span>
                   </div>
                 ))}
               </div>
               <div className="mt-4 pt-3 border-t-2 border-black flex justify-between text-sm">
                 <span className="font-black uppercase tracking-tight">{t("totalCost")}</span>
-                <span className="font-mono font-black">{Math.round(totals.totalCost).toLocaleString()}</span>
+                <span className="font-mono font-black">{formatCurrency(totals.totalCost)}</span>
               </div>
               <div className="mt-4 pt-4 border-t border-black/10 space-y-3">
                 <div className="grid grid-cols-2 gap-3">
