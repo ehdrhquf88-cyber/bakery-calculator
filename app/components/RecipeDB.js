@@ -1,16 +1,7 @@
 import { useState, useMemo } from "react";
 
 import { InputField } from "./common";
-
-const CATEGORY_LABEL_KEYS = {
-  "하드계열": "hardCategory",
-  "소프트계열": "softCategory",
-  "사전반죽": "prefermentCategory",
-};
-
-function labelFromMap(t, map, value) {
-  return map[value] ? t(map[value]) : value;
-}
+import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
 export default function RecipeDB({ t, recipes, setRecipes, costItems }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -33,7 +24,7 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems }) {
         {displayedRecipes.map(recipe => (
           <div key={recipe.id} onClick={() => { setEditingRecipe(recipe); setIsModalOpen(true); }} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center cursor-pointer hover:border-black group transition-all">
             <div>
-              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{labelFromMap(t, CATEGORY_LABEL_KEYS, recipe.category)}</div>
+              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{labelFromMap(t, RECIPE_CATEGORY_LABEL_KEYS, recipe.category)}</div>
               <div className="text-xl font-black tracking-tighter uppercase">{recipe.productName}</div>
             </div>
             <button onClick={(e) => { e.stopPropagation(); if (confirm(t("deleteConfirm"))) setRecipes(prev => prev.filter(r => r.id !== recipe.id)); }} className="text-gray-300 hover:text-red-500">x</button>

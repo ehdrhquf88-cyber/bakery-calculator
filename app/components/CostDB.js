@@ -1,24 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { InputField } from "./common";
-
-const CATEGORY_LABEL_KEYS = {
-  "미등록": "uncategorized",
-  "밀가루": "flourCategory",
-  "유제품": "dairyCategory",
-  "설탕류": "sugarCategory",
-  "유지류": "fatCategory",
-  "견과류": "nutsCategory",
-  "과일/필링": "fruitFillingCategory",
-  "초콜릿": "chocolateCategory",
-  "소금": "typeSalt",
-  "첨가물": "additiveCategory",
-  "기타": "typeOther",
-};
-
-function labelFromMap(t, map, value) {
-  return map[value] ? t(map[value]) : value;
-}
+import { COST_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
 function parseNumber(value) {
   const rawValue = String(value || "").trim();
@@ -125,7 +108,7 @@ export default function CostDB({ t, costItems, setCostItems }) {
               >
                 <div>
                   <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("category")}</div>
-                  <div className="text-xl font-black tracking-tighter uppercase">{labelFromMap(t, CATEGORY_LABEL_KEYS, category)}</div>
+                  <div className="text-xl font-black tracking-tighter uppercase">{labelFromMap(t, COST_CATEGORY_LABEL_KEYS, category)}</div>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{items.length} {t("items")}</span>
@@ -139,7 +122,7 @@ export default function CostDB({ t, costItems, setCostItems }) {
                     {items.map(item => (
                       <div key={item.id} onClick={() => { setEditingItem(item); setIsModalOpen(true); }} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center cursor-pointer hover:border-black group transition-all">
                         <div className="min-w-0">
-                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{labelFromMap(t, CATEGORY_LABEL_KEYS, item.category)}</div>
+                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{labelFromMap(t, COST_CATEGORY_LABEL_KEYS, item.category)}</div>
                           <div className="text-xl font-black tracking-tighter uppercase truncate">{item.name}</div>
                           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-bold text-gray-400 uppercase tracking-tight">
                             <span className="font-mono text-black">{item.cost || 0}{t("won")} / g</span>

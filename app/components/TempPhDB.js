@@ -1,35 +1,6 @@
 import { useState, useMemo } from "react";
 
-const ITEM_LABEL_KEYS = {
-  "날짜": "itemDate",
-  "르방": "itemLevain",
-  "밀": "itemFlour",
-  "물": "itemWater",
-  "결과": "itemResult",
-  "오토리즈": "itemAutolyse",
-  "오토리즈완료": "itemAutolyseDone",
-  "반죽완료": "itemMixDone",
-  "하바1": "itemFold1",
-  "하바2": "itemFold2",
-  "하바3": "itemFold3",
-  "하바4": "itemFold4",
-  "분할": "itemDivide",
-  "성형": "itemShape",
-  "굽기": "itemBake",
-  "수분": "typeWater",
-  "사용시점": "itemUsePoint",
-  "정점": "itemPeak",
-};
-
-const LOG_TYPE_LABEL_KEYS = {
-  "1차 저온": "firstCold",
-  "2차 저온": "secondCold",
-  "사전반죽 기록": "prefermentRecord",
-};
-
-function labelFromMap(t, map, value) {
-  return map[value] ? t(map[value]) : value;
-}
+import { LOG_TYPE_LABEL_KEYS, TEMP_FIELD_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
 
 // 제품별 온도/pH 기록을 날짜 기준으로 비교하는 미니 차트 컴포넌트입니다.
@@ -137,7 +108,7 @@ function HistoryChart({ t, logs, isPreFerment }) {
           <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">{t("xAxisField")}</label>
           <div className="flex flex-wrap gap-1">
             {availableFields.map(f => (
-              <button key={f} onClick={() => setSelectedXField(f)} className={`px-2.5 py-1 rounded-md font-bold transition-all text-[11px] ${selectedXField === f ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>{labelFromMap(t, ITEM_LABEL_KEYS, f)}</button>
+              <button key={f} onClick={() => setSelectedXField(f)} className={`px-2.5 py-1 rounded-md font-bold transition-all text-[11px] ${selectedXField === f ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>{labelFromMap(t, TEMP_FIELD_LABEL_KEYS, f)}</button>
             ))}
           </div>
         </div>
@@ -182,8 +153,8 @@ function HistoryChart({ t, logs, isPreFerment }) {
       ) : (
         <div>
           <div className="flex gap-4 text-[10px] font-black uppercase tracking-wider mb-2 justify-end">
-            <span className="flex items-center gap-1 text-orange-600">- {labelFromMap(t, ITEM_LABEL_KEYS, selectedXField)} {t("temperature")}(°C)</span>
-            <span className="flex items-center gap-1 text-teal-700">- {labelFromMap(t, ITEM_LABEL_KEYS, selectedXField)} pH</span>
+            <span className="flex items-center gap-1 text-orange-600">- {labelFromMap(t, TEMP_FIELD_LABEL_KEYS, selectedXField)} {t("temperature")}(°C)</span>
+            <span className="flex items-center gap-1 text-teal-700">- {labelFromMap(t, TEMP_FIELD_LABEL_KEYS, selectedXField)} pH</span>
           </div>
           <div className="relative w-full overflow-hidden">
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
@@ -356,7 +327,7 @@ export default function TempPhDB({ t, tempLogs, setTempLogs }) {
                                   <div className="space-y-1 max-h-[220px] overflow-y-auto pr-1 no-scrollbar">
                                     {activeItems.map(item => (
                                       <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1 text-[11px]">
-                                        <span className="font-bold uppercase text-gray-400">{labelFromMap(t, ITEM_LABEL_KEYS, item)}</span>
+                                        <span className="font-bold uppercase text-gray-400">{labelFromMap(t, TEMP_FIELD_LABEL_KEYS, item)}</span>
                                         {item === "날짜" ? (
                                           <input type="date" value={inlineData["날짜"]?.t || ""} className="w-full bg-gray-50 rounded px-1 py-0.5 text-right font-mono text-[10px] border border-transparent" onChange={(e) => setInlineData({ ...inlineData, [item]: { t: e.target.value } })} />
                                         ) : log.type === "사전반죽 기록" && (item === "사용시점" || item === "정점") ? (
@@ -395,7 +366,7 @@ export default function TempPhDB({ t, tempLogs, setTempLogs }) {
                                   <div className="space-y-1">
                                     {activeItems.map(item => log.data[item] && (log.data[item].t || log.data[item].p || log.data[item].h || log.data[item].v) ? (
                                       <div key={item} className="flex justify-between text-[11px] border-b border-gray-50 pb-0.5">
-                                        <span className="font-bold text-gray-400 uppercase">{labelFromMap(t, ITEM_LABEL_KEYS, item)}</span>
+                                        <span className="font-bold text-gray-400 uppercase">{labelFromMap(t, TEMP_FIELD_LABEL_KEYS, item)}</span>
                                         <span className="font-mono text-black">
                                           {log.data[item].t}
                                           {log.data[item].p ? ` / ${log.data[item].p}pH` : ""}

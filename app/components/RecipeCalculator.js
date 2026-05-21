@@ -1,45 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 
 import { InputField, SummaryCard, SummaryRow } from "./common";
-
-const TYPE_LABEL_KEYS = {
-  "밀": "typeFlour",
-  "수분": "typeWater",
-  "사전반죽": "typePreferment",
-  "소금": "typeSalt",
-  "기타": "typeOther",
-};
-
-const ITEM_LABEL_KEYS = {
-  "날짜": "itemDate",
-  "르방": "itemLevain",
-  "밀": "itemFlour",
-  "물": "itemWater",
-  "결과": "itemResult",
-  "오토리즈": "itemAutolyse",
-  "오토리즈완료": "itemAutolyseDone",
-  "반죽완료": "itemMixDone",
-  "하바1": "itemFold1",
-  "하바2": "itemFold2",
-  "하바3": "itemFold3",
-  "하바4": "itemFold4",
-  "분할": "itemDivide",
-  "성형": "itemShape",
-  "굽기": "itemBake",
-  "수분": "typeWater",
-  "사용시점": "itemUsePoint",
-  "정점": "itemPeak",
-};
-
-const LOG_TYPE_LABEL_KEYS = {
-  "1차 저온": "firstCold",
-  "2차 저온": "secondCold",
-  "사전반죽 기록": "prefermentRecord",
-};
-
-function labelFromMap(t, map, value) {
-  return map[value] ? t(map[value]) : value;
-}
+import { INGREDIENT_TYPE_LABEL_KEYS, LOG_TYPE_LABEL_KEYS, TEMP_FIELD_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
 export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, setTempLogs, requestSafetyCheck }) {
   const [category, setCategory] = useState("하드계열");
@@ -343,7 +305,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, set
                   return (
                     <tr key={idx} className="border-b border-gray-200">
                       <td className="p-2">
-                          <div className="text-[9px] text-gray-400 font-bold uppercase">{labelFromMap(t, TYPE_LABEL_KEYS, ing.type)}</div>
+                          <div className="text-[9px] text-gray-400 font-bold uppercase">{labelFromMap(t, INGREDIENT_TYPE_LABEL_KEYS, ing.type)}</div>
                           <div className="font-black text-sm">{ing.name}</div>
                       </td>
                       <td className="p-2 text-right">
@@ -413,7 +375,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, set
                 {ingredientCosts.map((item, idx) => (
                   <div key={`${item.name}-${idx}`} className="flex justify-between gap-3 border-b border-dashed border-black/10 pb-2 text-xs md:text-sm">
                     <div className="min-w-0">
-                      <div className="text-[9px] text-gray-400 font-bold uppercase">{labelFromMap(t, TYPE_LABEL_KEYS, item.type)}</div>
+                      <div className="text-[9px] text-gray-400 font-bold uppercase">{labelFromMap(t, INGREDIENT_TYPE_LABEL_KEYS, item.type)}</div>
                       <div className="font-bold truncate">{item.name}</div>
                     </div>
                     <span className="font-mono font-bold shrink-0">{item.cost.toLocaleString()}</span>
@@ -581,7 +543,7 @@ function QuickTempEntry({ t, tempLogs, setTempLogs, currentProductName, memo, se
           <div className="space-y-2">
             {items.map(item => (
               <div key={item} className="grid grid-cols-[1fr_120px] gap-2 items-center border-b border-black/5 pb-1">
-                <span className="text-[11px] font-bold uppercase">{labelFromMap(t, ITEM_LABEL_KEYS, item)}</span>
+                <span className="text-[11px] font-bold uppercase">{labelFromMap(t, TEMP_FIELD_LABEL_KEYS, item)}</span>
                 <div className="grid grid-cols-2 gap-1">
                   {item === "날짜" ? (
                     <input type="date" value={currentEntry["날짜"]?.t || ""} className="col-span-2 bg-white rounded p-1 text-right font-mono text-[10px] border border-gray-100 outline-none"
@@ -644,7 +606,7 @@ function QuickTempEntry({ t, tempLogs, setTempLogs, currentProductName, memo, se
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                   {items.map(item => latestLog.data[item] && (latestLog.data[item].t || latestLog.data[item].p || latestLog.data[item].h || latestLog.data[item].v) ? (
                     <div key={item} className="flex justify-between border-b border-gray-50/50 min-w-0">
-                      <span className="text-gray-400 font-bold uppercase shrink-0 mr-1">{labelFromMap(t, ITEM_LABEL_KEYS, item)}</span>
+                      <span className="text-gray-400 font-bold uppercase shrink-0 mr-1">{labelFromMap(t, TEMP_FIELD_LABEL_KEYS, item)}</span>
                       <span className="font-mono truncate text-right">
                         {latestLog.data[item].t && `${latestLog.data[item].t}`}
                         {latestLog.data[item].p && ` / ${latestLog.data[item].p}pH`}
