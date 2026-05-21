@@ -132,8 +132,8 @@ export default function Home() {
 
       <div className="py-4 md:py-8 print:py-0">
         {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={setRecipes} tempLogs={tempLogs} setTempLogs={setTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
-        {view === "db" && <RecipeDB recipes={recipes} setRecipes={setRecipes} costItems={costItems} setCostItems={setCostItems} />}
-        {view === "cost_db" && <CostDB costItems={costItems} setCostItems={setCostItems} />}
+        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={setRecipes} costItems={costItems} setCostItems={setCostItems} />}
+        {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={setCostItems} />}
         {view === "temp_db" && <TempPhDB tempLogs={tempLogs} setTempLogs={setTempLogs} />}
         {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} />}
       </div>
