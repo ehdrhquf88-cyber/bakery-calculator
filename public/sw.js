@@ -1,4 +1,4 @@
-const CACHE_NAME = "bakery-app-v1";
+const CACHE_NAME = "bread-people-v2";
 const APP_SHELL = [
   "/",
   "/manifest.webmanifest",
@@ -47,10 +47,14 @@ self.addEventListener("fetch", (event) => {
   if (
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icon-") ||
-    url.pathname === "/apple-touch-icon.png" ||
-    url.pathname === "/manifest.webmanifest"
+    url.pathname === "/apple-touch-icon.png"
   ) {
     event.respondWith(cacheFirst(request));
+    return;
+  }
+
+  if (url.pathname === "/manifest.webmanifest") {
+    event.respondWith(networkFirst(request));
     return;
   }
 
