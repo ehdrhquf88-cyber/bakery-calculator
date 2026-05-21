@@ -47,6 +47,53 @@ function formatUnitCost(purchasePrice, packageAmount, packageUnit) {
   return String(Number((price / baseAmount).toFixed(4)));
 }
 
+function createCostHistoryEntry(item, savedAt) {
+  if (!item.cost) return null;
+
+  return {
+    id: `${savedAt}-${item.cost}-${item.purchasePrice || ""}-${item.unit || ""}`,
+    date: savedAt,
+    cost: item.cost,
+    purchasePrice: item.purchasePrice || "",
+    unit: item.unit || "",
+    supplier: item.supplier || "",
+  };
+}
+
+function isSameCostEntry(entry, item) {
+  return (
+    String(entry?.cost || "") === String(item.cost || "") &&
+    String(entry?.purchasePrice || "") === String(item.purchasePrice || "") &&
+    String(entry?.unit || "") === String(item.unit || "")
+  );
+}
+
+function getCostHistory(item) {
+  if (!item) return [];
+
+  const history = Array.isArray(item.costHistory) ? item.costHistory : [];
+  if (history.length > 0) return history;
+
+  const initialEntry = createCostHistoryEntry(item, item.updatedAt || new Date().toISOString().slice(0, 10));
+  return initialEntry ? [initialEntry] : [];
+}
+
+function getChartPoints(values, width, height, padding) {
+  if (values.length === 0) return [];
+
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const range = maxValue - minValue || 1;
+  const innerWidth = width - padding * 2;
+  const innerHeight = height - padding * 2;
+
+  return values.map((value, index) => {
+    const x = values.length === 1 ? width / 2 : padding + (innerWidth * index) / (values.length - 1);
+    const y = padding + innerHeight - ((value - minValue) / range) * innerHeight;
+    return { x, y };
+  });
+}
+
 export default function CostDB({ t, costItems, setCostItems }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -71,15 +118,32 @@ export default function CostDB({ t, costItems, setCostItems }) {
   }, [displayedItems]);
 
   const handleSave = (data) => {
+    const savedAt = new Date().toISOString().slice(0, 10);
     const itemData = {
       ...data,
-      updatedAt: new Date().toISOString().slice(0, 10),
+      updatedAt: savedAt,
     };
 
     if (editingItem) {
-      setCostItems(prev => prev.map(item => item.id === editingItem.id ? { ...itemData, id: item.id } : item));
+      setCostItems(prev => prev.map(item => {
+        if (item.id !== editingItem.id) return item;
+
+        const costHistory = getCostHistory(item);
+        const latestHistory = costHistory[costHistory.length - 1];
+        const nextEntry = createCostHistoryEntry(itemData, savedAt);
+        const nextHistory = nextEntry && !isSameCostEntry(latestHistory, itemData)
+          ? [...costHistory, nextEntry]
+          : costHistory;
+
+        return { ...itemData, id: item.id, costHistory: nextHistory };
+      }));
     } else {
-      setCostItems(prev => [...prev, { ...itemData, id: Date.now() }]);
+      const firstEntry = createCostHistoryEntry(itemData, savedAt);
+      setCostItems(prev => [...prev, {
+        ...itemData,
+        id: Date.now(),
+        costHistory: firstEntry ? [firstEntry] : [],
+      }]);
     }
 
     setIsModalOpen(false);
@@ -171,6 +235,7 @@ function CostModal({ t, initialData, onSave, onClose }) {
   const [supplier, setSupplier] = useState(initialData?.supplier || "");
   const [memo, setMemo] = useState(initialData?.memo || "");
   const cost = formatUnitCost(purchasePrice, packageAmount, packageUnit) || initialData?.cost || "";
+  const costHistory = useMemo(() => getCostHistory(initialData), [initialData]);
 
   const handleSubmit = () => {
     if (!name.trim()) return;
@@ -243,11 +308,99 @@ function CostModal({ t, initialData, onSave, onClose }) {
           <textarea value={memo} onChange={e => setMemo(e.target.value)} className="w-full bg-white/50 border border-black/5 rounded-lg p-3 text-xs leading-5 resize-none h-24 outline-none font-medium" placeholder={t("notes")} />
         </div>
 
+        {initialData && (
+        <CostHistoryChart
+          t={t}
+          history={costHistory}
+          currentCost={cost}
+          currentPurchasePrice={String(purchasePrice).replace(/\D/g, "")}
+          currentUnit={`${packageAmount || 1}${packageUnit}`}
+        />
+        )}
+
         <div className="mt-8 flex gap-3">
           <button onClick={onClose} className="flex-1 bg-white border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-tighter">{t("close")}</button>
           <button onClick={handleSubmit} className="flex-1 bg-black text-white py-4 rounded-xl font-bold uppercase tracking-tighter">{t("saveCost")}</button>
         </div>
       </div>
     </div>
+  );
+}
+
+function CostHistoryChart({ t, history, currentCost, currentPurchasePrice, currentUnit }) {
+  const chartHistory = useMemo(() => {
+    const nextHistory = [...history];
+    const latestHistory = nextHistory[nextHistory.length - 1];
+    const currentEntry = currentCost
+      ? {
+          id: `current-${currentCost}`,
+          date: new Date().toISOString().slice(0, 10),
+          cost: currentCost,
+          purchasePrice: currentPurchasePrice,
+          unit: currentUnit,
+        }
+      : null;
+
+    if (currentEntry && !isSameCostEntry(latestHistory, currentEntry)) {
+      nextHistory.push(currentEntry);
+    }
+
+    return nextHistory;
+  }, [history, currentCost, currentPurchasePrice, currentUnit]);
+
+  const values = chartHistory.map(entry => parseNumber(entry.cost)).filter(value => !isNaN(value));
+  const width = 520;
+  const height = 180;
+  const padding = 28;
+  const points = getChartPoints(values, width, height, padding);
+  const pointList = points.map(point => `${point.x},${point.y}`).join(" ");
+  const firstEntry = chartHistory[0];
+  const latestEntry = chartHistory[chartHistory.length - 1];
+
+  return (
+    <section className="mt-8 rounded-xl border border-black/10 bg-white p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-tight">{t("materialCostTrend")}</h3>
+          <p className="mt-1 text-[10px] font-bold text-gray-400 uppercase tracking-tight">
+            {chartHistory.length} {t("records")}
+          </p>
+        </div>
+        {values.length > 0 && (
+          <div className="text-right text-[10px] font-bold text-gray-400 uppercase tracking-tight">
+            <div>{t("previousCost")} <span className="font-mono text-black">{values[0]}{t("won")}/g</span></div>
+            <div>{t("currentCost")} <span className="font-mono text-black">{values[values.length - 1]}{t("won")}/g</span></div>
+          </div>
+        )}
+      </div>
+
+      {values.length === 0 ? (
+        <div className="mt-4 rounded-lg border border-dashed border-gray-200 p-8 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">
+          {t("noMaterialCostHistory")}
+        </div>
+      ) : (
+        <div className="mt-4">
+          <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full overflow-visible" role="img" aria-label={t("materialCostTrend")}>
+            <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#e5e7eb" strokeWidth="2" />
+            <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#e5e7eb" strokeWidth="2" />
+            {points.length > 1 && (
+              <polyline points={pointList} fill="none" stroke="#111827" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            )}
+            {points.map((point, index) => (
+              <g key={`${chartHistory[index]?.date}-${index}`}>
+                <circle cx={point.x} cy={point.y} r="5" fill="#111827" />
+                <text x={point.x} y={point.y - 12} textAnchor="middle" className="fill-gray-500 text-[10px] font-bold">
+                  {values[index]}
+                </text>
+              </g>
+            ))}
+          </svg>
+          <div className="mt-2 flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-tight">
+            <span>{firstEntry?.date || ""}</span>
+            <span>{latestEntry?.date || ""}</span>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
