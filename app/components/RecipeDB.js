@@ -132,7 +132,7 @@ function RecipeModal({ initialData, costItems, onSave, onClose }) {
                 />
                 <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="%" type="text" inputMode="decimal" />
                 <input
-                  value={displayCost || ""}
+                  value={displayCost ? `${displayCost}원 / g` : ""}
                   readOnly
                   title="원가는 원가 리스트 DB에서 자동으로 연결됩니다."
                   className={`bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold text-gray-400 cursor-not-allowed ${isCostLinked ? "" : "placeholder:text-gray-300"}`}
@@ -178,7 +178,7 @@ function IngredientNameInput({ value, costItems, selectedIngredientId, onChange,
       />
       {selectedItem && (
         <div className="mt-1 text-[9px] font-black text-gray-400 uppercase tracking-tight">
-          Cost DB 연결됨 · {selectedItem.cost || 0} / g
+          Cost DB 연결됨 · {selectedItem.cost || 0}원 / g
         </div>
       )}
       {shouldShowMatches && (
@@ -194,7 +194,7 @@ function IngredientNameInput({ value, costItems, selectedIngredientId, onChange,
               <div className="text-xs font-black tracking-tight">{item.name}</div>
               <div className="mt-0.5 flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-tight">
                 <span>{item.category}</span>
-                <span className="font-mono text-black">{item.cost || 0} / g</span>
+                <span className="font-mono text-black">{item.cost || 0}원 / g</span>
               </div>
             </button>
           ))}
