@@ -3,7 +3,7 @@ import { useState, useMemo, useCallback } from "react";
 import { InputField, SummaryCard, SummaryRow } from "./common";
 import { INGREDIENT_TYPE_LABEL_KEYS, LOG_TYPE_LABEL_KEYS, TEMP_FIELD_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
-export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, setTempLogs, requestSafetyCheck }) {
+export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [], tempLogs, setTempLogs, requestSafetyCheck }) {
   const [category, setCategory] = useState("하드계열");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const [totalDough, setTotalDough] = useState("");
@@ -21,6 +21,19 @@ export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, set
 
   const filteredRecipes = useMemo(() => recipes.filter(r => r.category === category), [recipes, category]);
   const currentRecipe = useMemo(() => recipes.find(r => r.id === Number(selectedRecipeId)), [recipes, selectedRecipeId]);
+  const costItemById = useMemo(() => {
+    return new Map(costItems.map(item => [item.id, item]));
+  }, [costItems]);
+  const costItemByName = useMemo(() => {
+    return new Map(costItems.map(item => [item.name.trim().toLowerCase(), item]));
+  }, [costItems]);
+  const getIngredientUnitCost = useCallback((ing) => {
+    const linkedItem = costItemById.get(ing.ingredientId);
+    const namedItem = ing.name ? costItemByName.get(ing.name.trim().toLowerCase()) : null;
+    const latestCost = linkedItem?.cost ?? namedItem?.cost ?? ing.cost;
+
+    return parseFloat(String(latestCost).replace(',', '.')) || 0;
+  }, [costItemById, costItemByName]);
   const preFerments = useMemo(() => {
     return currentRecipe ? currentRecipe.ingredients.filter(ing => ing.type === "사전반죽") : [];
   }, [currentRecipe]);
@@ -70,7 +83,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, set
     const cost = currentRecipe.ingredients.reduce((sum, ing) => {
         const pctVal = parseFloat(String(ing.percent).replace(',', '.')) || 0;
         const weight = parsedFlourWeight * (pctVal / 100);
-        const unitCost = parseFloat(String(ing.cost).replace(',', '.')) || 0;
+        const unitCost = getIngredientUnitCost(ing);
         return sum + (weight * unitCost);
     }, 0);
     const baseTotalDough = 1000 * (rawTotalPercent / 100);
@@ -82,7 +95,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, set
       totalCost: isNaN(cost) ? 0 : cost, 
       baseTotalDough 
     };
-  }, [currentRecipe, pfYields, flourWeight]);
+  }, [currentRecipe, pfYields, flourWeight, getIngredientUnitCost]);
 
   const ingredientCosts = useMemo(() => {
     if (!currentRecipe) return [];
@@ -92,7 +105,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, set
     return currentRecipe.ingredients.map(ing => {
       const parsedPercent = parseFloat(String(ing.percent).replace(',', '.')) || 0;
       const grams = Math.round(parsedFlour * (parsedPercent / 100));
-      const unitCost = parseFloat(String(ing.cost).replace(',', '.')) || 0;
+      const unitCost = getIngredientUnitCost(ing);
 
       return {
         name: ing.name,
@@ -100,7 +113,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, set
         cost: Math.round((grams || 0) * unitCost),
       };
     });
-  }, [currentRecipe, flourWeight]);
+  }, [currentRecipe, flourWeight, getIngredientUnitCost]);
 
   const productCostInfo = useMemo(() => {
     const parsedTotalDough = parseFloat(String(totalDough).replace(',', '.')) || 0;

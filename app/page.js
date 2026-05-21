@@ -131,7 +131,7 @@ export default function Home() {
       </nav>
 
       <div className="py-4 md:py-8 print:py-0">
-        {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={setRecipes} tempLogs={tempLogs} setTempLogs={setTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
+        {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={setRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={setTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
         {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={setRecipes} costItems={costItems} setCostItems={setCostItems} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={setCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
