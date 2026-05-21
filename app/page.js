@@ -17,6 +17,7 @@ export default function Home() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [skipCalcLeaveCheck, setSkipCalcLeaveCheck] = useState(false);
   const [pendingView, setPendingView] = useState(null);
+  const [pendingCalcAction, setPendingCalcAction] = useState(null);
   const [leaveCheckStep, setLeaveCheckStep] = useState(null);
   const [hideLeaveCheck, setHideLeaveCheck] = useState(false);
 
@@ -60,7 +61,19 @@ export default function Home() {
 
   const closeLeaveCheck = () => {
     setPendingView(null);
+    setPendingCalcAction(null);
     setLeaveCheckStep(null);
+    setHideLeaveCheck(false);
+  };
+
+  const requestCalcSafetyCheck = (afterConfirm) => {
+    if (skipCalcLeaveCheck) {
+      afterConfirm();
+      return;
+    }
+
+    setPendingCalcAction(() => afterConfirm);
+    setLeaveCheckStep("salt");
     setHideLeaveCheck(false);
   };
 
@@ -68,13 +81,17 @@ export default function Home() {
     if (nextView === view) return;
 
     if (view === "calc" && nextView !== "calc" && !skipCalcLeaveCheck) {
+      requestCalcSafetyCheck(() => setView(nextView));
       setPendingView(nextView);
-      setLeaveCheckStep("salt");
-      setHideLeaveCheck(false);
       return;
     }
 
     setView(nextView);
+  };
+
+  const restoreCalcLeaveCheck = () => {
+    localStorage.removeItem("bakery_skip_calc_leave_check");
+    setSkipCalcLeaveCheck(false);
   };
 
   const confirmLeaveCheck = () => {
@@ -85,7 +102,8 @@ export default function Home() {
       return;
     }
 
-    if (pendingView) setView(pendingView);
+    if (pendingCalcAction) pendingCalcAction();
+    else if (pendingView) setView(pendingView);
     closeLeaveCheck();
   };
 
@@ -99,13 +117,15 @@ export default function Home() {
         <NavButton active={view === "db"} onClick={() => moveToView("db")}>레시피 DB</NavButton>
         <NavButton active={view === "cost_db"} onClick={() => moveToView("cost_db")}>원가 리스트 DB</NavButton>
         <NavButton active={view === "temp_db"} onClick={() => moveToView("temp_db")}>온도/pH 히스토리</NavButton>
+        <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>설정</NavButton>
       </nav>
 
       <div className="py-4 md:py-8 print:py-0">
-        {view === "calc" && <RecipeCalculator recipes={recipes} setRecipes={setRecipes} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
+        {view === "calc" && <RecipeCalculator recipes={recipes} setRecipes={setRecipes} tempLogs={tempLogs} setTempLogs={setTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
         {view === "db" && <RecipeDB recipes={recipes} setRecipes={setRecipes} costItems={costItems} setCostItems={setCostItems} />}
         {view === "cost_db" && <CostDB costItems={costItems} setCostItems={setCostItems} />}
         {view === "temp_db" && <TempPhDB tempLogs={tempLogs} setTempLogs={setTempLogs} />}
+        {view === "settings" && <SettingsPanel skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} />}
       </div>
       {leaveCheckStep && (
         <LeaveCheckModal
@@ -118,6 +138,36 @@ export default function Home() {
       )}
       <ServiceWorkerUpdater />
     </div>
+  );
+}
+
+function SettingsPanel({ skipCalcLeaveCheck, onRestoreCalcLeaveCheck }) {
+  return (
+    <main className="max-w-3xl mx-auto px-4 md:px-8 text-black">
+      <div className="border-b-2 border-black pb-4 mb-6">
+        <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">Settings</h1>
+      </div>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">레시피 계산기 알림</div>
+            <h2 className="mt-1 text-xl font-black tracking-tighter">소금/이스트 확인창</h2>
+            <p className="mt-2 text-xs font-bold text-gray-400">
+              현재 상태: {skipCalcLeaveCheck ? "숨김" : "표시"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onRestoreCalcLeaveCheck}
+            className="bg-black text-white px-5 py-3 rounded-xl text-sm font-black uppercase tracking-tight disabled:bg-gray-300 disabled:cursor-not-allowed"
+            disabled={!skipCalcLeaveCheck}
+          >
+            알림 다시 보기
+          </button>
+        </div>
+      </section>
+    </main>
   );
 }
 

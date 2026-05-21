@@ -4,7 +4,7 @@ import { InputField, SummaryCard, SummaryRow } from "./common";
 
 
 
-export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs }) {
+export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTempLogs, requestSafetyCheck }) {
   const [category, setCategory] = useState("하드계열");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const [totalDough, setTotalDough] = useState("");
@@ -163,6 +163,17 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
     }
   }, [recipes]);
 
+  const handleRecipeSelectionChange = (recipeId) => {
+    if (recipeId === selectedRecipeId) return;
+
+    if (selectedRecipeId && recipeId && requestSafetyCheck) {
+      requestSafetyCheck(() => resetRecipeSelection(recipeId));
+      return;
+    }
+
+    resetRecipeSelection(recipeId);
+  };
+
   // 브라우저 프린트 실행 연동 함수 수정
   const handlePrintPDF = () => {
     if (!currentRecipe) return;
@@ -221,7 +232,7 @@ export default function RecipeCalculator({ recipes, setRecipes, tempLogs, setTem
             </InputField>
           
             <InputField label="제품명 선택">
-              <select value={selectedRecipeId} onChange={(e) => resetRecipeSelection(e.target.value)} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
+              <select value={selectedRecipeId} onChange={(e) => handleRecipeSelectionChange(e.target.value)} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
                 <option value="">선택하세요</option>
                 {filteredRecipes.map(r => <option key={r.id} value={r.id}>{r.productName}</option>)}
               </select>
