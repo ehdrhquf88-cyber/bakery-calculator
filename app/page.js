@@ -23,11 +23,9 @@ export default function Home() {
       const savedRecipes = localStorage.getItem("bakery_recipes");
       const savedCostItems = localStorage.getItem("bakery_cost_items");
       const savedTempLogs = localStorage.getItem("bakery_temp_ph");
-      const savedAccessMode = localStorage.getItem("bakery_access_mode");
       if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
       if (savedCostItems) setCostItems(JSON.parse(savedCostItems));
       if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
-      if (savedAccessMode) setAccessMode(savedAccessMode);
     } catch (e) {
       console.error("로컬스토리지 데이터를 읽는 중 오류가 발생했습니다.", e);
     }
@@ -49,10 +47,7 @@ export default function Home() {
   }, [recipes, costItems, tempLogs, isLoaded]);
 
   if (!isLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
-  if (!accessMode) return <LoginScreen onFreeStart={() => {
-    localStorage.setItem("bakery_access_mode", "free");
-    setAccessMode("free");
-  }} />;
+  if (!accessMode) return <LoginScreen onFreeStart={() => setAccessMode("free")} />;
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
