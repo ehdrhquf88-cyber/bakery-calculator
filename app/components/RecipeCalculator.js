@@ -50,6 +50,8 @@ export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, set
   const [memo, setMemo] = useState("");
   const [doughMultiplier, setDoughMultiplier] = useState("1");
   const [flourMultiplier, setFlourMultiplier] = useState("1");
+  const [productWeight, setProductWeight] = useState("");
+  const [productPrice, setProductPrice] = useState("");
 
   // 프린트 배수 모달 상태 추가
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -137,6 +139,20 @@ export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, set
       };
     });
   }, [currentRecipe, flourWeight]);
+
+  const productCostInfo = useMemo(() => {
+    const parsedTotalDough = parseFloat(String(totalDough).replace(',', '.')) || 0;
+    const parsedProductWeight = parseFloat(String(productWeight).replace(',', '.')) || 0;
+    const parsedProductPrice = parseFloat(String(productPrice).replace(',', '.')) || 0;
+    const costPerGram = parsedTotalDough > 0 ? totals.totalCost / parsedTotalDough : 0;
+    const productCost = costPerGram * parsedProductWeight;
+    const costRate = parsedProductPrice > 0 ? (productCost / parsedProductPrice) * 100 : 0;
+
+    return {
+      productCost: isNaN(productCost) ? 0 : productCost,
+      costRate: isNaN(costRate) ? 0 : costRate,
+    };
+  }, [totalDough, productWeight, productPrice, totals.totalCost]);
 
   const handleDoughMultiplierChange = (value) => {
     const cleanValue = value.replace(',', '.');
@@ -423,6 +439,41 @@ export default function RecipeCalculator({ t, recipes, setRecipes, tempLogs, set
               <div className="mt-4 pt-3 border-t-2 border-black flex justify-between text-sm">
                 <span className="font-black uppercase tracking-tight">{t("totalCost")}</span>
                 <span className="font-mono font-black">{Math.round(totals.totalCost).toLocaleString()}</span>
+              </div>
+              <div className="mt-4 pt-4 border-t border-black/10 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField label={t("productWeight")}>
+                    <div className="flex items-end gap-1 border-b border-black/20 focus-within:border-black transition-colors">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={productWeight}
+                        onChange={(e) => setProductWeight(e.target.value.replace(',', '.'))}
+                        className="w-full bg-transparent pb-1 outline-none text-right font-mono font-bold text-sm"
+                        placeholder="0"
+                      />
+                      <span className="pb-1 text-[10px] font-black text-gray-400">g</span>
+                    </div>
+                  </InputField>
+                  <InputField label={t("productPrice")}>
+                    <div className="flex items-end gap-1 border-b border-black/20 focus-within:border-black transition-colors">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={productPrice}
+                        onChange={(e) => setProductPrice(e.target.value.replace(',', '.'))}
+                        className="w-full bg-transparent pb-1 outline-none text-right font-mono font-bold text-sm"
+                        placeholder="0"
+                      />
+                      <span className="pb-1 text-[10px] font-black text-gray-400">{t("won")}</span>
+                    </div>
+                  </InputField>
+                </div>
+                <SummaryRow label={t("productCost")} value={Math.round(productCostInfo.productCost).toLocaleString()} />
+                <div className="flex justify-between items-end pt-2 border-t border-dashed border-black/10">
+                  <span className="text-gray-600 font-bold uppercase text-[10px] tracking-tight">{t("costRate")}</span>
+                  <span className="font-mono font-black text-lg">{productCostInfo.costRate.toFixed(1)}%</span>
+                </div>
               </div>
             </SummaryCard>
           )}
