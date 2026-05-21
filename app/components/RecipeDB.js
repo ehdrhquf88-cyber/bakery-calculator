@@ -12,7 +12,7 @@ function labelFromMap(t, map, value) {
   return map[value] ? t(map[value]) : value;
 }
 
-export default function RecipeDB({ t, recipes, setRecipes, costItems }) {
+export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingRecipe, setEditingRecipe] = useState(null);
@@ -40,7 +40,8 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems }) {
           </div>
         ))}
       </div>
-      {isModalOpen && <RecipeModal t={t} initialData={editingRecipe} costItems={costItems} onSave={(data) => {
+      {isModalOpen && <RecipeModal t={t} initialData={editingRecipe} costItems={costItems} onSave={(data, newCostItems) => {
+        if (newCostItems.length > 0) setCostItems(prev => [...prev, ...newCostItems]);
         if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id } : r));
         else setRecipes(prev => [...prev, { ...data, id: Date.now() }]);
         setIsModalOpen(false);
@@ -77,6 +78,7 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
   };
   const saveRecipe = () => {
     const knownItems = [...costItems];
+    const newCostItems = [];
 
     const nextIngredients = ingredients.map((ing) => {
       const trimmedName = ing.name.trim();
@@ -103,15 +105,31 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
         };
       }
 
+      const newCostItem = {
+        id: Date.now() + newCostItems.length + 1,
+        category: "미등록",
+        name: trimmedName,
+        purchasePrice: "",
+        unit: "1g",
+        cost: "",
+        supplier: "",
+        memo: "",
+        updatedAt: new Date().toISOString().slice(0, 10),
+      };
+
+      knownItems.push(newCostItem);
+      newCostItems.push(newCostItem);
+
       return {
         ...ing,
+        ingredientId: newCostItem.id,
         name: trimmedName,
         cost: "",
         costUnit: "g",
       };
     });
 
-    onSave({ category, productName, ingredients: nextIngredients });
+    onSave({ category, productName, ingredients: nextIngredients }, newCostItems);
   };
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
