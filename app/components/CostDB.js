@@ -191,7 +191,7 @@ function CostModal({ initialData, onSave, onClose }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <InputField label="분류">
-            <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold">
+            <select value={category} onChange={e => setCategory(e.target.value)} className="w-full h-10 bg-transparent border-b-2 border-black py-2 outline-none font-bold leading-normal">
               <option>미등록</option>
               <option>밀가루</option>
               <option>유제품</option>
@@ -217,7 +217,7 @@ function CostModal({ initialData, onSave, onClose }) {
           <InputField label="단위">
             <div className="grid grid-cols-[1fr_88px] gap-2">
               <input value={packageAmount} onChange={e => setPackageAmount(e.target.value.replace(/[^\d,.]/g, ""))} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-mono font-bold text-right" type="text" inputMode="decimal" placeholder="25" />
-              <select value={packageUnit} onChange={e => setPackageUnit(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold">
+              <select value={packageUnit} onChange={e => setPackageUnit(e.target.value)} className="w-full h-10 bg-transparent border-b-2 border-black py-2 outline-none font-bold leading-normal">
                 <option>g</option>
                 <option>kg</option>
                 <option>ml</option>
