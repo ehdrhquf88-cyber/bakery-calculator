@@ -26,7 +26,7 @@ export const translations = {
     hideNextTime: "다음부터 이 창 보이지 않기",
     cancel: "취소",
     confirm: "확인",
-    loginGreeting: "오늘 반죽 준비됐나요?",
+    loginGreeting: "빵쟁이들 안녕? 반죽칠 준비 됐어? 커피 한잔 하고 할까?",
     signIn: "시작하기",
     email: "Email",
     password: "Password",
