@@ -8,6 +8,11 @@ const formatCurrency = (value) => `${new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 0,
 }).format(value || 0)}원`;
 
+const formatGrams = (value) => `${new Intl.NumberFormat("ko-KR", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+}).format(value || 0)}g`;
+
 const parseDecimal = (value) => parseFloat(String(value).replace(',', '.')) || 0;
 
 const getRecipeTotalPercent = (ingredients = []) => {
@@ -373,9 +378,9 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
               </thead>
               <tbody>
                 {currentRecipe ? currentRecipe.ingredients.map((ing, idx) => {
-                  const parsedFlour = parseFloat(String(flourWeight).replace(',','.')) || 0;
-                  const parsedPercent = parseFloat(String(ing.percent).replace(',','.')) || 0;
-                  const computedGrams = Math.round(parsedFlour * (parsedPercent / 100));
+                  const parsedFlour = parseDecimal(flourWeight);
+                  const parsedPercent = parseDecimal(ing.percent);
+                  const computedGrams = parsedFlour * (parsedPercent / 100);
                   return (
                     <tr key={idx} className="border-b border-gray-200">
                       <td className="p-2">
@@ -396,14 +401,14 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
                       </td>
                       {/* 화면용 기본 단일 무게 컬럼 */}
                       <td className="p-2 text-right font-bold text-gray-400 text-sm print-hidden-multipliers">
-                        {(computedGrams || 0).toLocaleString()}g
+                        {formatGrams(computedGrams)}
                       </td>
                       {/* 인쇄용 다중 배수 컬럼 동적 계산 영역 */}
                       {validPrintMultipliers.map((m, mIdx) => {
-                        const multipliedGrams = Math.round(computedGrams * m);
+                        const multipliedGrams = computedGrams * m;
                         return (
                           <td key={mIdx} className="p-2 text-right font-black text-black text-sm hidden print-visible-multipliers font-mono">
-                            {(multipliedGrams || 0).toLocaleString()}g
+                            {formatGrams(multipliedGrams)}
                           </td>
                         );
                       })}
