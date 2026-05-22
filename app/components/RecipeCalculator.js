@@ -3,12 +3,10 @@ import { useState, useMemo, useCallback } from "react";
 import { InputField, SummaryCard, SummaryRow } from "./common";
 import { INGREDIENT_TYPE_LABEL_KEYS, LOG_TYPE_LABEL_KEYS, TEMP_FIELD_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
-const formatCurrency = (value) => new Intl.NumberFormat("ko-KR", {
-  style: "currency",
-  currency: "KRW",
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-}).format(value || 0);
+const formatCurrency = (value) => `${new Intl.NumberFormat("ko-KR", {
+  style: "decimal",
+  maximumFractionDigits: 0,
+}).format(value || 0)}원`;
 
 export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [], tempLogs, setTempLogs, requestSafetyCheck }) {
   const [category, setCategory] = useState("하드계열");
