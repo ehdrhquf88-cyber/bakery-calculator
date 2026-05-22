@@ -19,6 +19,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const [flourMultiplier, setFlourMultiplier] = useState("1");
   const [productWeight, setProductWeight] = useState("");
   const [productPrice, setProductPrice] = useState("");
+  const [printSections, setPrintSections] = useState({ summary: true, prefermentYield: true, cost: true });
 
   // 프린트 배수 모달 상태 추가
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -228,6 +229,10 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
       .filter(m => !isNaN(m) && m > 0);
   }, [printMultipliers]);
 
+  const printSummaryClass = printSections.summary ? "print:block" : "print:hidden";
+  const printPrefermentClass = printSections.prefermentYield ? "print:block" : "print:hidden";
+  const printCostClass = printSections.cost ? "print:block" : "print:hidden";
+
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black print:px-0 print:max-w-full">
       <style dangerouslySetInnerHTML={{__html: `
@@ -236,12 +241,13 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
           body { background: white; color: black; }
           .print-hidden-multipliers { display: none !important; }
           .print-visible-multipliers { display: table-cell !important; }
+          .print-page-break-after { page-break-after: always; break-after: page; }
         }
       `}} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 md:gap-8 print:block print:space-y-6">
         
-        <section className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 order-1 print:bg-white print:shadow-none print:border-none print:p-0">
+        <section className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 order-1 print:bg-white print:shadow-none print:border-none print:p-0 print-page-break-after">
           <div className="border-b-2 border-black pb-3 mb-6 flex justify-between items-end">
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter truncate uppercase print:text-2xl">
               {currentRecipe ? currentRecipe.productName : t("calculatorTitle")}
@@ -379,7 +385,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
         <div className="space-y-6 order-2 print:block print:space-y-4">
           {category !== "사전반죽" && (
             <>
-              <SummaryCard title={t("summary")}>
+              <SummaryCard title={t("summary")} className={printSummaryClass}>
                 <SummaryRow label={t("finalYieldWithPreferment")} value={`${totals.finalYield.toFixed(1)}%`} />
                 <SummaryRow label={t("saltWithPreferment")} value={`${totals.totalSaltPercent}%`} />
                 <SummaryRow label={t("totalDough")} value={`${(Math.round(parseFloat(String(totalDough).replace(',', '.'))) || 0).toLocaleString()}g`} />
@@ -387,7 +393,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
               </SummaryCard>
 
               {preFerments.length > 0 && (
-                <SummaryCard title={t("prefermentYield")}>
+                <SummaryCard title={t("prefermentYield")} className={printPrefermentClass}>
                   <div className="space-y-3">
                     {preFerments.map(pf => (
                       <div key={pf.name} className="flex justify-between items-center border-b border-black/5 pb-2">
@@ -405,7 +411,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
           )}
 
           {currentRecipe && (
-            <SummaryCard title={t("cost")}>
+            <SummaryCard title={t("cost")} className={printCostClass}>
               <div className="space-y-2">
                 {ingredientCosts.map((item, idx) => (
                   <div key={`${item.name}-${idx}`} className="flex justify-between gap-3 border-b border-dashed border-black/10 pb-2 text-xs md:text-sm">
@@ -468,9 +474,11 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
 
       {/* 다중 배수 프린트 설정 모달 (최대 4개) */}
       {isPrintModalOpen && (
-        <PrintMultiplierModal 
+        <PrintOptionsModal 
           multipliers={printMultipliers} 
           setMultipliers={setPrintMultipliers} 
+          printSections={printSections}
+          setPrintSections={setPrintSections}
           onClose={() => setIsPrintModalOpen(false)} 
           onPrint={executePrint}
           t={t}
@@ -482,10 +490,14 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
 
 // 다중 배수 입력 모달 컴포넌트 추가
 
-function PrintMultiplierModal({ multipliers, setMultipliers, onClose, onPrint, t }) {
+function PrintOptionsModal({ multipliers, setMultipliers, printSections, setPrintSections, onClose, onPrint, t }) {
   const handleInputChange = (index, value) => {
     const cleanValue = value.replace(',', '.');
     setMultipliers(prev => prev.map((m, idx) => idx === index ? cleanValue : m));
+  };
+
+  const toggleSection = (sectionKey) => {
+    setPrintSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
   };
 
   return (
@@ -493,7 +505,22 @@ function PrintMultiplierModal({ multipliers, setMultipliers, onClose, onPrint, t
       <div className="bg-[#f7f6f3] w-full max-w-md rounded-[2rem] p-6 shadow-2xl border border-white">
         <h2 className="text-xl md:text-2xl font-black tracking-tighter mb-2 uppercase">{t("printOptions")}</h2>
         <p className="text-xs font-bold text-gray-400 uppercase tracking-tight mb-6">{t("printOptionsDescription")}</p>
-        
+
+        <div className="space-y-3 mb-6">
+          <p className="text-[10px] font-black uppercase tracking-tight text-gray-500">{t("printSectionHint")}</p>
+          <div className="grid grid-cols-1 gap-2">
+            <button type="button" onClick={() => toggleSection("summary")} className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-bold ${printSections.summary ? "border-black bg-black text-white" : "border-gray-200 bg-white text-black"}`}>
+              {t("summary")}
+            </button>
+            <button type="button" onClick={() => toggleSection("prefermentYield")} className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-bold ${printSections.prefermentYield ? "border-black bg-black text-white" : "border-gray-200 bg-white text-black"}`}>
+              {t("prefermentYield")}
+            </button>
+            <button type="button" onClick={() => toggleSection("cost")} className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-bold ${printSections.cost ? "border-black bg-black text-white" : "border-gray-200 bg-white text-black"}`}>
+              {t("cost")}
+            </button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-4 mb-8">
           {multipliers.map((mult, i) => (
             <div key={i} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">

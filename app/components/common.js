@@ -7,9 +7,9 @@ export function InputField({ label, children }) {
     );
 }
 
-export function SummaryCard({ title, children }) {
+export function SummaryCard({ title, children, className = "" }) {
   return (
-    <div className="bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50">
+    <div className={`bg-[#f7f6f3] rounded-2xl p-5 md:p-6 shadow-lg border border-white/50 ${className}`}>
       <h2 className="text-xl md:text-2xl font-black tracking-tighter border-b-2 border-black pb-2 mb-4 uppercase">{title}</h2>
       {children}
     </div>
