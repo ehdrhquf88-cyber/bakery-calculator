@@ -8,6 +8,12 @@ const formatCurrency = (value) => `${new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 0,
 }).format(value || 0)}원`;
 
+const parseDecimal = (value) => parseFloat(String(value).replace(',', '.')) || 0;
+
+const getRecipeTotalPercent = (ingredients = []) => {
+  return ingredients.reduce((sum, ing) => sum + parseDecimal(ing.percent), 0);
+};
+
 export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [], tempLogs, setTempLogs, requestSafetyCheck }) {
   const [category, setCategory] = useState("하드계열");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
@@ -44,21 +50,50 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     return currentRecipe ? currentRecipe.ingredients.filter(ing => ing.type === "사전반죽") : [];
   }, [currentRecipe]);
 
-  const handlePercentChange = useCallback((ingName, value) => {
+  const syncWeightsToTotalPercent = useCallback((nextTotalPercent) => {
+    if (nextTotalPercent <= 0) {
+      setTotalDough("");
+      setFlourWeight("");
+      return;
+    }
+
+    const parsedFlourWeight = parseDecimal(flourWeight);
+    const parsedTotalDough = parseDecimal(totalDough);
+
+    if (parsedFlourWeight > 0) {
+      setTotalDough(Math.round(parsedFlourWeight * (nextTotalPercent / 100)));
+      return;
+    }
+
+    if (parsedTotalDough > 0) {
+      setFlourWeight(Math.round(parsedTotalDough / (nextTotalPercent / 100)));
+    }
+  }, [flourWeight, totalDough]);
+
+  const handlePercentChange = useCallback((ingIndex, value) => {
     if (!selectedRecipeId) return;
     const cleanValue = value.replace(',', '.');
+    const recipeId = Number(selectedRecipeId);
+    const nextIngredients = currentRecipe?.ingredients.map((ing, idx) => (
+      idx === ingIndex ? { ...ing, percent: cleanValue } : ing
+    ));
+
+    if (nextIngredients) {
+      syncWeightsToTotalPercent(getRecipeTotalPercent(nextIngredients));
+    }
+
     setRecipes(prev => prev.map(recipe => {
-      if (recipe.id === Number(selectedRecipeId)) {
+      if (recipe.id === recipeId) {
         return {
           ...recipe,
-          ingredients: recipe.ingredients.map(ing => ing.name === ingName ? { ...ing, percent: cleanValue } : ing)
+          ingredients: recipe.ingredients.map((ing, idx) => idx === ingIndex ? { ...ing, percent: cleanValue } : ing)
         };
       }
       return recipe;
     }));
     setDoughMultiplier("1");
     setFlourMultiplier("1");
-  }, [selectedRecipeId, setRecipes]);
+  }, [currentRecipe, selectedRecipeId, setRecipes, syncWeightsToTotalPercent]);
 
   const totals = useMemo(() => {
     if (!currentRecipe) return { totalPercent: 0, totalSaltPercent: "0.00", finalYield: 0, totalCost: 0, baseTotalDough: 0 };
@@ -68,7 +103,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     let rawTotalPercent = 0;
 
     currentRecipe.ingredients.forEach(ing => {
-      const pct = parseFloat(String(ing.percent).replace(',', '.')) || 0;
+      const pct = parseDecimal(ing.percent);
       rawTotalPercent += pct;
       if (ing.type === "밀") totalFlourPct += pct;
       else if (ing.type === "수분") totalWaterPct += pct;
@@ -85,9 +120,9 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     const realSaltPercent = totalFlourPct > 0 ? (totalSaltPct / totalFlourPct) * 100 : 0;
     const finalYield = totalFlourPct > 0 ? (totalWaterPct / totalFlourPct) * 100 : 0;
     
-    const parsedFlourWeight = parseFloat(String(flourWeight).replace(',', '.')) || 0;
+    const parsedFlourWeight = parseDecimal(flourWeight);
     const cost = currentRecipe.ingredients.reduce((sum, ing) => {
-        const pctVal = parseFloat(String(ing.percent).replace(',', '.')) || 0;
+        const pctVal = parseDecimal(ing.percent);
         const weight = parsedFlourWeight * (pctVal / 100);
         const unitCost = getIngredientUnitCost(ing);
         return sum + (weight * unitCost);
@@ -106,10 +141,10 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const ingredientCosts = useMemo(() => {
     if (!currentRecipe) return [];
 
-    const parsedFlour = parseFloat(String(flourWeight).replace(',', '.')) || 0;
+    const parsedFlour = parseDecimal(flourWeight);
 
     return currentRecipe.ingredients.map(ing => {
-      const parsedPercent = parseFloat(String(ing.percent).replace(',', '.')) || 0;
+      const parsedPercent = parseDecimal(ing.percent);
       const grams = Math.round(parsedFlour * (parsedPercent / 100));
       const unitCost = getIngredientUnitCost(ing);
 
@@ -185,9 +220,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     setFlourMultiplier("1");
 
     const recipe = recipes.find(r => r.id === Number(recipeId));
-    const rawTotalPercent = recipe?.ingredients.reduce((sum, ing) => {
-      return sum + (parseFloat(String(ing.percent).replace(',', '.')) || 0);
-    }, 0) || 0;
+    const rawTotalPercent = getRecipeTotalPercent(recipe?.ingredients);
 
     if (recipe && rawTotalPercent > 0) {
       setFlourWeight(1000);
@@ -354,7 +387,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
                           <input 
                             type="text" inputMode="decimal" value={ing.percent}
                             size={String(ing.percent).length || 1}
-                            onChange={(e) => handlePercentChange(ing.name, e.target.value)}
+                            onChange={(e) => handlePercentChange(idx, e.target.value)}
                             style={{ minWidth: '1.5rem' }}
                             className="bg-transparent border-b border-black/10 hover:border-black text-right font-mono text-sm font-bold outline-none transition-colors pb-1 h-auto print:border-none"
                           />
