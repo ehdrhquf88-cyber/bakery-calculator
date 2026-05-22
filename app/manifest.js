@@ -2,7 +2,7 @@ export default function manifest() {
   return {
     name: "빵쟁이들",
     short_name: "빵쟁이들",
-    description: "빵쟁이들을 위한 레시피 계산기와 발효 기록",
+    description: "베이커를 위한 레시피 계산기, 재료비 관리, 발효 기록 앱",
     start_url: "/",
     scope: "/",
     display: "standalone",

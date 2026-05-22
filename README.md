@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 빵쟁이들
 
-## Getting Started
+베이커를 위한 작업 도구입니다. 레시피 배합 계산, 레시피 DB, 재료비 DB, 온도/pH 기록을 한 화면 안에서 빠르게 관리할 수 있습니다.
 
-First, run the development server:
+## 주요 기능
+
+- 레시피별 총 반죽량/밀가루량 기준 배합 계산
+- 사전반죽 수율, 최종 수율, 소금 비율 확인
+- 재료비 DB와 연결한 제품 원가 계산
+- 레시피, 재료비, 온도/pH 히스토리 로컬 저장
+- 한국어/프랑스어 화면 언어 전환
+- 모바일 설치를 고려한 PWA manifest와 서비스 워커 업데이트 안내
+
+## 실행
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+브라우저에서 `http://localhost:3000`을 엽니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 배포 확인
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npm run build
+npm run start
+```
 
-## Learn More
+프로덕션 빌드는 정적 페이지로 생성되며, Node.js 서버 배포와 Vercel 같은 Next.js 호스팅에서 사용할 수 있습니다.
 
-To learn more about Next.js, take a look at the following resources:
+## 데이터 저장
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+현재 데이터는 브라우저 `localStorage`에 저장됩니다. 기기나 브라우저를 바꾸면 데이터가 자동 동기화되지 않으므로, 실제 운영 전에 백업/동기화 정책을 별도로 결정해야 합니다.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 실제 기기 체크리스트
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- 모바일 Safari/Chrome에서 첫 화면과 하단 여백이 자연스러운지 확인
+- 레시피 선택, 배수 변경, PDF 인쇄 버튼 흐름 확인
+- 홈 화면 설치 후 앱 이름과 아이콘 확인
+- 오프라인 또는 새 버전 배포 후 업데이트 안내가 보이는지 확인
+- 긴 재료명/제품명 입력 시 카드와 표 레이아웃이 깨지지 않는지 확인
