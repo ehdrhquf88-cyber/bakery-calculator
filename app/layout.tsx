@@ -15,9 +15,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "빵쟁이들",
   applicationName: "빵쟁이들",
-  description: "빵쟁이들을 위한 레시피 계산기와 발효 기록",
+  description: "베이커를 위한 레시피 계산기, 재료비 관리, 발효 기록 앱",
   appleWebApp: {
     title: "빵쟁이들",
+    capable: true,
+  },
+  formatDetection: {
+    telephone: false,
   },
 };
 
@@ -28,7 +32,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="ko"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
