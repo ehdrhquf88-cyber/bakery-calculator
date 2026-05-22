@@ -509,15 +509,18 @@ function PrintOptionsModal({ multipliers, setMultipliers, printSections, setPrin
         <div className="space-y-3 mb-6">
           <p className="text-[10px] font-black uppercase tracking-tight text-gray-500">{t("printSectionHint")}</p>
           <div className="grid grid-cols-1 gap-2">
-            <button type="button" onClick={() => toggleSection("summary")} className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-bold ${printSections.summary ? "border-black bg-black text-white" : "border-gray-200 bg-white text-black"}`}>
-              {t("summary")}
-            </button>
-            <button type="button" onClick={() => toggleSection("prefermentYield")} className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-bold ${printSections.prefermentYield ? "border-black bg-black text-white" : "border-gray-200 bg-white text-black"}`}>
-              {t("prefermentYield")}
-            </button>
-            <button type="button" onClick={() => toggleSection("cost")} className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-bold ${printSections.cost ? "border-black bg-black text-white" : "border-gray-200 bg-white text-black"}`}>
-              {t("cost")}
-            </button>
+            <label className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-bold cursor-pointer ${printSections.summary ? "border-black bg-black text-white" : "border-gray-200 bg-white text-black"}`}>
+              <input type="checkbox" checked={printSections.summary} onChange={() => toggleSection("summary")} className="h-4 w-4 accent-black" />
+              <span>{t("summary")}</span>
+            </label>
+            <label className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-bold cursor-pointer ${printSections.prefermentYield ? "border-black bg-black text-white" : "border-gray-200 bg-white text-black"}`}>
+              <input type="checkbox" checked={printSections.prefermentYield} onChange={() => toggleSection("prefermentYield")} className="h-4 w-4 accent-black" />
+              <span>{t("prefermentYield")}</span>
+            </label>
+            <label className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-bold cursor-pointer ${printSections.cost ? "border-black bg-black text-white" : "border-gray-200 bg-white text-black"}`}>
+              <input type="checkbox" checked={printSections.cost} onChange={() => toggleSection("cost")} className="h-4 w-4 accent-black" />
+              <span>{t("cost")}</span>
+            </label>
           </div>
         </div>
 
