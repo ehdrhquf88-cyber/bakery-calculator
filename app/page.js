@@ -258,7 +258,9 @@ function LoginScreen({ t, onGoogleStart }) {
             onClick={onGoogleStart}
             className="w-full bg-white/72 md:bg-white border border-white/35 md:border-gray-200 py-4 rounded-xl font-black text-sm uppercase tracking-tight hover:border-black transition-all flex items-center justify-center gap-3"
           >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black text-xs font-black text-white">G</span>
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[conic-gradient(#4285f4_0_25%,#34a853_0_50%,#fbbc05_0_75%,#ea4335_0_100%)] text-xs font-black text-white shadow-inner">
+              G
+            </span>
             {t("googleStart")}
           </button>
         </section>
