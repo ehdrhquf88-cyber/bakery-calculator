@@ -1,6 +1,14 @@
 import { useMemo } from "react";
 
-import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
+const CATEGORY_LABEL_KEYS = {
+  "하드계열": "hardCategory",
+  "소프트계열": "softCategory",
+  "사전반죽": "prefermentCategory",
+};
+
+function labelFromMap(t, map, value) {
+  return map[value] ? t(map[value]) : value;
+}
 
 export default function MyBreadYourBread({ t, recipes, setRecipes }) {
   const publicRecipes = useMemo(() => {
@@ -64,7 +72,7 @@ export default function MyBreadYourBread({ t, recipes, setRecipes }) {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                      {labelFromMap(t, RECIPE_CATEGORY_LABEL_KEYS, recipe.category)}
+                      {labelFromMap(t, CATEGORY_LABEL_KEYS, recipe.category)}
                     </div>
                     <h2 className="mt-1 text-2xl font-black tracking-tighter uppercase">{recipe.productName}</h2>
                   </div>
