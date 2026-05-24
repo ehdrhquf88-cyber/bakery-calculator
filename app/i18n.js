@@ -29,7 +29,7 @@ export const translations = {
     cancel: "취소",
     confirm: "확인",
     loginGreeting: "빵쟁이들 안녕?",
-    signIn: "시작하기",
+    signIn: "오늘 칠 거 많아?",
     googleStart: "Google로 시작하기",
     email: "Email",
     password: "Password",
