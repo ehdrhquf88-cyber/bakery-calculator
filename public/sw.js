@@ -1,5 +1,5 @@
 const CACHE_PREFIXES = ["bread-people-", "bakery-app-"];
-const CACHE_NAME = "bread-people-v4";
+const CACHE_NAME = "bread-people-v5";
 const APP_SHELL = [
   "/",
   "/manifest.webmanifest",

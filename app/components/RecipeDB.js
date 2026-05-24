@@ -11,6 +11,19 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
   const displayedRecipes = useMemo(() => {
     return recipes.filter(r => r.productName.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [recipes, searchTerm]);
+  const toggleCommunityVisibility = (recipeId) => {
+    setRecipes(prev => prev.map(recipe => {
+      if (recipe.id !== recipeId) return recipe;
+
+      const isPublishing = !recipe.isPublic;
+      return {
+        ...recipe,
+        isPublic: isPublishing,
+        publishedAt: isPublishing ? recipe.publishedAt || new Date().toISOString() : recipe.publishedAt,
+      };
+    }));
+  };
+
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-6 gap-4">
@@ -22,18 +35,31 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
       </div>
       <div className="grid grid-cols-1 gap-3">
         {displayedRecipes.map(recipe => (
-          <div key={recipe.id} onClick={() => { setEditingRecipe(recipe); setIsModalOpen(true); }} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center cursor-pointer hover:border-black group transition-all">
+          <div key={recipe.id} onClick={() => { setEditingRecipe(recipe); setIsModalOpen(true); }} className="bg-white p-5 rounded-2xl border border-gray-100 flex flex-col md:flex-row md:justify-between md:items-center gap-4 cursor-pointer hover:border-black group transition-all">
             <div>
               <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{labelFromMap(t, RECIPE_CATEGORY_LABEL_KEYS, recipe.category)}</div>
               <div className="text-xl font-black tracking-tighter uppercase">{recipe.productName}</div>
+              {recipe.communityText && <p className="mt-1 text-xs font-bold text-gray-400 line-clamp-1">{recipe.communityText}</p>}
             </div>
-            <button onClick={(e) => { e.stopPropagation(); if (confirm(t("deleteConfirm"))) setRecipes(prev => prev.filter(r => r.id !== recipe.id)); }} className="text-gray-300 hover:text-red-500">x</button>
+            <div className="flex items-center gap-2 self-end md:self-auto">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleCommunityVisibility(recipe.id);
+                }}
+                className={`px-4 py-2 rounded-full text-xs font-black uppercase tracking-tight border transition-all ${recipe.isPublic ? "bg-black text-white border-black" : "bg-white text-gray-400 border-gray-200 hover:border-black hover:text-black"}`}
+              >
+                {recipe.isPublic ? t("publicRecipe") : t("privateRecipe")}
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); if (confirm(t("deleteConfirm"))) setRecipes(prev => prev.filter(r => r.id !== recipe.id)); }} className="text-gray-300 hover:text-red-500">x</button>
+            </div>
           </div>
         ))}
       </div>
       {isModalOpen && <RecipeModal t={t} initialData={editingRecipe} costItems={costItems} onSave={(data, newCostItems) => {
         if (newCostItems.length > 0) setCostItems(prev => [...prev, ...newCostItems]);
-        if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id } : r));
+        if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id, publishedAt: data.isPublic ? r.publishedAt || new Date().toISOString() : r.publishedAt } : r));
         else setRecipes(prev => [...prev, { ...data, id: Date.now() }]);
         setIsModalOpen(false);
       }} onClose={() => setIsModalOpen(false)} />}
@@ -45,6 +71,9 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
+  const [isPublic, setIsPublic] = useState(Boolean(initialData?.isPublic));
+  const [communityText, setCommunityText] = useState(initialData?.communityText || "");
+  const [communityImage, setCommunityImage] = useState(initialData?.communityImage || "");
   const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => {
     if (idx !== i) return ing;
 
@@ -120,7 +149,23 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
       };
     });
 
-    onSave({ category, productName, ingredients: nextIngredients }, newCostItems);
+    onSave({
+      category,
+      productName,
+      ingredients: nextIngredients,
+      isPublic,
+      communityText,
+      communityImage,
+      sourceRecipeId: initialData?.sourceRecipeId,
+      savedFromCommunityAt: initialData?.savedFromCommunityAt,
+    }, newCostItems);
+  };
+  const updateCommunityImage = (file) => {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => setCommunityImage(reader.result || "");
+    reader.readAsDataURL(file);
   };
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
@@ -131,6 +176,37 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
           <InputField label={t("category")}><select value={category} onChange={e => setCategory(e.target.value)} className="w-full h-10 bg-transparent border-b-2 border-black py-2 outline-none font-bold leading-normal"><option value="하드계열">{t("hardCategory")}</option><option value="소프트계열">{t("softCategory")}</option><option value="사전반죽">{t("prefermentCategory")}</option></select></InputField>
           <InputField label={t("productName")}><input value={productName} onChange={e => setProductName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" /></InputField>
         </div>
+        <section className="mb-8 bg-white rounded-2xl border border-gray-100 p-4 md:p-5">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("communityPublish")}</div>
+              <p className="mt-1 text-xs font-bold text-gray-400">{t("communityPublishDescription")}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsPublic(prev => !prev)}
+              className={`px-5 py-3 rounded-xl text-sm font-black uppercase tracking-tight ${isPublic ? "bg-black text-white" : "bg-[#f7f6f3] text-gray-400 border border-gray-200"}`}
+            >
+              {isPublic ? t("publicRecipe") : t("privateRecipe")}
+            </button>
+          </div>
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-[180px_1fr] gap-4">
+            <label className="min-h-36 rounded-2xl border border-dashed border-gray-200 bg-[#f7f6f3] flex items-center justify-center overflow-hidden cursor-pointer">
+              {communityImage ? (
+                <span className="block h-full min-h-36 w-full bg-cover bg-center" style={{ backgroundImage: `url(${communityImage})` }} />
+              ) : (
+                <span className="px-4 text-center text-xs font-black text-gray-400 uppercase tracking-tight">{t("uploadBreadPhoto")}</span>
+              )}
+              <input type="file" accept="image/*" onChange={e => updateCommunityImage(e.target.files?.[0])} className="sr-only" />
+            </label>
+            <textarea
+              value={communityText}
+              onChange={e => setCommunityText(e.target.value)}
+              placeholder={t("communityPostPlaceholder")}
+              className="min-h-36 w-full resize-none rounded-2xl border border-gray-100 bg-[#f7f6f3] p-4 text-sm font-bold outline-none focus:border-black"
+            />
+          </div>
+        </section>
         <div className="space-y-3">
           {ingredients.map((ing, i) => {
             const linkedCostItem = costItems.find(item => item.id === ing.ingredientId);
