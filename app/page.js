@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import CostDB from "./components/CostDB";
+import MyBreadYourBread from "./components/MyBreadYourBread";
 import NavButton from "./components/NavButton";
 import RecipeCalculator from "./components/RecipeCalculator";
 import RecipeDB from "./components/RecipeDB";
@@ -125,6 +126,7 @@ export default function Home() {
       <nav className="sticky top-0 z-40 flex gap-4 md:gap-8 p-4 md:p-6 bg-white/80 backdrop-blur-md border-b border-gray-200 justify-start md:justify-center overflow-x-auto whitespace-nowrap shadow-sm no-scrollbar print:hidden">
         <NavButton active={view === "calc"} onClick={() => moveToView("calc")}>{t("navRecipeCalculator")}</NavButton>
         <NavButton active={view === "db"} onClick={() => moveToView("db")}>{t("navRecipeDb")}</NavButton>
+        <NavButton active={view === "community"} onClick={() => moveToView("community")}>{t("navCommunity")}</NavButton>
         <NavButton active={view === "cost_db"} onClick={() => moveToView("cost_db")}>{t("navCostDb")}</NavButton>
         <NavButton active={view === "temp_db"} onClick={() => moveToView("temp_db")}>{t("navTempPh")}</NavButton>
         <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>{t("navSettings")}</NavButton>
@@ -133,6 +135,7 @@ export default function Home() {
       <div className="py-4 md:py-8 print:py-0">
         {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={setRecipes} tempLogs={tempLogs} setTempLogs={setTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
         {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={setRecipes} costItems={costItems} setCostItems={setCostItems} />}
+        {view === "community" && <MyBreadYourBread t={t} recipes={recipes} setRecipes={setRecipes} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={setCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
         {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} />}
