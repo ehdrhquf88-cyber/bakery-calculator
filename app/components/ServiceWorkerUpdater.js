@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 export default function ServiceWorkerUpdater({ t }) {
   const [waitingWorker, setWaitingWorker] = useState(null);
   const [isBannerVisible, setIsBannerVisible] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const isRefreshing = useRef(false);
   const registrationRef = useRef(null);
 
@@ -63,6 +64,8 @@ export default function ServiceWorkerUpdater({ t }) {
         });
 
         checkForUpdate();
+        const updateInterval = window.setInterval(checkForUpdate, 60 * 60 * 1000);
+        registrationRef.current.updateInterval = updateInterval;
       } catch (error) {
         console.error("Service Worker registration failed.", error);
       }
@@ -74,11 +77,14 @@ export default function ServiceWorkerUpdater({ t }) {
       navigator.serviceWorker.removeEventListener("controllerchange", refreshForUpdate);
       navigator.serviceWorker.removeEventListener("message", handleMessage);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (registrationRef.current?.updateInterval) {
+        window.clearInterval(registrationRef.current.updateInterval);
+      }
     };
   }, []);
 
   const handleUpdate = () => {
-    setIsBannerVisible(false);
+    setIsUpdating(true);
 
     if (waitingWorker) {
       waitingWorker.postMessage({ type: "SKIP_WAITING" });
@@ -96,27 +102,29 @@ export default function ServiceWorkerUpdater({ t }) {
   if (!isBannerVisible) return null;
 
   return (
-    <div className="fixed left-4 right-4 bottom-4 z-50 mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl border border-black/10 bg-white px-4 py-3 text-black shadow-xl print:hidden">
-      <div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm print:hidden">
+      <section className="w-full max-w-sm rounded-2xl border border-black/10 bg-white p-6 text-black shadow-2xl">
         <div className="text-xs font-black uppercase tracking-tight">{t("updateAvailable")}</div>
-        <div className="text-[10px] font-bold text-gray-400">{t("updateDescription")}</div>
-      </div>
-      <div className="flex shrink-0 gap-2">
-        <button
-          type="button"
-          onClick={() => setIsBannerVisible(false)}
-          className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-tight text-gray-400"
-        >
-          {t("later")}
-        </button>
-        <button
-          type="button"
-          onClick={handleUpdate}
-          className="rounded-full bg-black px-3 py-1.5 text-[10px] font-black uppercase tracking-tight text-white"
-        >
-          {t("update")}
-        </button>
-      </div>
+        <p className="mt-2 text-sm font-bold leading-6 text-gray-500">{t("updateDescription")}</p>
+        <div className="mt-6 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setIsBannerVisible(false)}
+            className="rounded-xl border border-gray-200 bg-white py-3 text-sm font-black uppercase tracking-tight text-gray-400 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isUpdating}
+          >
+            {t("later")}
+          </button>
+          <button
+            type="button"
+            onClick={handleUpdate}
+            className="rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white disabled:cursor-wait disabled:bg-gray-500"
+            disabled={isUpdating}
+          >
+            {isUpdating ? t("updating") : t("update")}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

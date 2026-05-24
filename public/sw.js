@@ -1,7 +1,6 @@
 const CACHE_PREFIXES = ["bread-people-", "bakery-app-"];
-const CACHE_NAME = "bread-people-v5";
+const CACHE_NAME = "bread-people-v6";
 const APP_SHELL = [
-  "/",
   "/manifest.webmanifest",
   "/icon-192x192.png",
   "/icon-512x512.png",
@@ -46,7 +45,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.mode === "navigate") {
-    event.respondWith(networkFirst(request, "/"));
+    event.respondWith(networkFirst(request));
     return;
   }
 

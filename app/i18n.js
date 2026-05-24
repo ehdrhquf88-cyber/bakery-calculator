@@ -183,6 +183,7 @@ export const translations = {
     updateDescription: "업데이트하면 앱이 새로고침됩니다.",
     later: "나중에",
     update: "업데이트",
+    updating: "업데이트 중",
   },
   fr: {
     navRecipeCalculator: "Calculateur",
@@ -361,6 +362,7 @@ export const translations = {
     updateDescription: "La mise a jour rechargera l'application.",
     later: "Plus tard",
     update: "Mettre a jour",
+    updating: "Mise a jour...",
   },
 };
 
