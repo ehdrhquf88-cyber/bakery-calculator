@@ -7,6 +7,7 @@ export default function ServiceWorkerUpdater({ t }) {
   const [isBannerVisible, setIsBannerVisible] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const isRefreshing = useRef(false);
+  const updateIntervalRef = useRef(null);
   const registrationRef = useRef(null);
 
   useEffect(() => {
@@ -24,19 +25,41 @@ export default function ServiceWorkerUpdater({ t }) {
       }
     };
 
-    const checkForUpdate = () => {
-      registrationRef.current?.update().catch((error) => {
+    const checkForUpdate = async () => {
+      if (!navigator.onLine) return;
+
+      try {
+        const registration = registrationRef.current || await navigator.serviceWorker.getRegistration("/");
+        if (!registration) return;
+
+        registrationRef.current = registration;
+
+        if (registration.waiting && navigator.serviceWorker.controller) {
+          setWaitingWorker(registration.waiting);
+          setIsBannerVisible(true);
+          return;
+        }
+
+        await registration.update();
+      } catch (error) {
         console.error("Service Worker update check failed.", error);
-      });
+      }
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") checkForUpdate();
     };
 
+    const handlePageShow = () => {
+      checkForUpdate();
+    };
+
     navigator.serviceWorker.addEventListener("controllerchange", refreshForUpdate);
     navigator.serviceWorker.addEventListener("message", handleMessage);
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", checkForUpdate);
+    window.addEventListener("online", checkForUpdate);
+    window.addEventListener("pageshow", handlePageShow);
 
     const registerServiceWorker = async () => {
       try {
@@ -64,8 +87,7 @@ export default function ServiceWorkerUpdater({ t }) {
         });
 
         checkForUpdate();
-        const updateInterval = window.setInterval(checkForUpdate, 60 * 60 * 1000);
-        registrationRef.current.updateInterval = updateInterval;
+        updateIntervalRef.current = window.setInterval(checkForUpdate, 30 * 60 * 1000);
       } catch (error) {
         console.error("Service Worker registration failed.", error);
       }
@@ -77,8 +99,11 @@ export default function ServiceWorkerUpdater({ t }) {
       navigator.serviceWorker.removeEventListener("controllerchange", refreshForUpdate);
       navigator.serviceWorker.removeEventListener("message", handleMessage);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      if (registrationRef.current?.updateInterval) {
-        window.clearInterval(registrationRef.current.updateInterval);
+      window.removeEventListener("focus", checkForUpdate);
+      window.removeEventListener("online", checkForUpdate);
+      window.removeEventListener("pageshow", handlePageShow);
+      if (updateIntervalRef.current) {
+        window.clearInterval(updateIntervalRef.current);
       }
     };
   }, []);
@@ -97,6 +122,10 @@ export default function ServiceWorkerUpdater({ t }) {
     }
 
     registrationRef.current?.update();
+    window.setTimeout(() => {
+      if (isRefreshing.current) return;
+      setIsUpdating(false);
+    }, 2000);
   };
 
   if (!isBannerVisible) return null;
