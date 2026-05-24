@@ -120,7 +120,7 @@ export default function Home() {
   };
 
   if (!isLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
-  if (!accessMode) return <LoginScreen t={t} onFreeStart={() => setAccessMode("free")} />;
+  if (!accessMode) return <LoginScreen t={t} onGoogleStart={() => setAccessMode("authenticated")} />;
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
@@ -233,11 +233,7 @@ function LeaveCheckModal({ message, t, hideLeaveCheck, setHideLeaveCheck, onCanc
   );
 }
 
-function LoginScreen({ t, onFreeStart }) {
-  const showComingSoon = () => {
-    alert(t("loginComingSoon"));
-  };
-
+function LoginScreen({ t, onGoogleStart }) {
   return (
     <main
       className="min-h-screen px-4 py-8 md:px-8 text-black bg-cover bg-center relative overflow-hidden"
@@ -257,51 +253,13 @@ function LoginScreen({ t, onFreeStart }) {
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">{t("signIn")}</h1>
           </div>
 
-          <div className="space-y-3">
-            <input
-              type="email"
-              placeholder={t("email")}
-              className="w-full bg-white/58 md:bg-[#f7f6f3] border border-white/35 md:border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
-            />
-            <input
-              type="password"
-              placeholder={t("password")}
-              className="w-full bg-white/58 md:bg-[#f7f6f3] border border-white/35 md:border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black"
-            />
-            <button
-              type="button"
-              onClick={showComingSoon}
-              className="w-full bg-black text-white py-3 rounded-xl font-black text-sm uppercase tracking-tight"
-            >
-              {t("login")}
-            </button>
-          </div>
-
-          <div className="my-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-gray-100" />
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("or")}</span>
-            <div className="h-px flex-1 bg-gray-100" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            {["Google", "Apple", "Kakao", "Naver"].map(provider => (
-              <button
-                key={provider}
-                type="button"
-                onClick={showComingSoon}
-                className="bg-white/56 md:bg-white border border-white/35 md:border-gray-200 py-2.5 rounded-xl text-xs font-black uppercase tracking-tight hover:border-black transition-all"
-              >
-                {provider}
-              </button>
-            ))}
-          </div>
-
           <button
             type="button"
-            onClick={onFreeStart}
-            className="mt-6 w-full bg-white/58 md:bg-[#f7f6f3] border border-white/35 md:border-gray-200 py-4 rounded-xl font-black text-sm uppercase tracking-tight hover:border-black transition-all"
+            onClick={onGoogleStart}
+            className="w-full bg-white/72 md:bg-white border border-white/35 md:border-gray-200 py-4 rounded-xl font-black text-sm uppercase tracking-tight hover:border-black transition-all flex items-center justify-center gap-3"
           >
-            {t("freeStart")}
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black text-xs font-black text-white">G</span>
+            {t("googleStart")}
           </button>
         </section>
       </div>
