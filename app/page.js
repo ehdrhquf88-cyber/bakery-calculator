@@ -43,20 +43,12 @@ export default function Home() {
       const savedTempLogs = localStorage.getItem("bakery_temp_ph");
       const savedSkipCalcLeaveCheck = localStorage.getItem("bakery_skip_calc_leave_check");
       const savedLanguage = localStorage.getItem("bakery_language");
-      const savedAuthUser = localStorage.getItem("bakery_auth_user");
       if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
       if (savedCostItems) setCostItems(JSON.parse(savedCostItems));
       if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
       if (savedSkipCalcLeaveCheck === "true") setSkipCalcLeaveCheck(true);
       if (LANGUAGES.some(lang => lang.code === savedLanguage)) setLanguage(savedLanguage);
-      if (savedAuthUser) {
-        const parsedAuthUser = JSON.parse(savedAuthUser);
-        if (isAllowedGoogleEmail(parsedAuthUser.email)) {
-          setAuthUser(parsedAuthUser);
-        } else {
-          localStorage.removeItem("bakery_auth_user");
-        }
-      }
+      localStorage.removeItem("bakery_auth_user");
     } catch (e) {
       console.error("로컬스토리지 데이터를 읽는 중 오류가 발생했습니다.", e);
     }
@@ -130,7 +122,6 @@ export default function Home() {
     }
 
     setAuthUser(user);
-    localStorage.setItem("bakery_auth_user", JSON.stringify(user));
   };
 
   const handleSignOut = () => {
