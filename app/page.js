@@ -11,6 +11,14 @@ import ServiceWorkerUpdater from "./components/ServiceWorkerUpdater";
 import TempPhDB from "./components/TempPhDB";
 import { DEFAULT_LANGUAGE, LANGUAGES, getTranslator } from "./i18n";
 
+const ALLOWED_GOOGLE_EMAILS = [
+  "your-email@example.com",
+];
+
+const isAllowedGoogleEmail = (email) => (
+  ALLOWED_GOOGLE_EMAILS.includes(email?.trim().toLowerCase())
+);
+
 export default function Home() {
   const [view, setView] = useState("calc");
   const [recipes, setRecipes] = useState([]);
@@ -41,7 +49,14 @@ export default function Home() {
       if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
       if (savedSkipCalcLeaveCheck === "true") setSkipCalcLeaveCheck(true);
       if (LANGUAGES.some(lang => lang.code === savedLanguage)) setLanguage(savedLanguage);
-      if (savedAuthUser) setAuthUser(JSON.parse(savedAuthUser));
+      if (savedAuthUser) {
+        const parsedAuthUser = JSON.parse(savedAuthUser);
+        if (isAllowedGoogleEmail(parsedAuthUser.email)) {
+          setAuthUser(parsedAuthUser);
+        } else {
+          localStorage.removeItem("bakery_auth_user");
+        }
+      }
     } catch (e) {
       console.error("로컬스토리지 데이터를 읽는 중 오류가 발생했습니다.", e);
     }
@@ -109,6 +124,11 @@ export default function Home() {
   };
 
   const handleGoogleSignIn = (user) => {
+    if (!isAllowedGoogleEmail(user.email)) {
+      alert("초대받은 사용자만 이용할 수 있습니다.");
+      return;
+    }
+
     setAuthUser(user);
     localStorage.setItem("bakery_auth_user", JSON.stringify(user));
   };
