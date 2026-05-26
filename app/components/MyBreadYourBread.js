@@ -1,16 +1,28 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
 export default function MyBreadYourBread({ t, recipes = [], setRecipes }) {
+  const [savedRecipeId, setSavedRecipeId] = useState(null);
+
   const publicRecipes = useMemo(() => {
     return (Array.isArray(recipes) ? recipes : [])
       .filter(recipe => recipe.isPublic)
       .slice()
       .sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
   }, [recipes]);
+
+  useEffect(() => {
+    if (!savedRecipeId) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setSavedRecipeId(null);
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [savedRecipeId]);
 
   const saveRecipeToDb = (recipe) => {
     setRecipes(prev => {
@@ -29,6 +41,7 @@ export default function MyBreadYourBread({ t, recipes = [], setRecipes }) {
         },
       ];
     });
+    setSavedRecipeId(recipe.id);
   };
 
   return (
@@ -52,6 +65,7 @@ export default function MyBreadYourBread({ t, recipes = [], setRecipes }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {publicRecipes.map(recipe => (
             <article key={recipe.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+              {savedRecipeId === recipe.id && <span className="sr-only" aria-live="polite">{t("communityRecipeSaved")}</span>}
               <div className="aspect-[4/3] bg-[#efece5]">
                 {recipe.communityImage ? (
                   <div cjalassName="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${recipe.communityImage})` }} />
@@ -94,9 +108,9 @@ export default function MyBreadYourBread({ t, recipes = [], setRecipes }) {
                 <button
                   type="button"
                   onClick={() => saveRecipeToDb(recipe)}
-                  className="mt-5 w-full rounded-xl bg-black py-3 text-sm font-black text-white uppercase tracking-tight"
+                  className={`mt-5 w-full rounded-xl py-3 text-sm font-black uppercase tracking-tight transition-colors ${savedRecipeId === recipe.id ? "bg-emerald-600 text-white" : "bg-black text-white"}`}
                 >
-                  {t("saveCommunityRecipe")}
+                  {savedRecipeId === recipe.id ? t("communityRecipeSaved") : t("saveCommunityRecipe")}
                 </button>
               </div>
             </article>
