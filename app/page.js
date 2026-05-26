@@ -12,7 +12,7 @@ import TempPhDB from "./components/TempPhDB";
 import { DEFAULT_LANGUAGE, LANGUAGES, getTranslator } from "./i18n";
 
 const ALLOWED_GOOGLE_EMAILS = [
-  "your-email@example.com",
+  "ehdrhquf88@gmail.com",
 ];
 
 const isAllowedGoogleEmail = (email) => (
