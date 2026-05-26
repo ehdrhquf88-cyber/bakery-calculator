@@ -1,18 +1,12 @@
+"use client";
+
 import { useMemo } from "react";
 
-const CATEGORY_LABEL_KEYS = {
-  "하드계열": "hardCategory",
-  "소프트계열": "softCategory",
-  "사전반죽": "prefermentCategory",
-};
+import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
-function labelFromMap(t, map, value) {
-  return map[value] ? t(map[value]) : value;
-}
-
-export default function MyBreadYourBread({ t, recipes, setRecipes }) {
+export default function MyBreadYourBread({ t, recipes = [], setRecipes }) {
   const publicRecipes = useMemo(() => {
-    return recipes
+    return (Array.isArray(recipes) ? recipes : [])
       .filter(recipe => recipe.isPublic)
       .slice()
       .sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
@@ -60,7 +54,7 @@ export default function MyBreadYourBread({ t, recipes, setRecipes }) {
             <article key={recipe.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
               <div className="aspect-[4/3] bg-[#efece5]">
                 {recipe.communityImage ? (
-                  <div className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${recipe.communityImage})` }} />
+                  <div cjalassName="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${recipe.communityImage})` }} />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center px-6 text-center text-xs font-black text-gray-400 uppercase tracking-widest">
                     {t("noBreadPhoto")}
@@ -72,7 +66,7 @@ export default function MyBreadYourBread({ t, recipes, setRecipes }) {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                      {labelFromMap(t, CATEGORY_LABEL_KEYS, recipe.category)}
+                      {labelFromMap(t, RECIPE_CATEGORY_LABEL_KEYS, recipe.category)}
                     </div>
                     <h2 className="mt-1 text-2xl font-black tracking-tighter uppercase">{recipe.productName}</h2>
                   </div>

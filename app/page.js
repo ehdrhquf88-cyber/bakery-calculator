@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import BreadVideos from "./components/BreadVideos";
 import CostDB from "./components/CostDB";
 import MyBreadYourBread from "./components/MyBreadYourBread";
@@ -16,7 +16,7 @@ export default function Home() {
   const [recipes, setRecipes] = useState([]);
   const [costItems, setCostItems] = useState([]);
   const [tempLogs, setTempLogs] = useState([]);
-  const [accessMode, setAccessMode] = useState(null);
+  const [authUser, setAuthUser] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [skipCalcLeaveCheck, setSkipCalcLeaveCheck] = useState(false);
   const [pendingView, setPendingView] = useState(null);
@@ -35,11 +35,13 @@ export default function Home() {
       const savedTempLogs = localStorage.getItem("bakery_temp_ph");
       const savedSkipCalcLeaveCheck = localStorage.getItem("bakery_skip_calc_leave_check");
       const savedLanguage = localStorage.getItem("bakery_language");
+      const savedAuthUser = localStorage.getItem("bakery_auth_user");
       if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
       if (savedCostItems) setCostItems(JSON.parse(savedCostItems));
       if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
       if (savedSkipCalcLeaveCheck === "true") setSkipCalcLeaveCheck(true);
       if (LANGUAGES.some(lang => lang.code === savedLanguage)) setLanguage(savedLanguage);
+      if (savedAuthUser) setAuthUser(JSON.parse(savedAuthUser));
     } catch (e) {
       console.error("로컬스토리지 데이터를 읽는 중 오류가 발생했습니다.", e);
     }
@@ -106,6 +108,16 @@ export default function Home() {
     localStorage.setItem("bakery_language", nextLanguage);
   };
 
+  const handleGoogleSignIn = (user) => {
+    setAuthUser(user);
+    localStorage.setItem("bakery_auth_user", JSON.stringify(user));
+  };
+
+  const handleSignOut = () => {
+    setAuthUser(null);
+    localStorage.removeItem("bakery_auth_user");
+  };
+
   const confirmLeaveCheck = () => {
     saveLeaveCheckPreference();
 
@@ -120,18 +132,39 @@ export default function Home() {
   };
 
   if (!isLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
-  if (!accessMode) return <LoginScreen t={t} onGoogleStart={() => setAccessMode("authenticated")} />;
+  if (!authUser) return <LoginScreen t={t} onGoogleSignIn={handleGoogleSignIn} />;
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
-      <nav className="sticky top-0 z-40 flex gap-4 md:gap-8 p-4 md:p-6 bg-white/80 backdrop-blur-md border-b border-gray-200 justify-start md:justify-center overflow-x-auto whitespace-nowrap shadow-sm no-scrollbar print:hidden">
-        <NavButton active={view === "calc"} onClick={() => moveToView("calc")}>{t("navRecipeCalculator")}</NavButton>
-        <NavButton active={view === "db"} onClick={() => moveToView("db")}>{t("navRecipeDb")}</NavButton>
-        <NavButton active={view === "cost_db"} onClick={() => moveToView("cost_db")}>{t("navCostDb")}</NavButton>
-        <NavButton active={view === "temp_db"} onClick={() => moveToView("temp_db")}>{t("navTempPh")}</NavButton>
-        <NavButton active={view === "community"} onClick={() => moveToView("community")}>{t("navCommunity")}</NavButton>
-        <NavButton active={view === "videos"} onClick={() => moveToView("videos")}>{t("navVideos")}</NavButton>
-        <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>{t("navSettings")}</NavButton>
+      <nav className="sticky top-0 z-40 relative bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm print:hidden">
+        <div className="flex gap-4 md:gap-8 p-4 md:p-6 md:px-40 justify-start md:justify-center overflow-x-auto whitespace-nowrap no-scrollbar">
+          <NavButton active={view === "calc"} onClick={() => moveToView("calc")}>{t("navRecipeCalculator")}</NavButton>
+          <NavButton active={view === "db"} onClick={() => moveToView("db")}>{t("navRecipeDb")}</NavButton>
+          <NavButton active={view === "cost_db"} onClick={() => moveToView("cost_db")}>{t("navCostDb")}</NavButton>
+          <NavButton active={view === "temp_db"} onClick={() => moveToView("temp_db")}>{t("navTempPh")}</NavButton>
+          <NavButton active={view === "community"} onClick={() => moveToView("community")}>{t("navCommunity")}</NavButton>
+          <NavButton active={view === "videos"} onClick={() => moveToView("videos")}>{t("navVideos")}</NavButton>
+          <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>{t("navSettings")}</NavButton>
+        </div>
+        <button
+          type="button"
+          onClick={handleSignOut}
+          className="absolute right-4 top-1/2 hidden -translate-y-1/2 items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-500 md:flex md:right-6"
+          title={t("signOut")}
+        >
+          {authUser.picture ? (
+            <span
+              aria-hidden="true"
+              className="h-6 w-6 rounded-full bg-cover bg-center"
+              style={{ backgroundImage: `url(${authUser.picture})` }}
+            />
+          ) : (
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black text-[10px] text-white">
+              {authUser.name?.[0] || "U"}
+            </span>
+          )}
+          <span className="max-w-28 truncate">{authUser.name || authUser.email}</span>
+        </button>
       </nav>
 
       <div className="py-4 md:py-8 print:py-0">
@@ -141,7 +174,7 @@ export default function Home() {
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={setCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} onSignOut={handleSignOut} />}
       </div>
       {leaveCheckStep && (
         <LeaveCheckModal
@@ -158,7 +191,7 @@ export default function Home() {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck }) {
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, onSignOut }) {
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-8 text-black">
       <div className="border-b-2 border-black pb-4 mb-6">
@@ -180,6 +213,36 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
               <option key={lang.code} value={lang.code}>{lang.label}</option>
             ))}
           </select>
+        </div>
+      </section>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {authUser.picture ? (
+              <span
+                aria-hidden="true"
+                className="h-11 w-11 rounded-full bg-cover bg-center"
+                style={{ backgroundImage: `url(${authUser.picture})` }}
+              />
+            ) : (
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black text-sm font-black text-white">
+                {authUser.name?.[0] || "U"}
+              </span>
+            )}
+            <div>
+              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("signedInAs")}</div>
+              <h2 className="mt-1 text-xl font-black tracking-tighter">{authUser.name || authUser.email}</h2>
+              {authUser.email && <p className="mt-1 text-xs font-bold text-gray-400">{authUser.email}</p>}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="bg-black text-white px-5 py-3 rounded-xl text-sm font-black uppercase tracking-tight"
+          >
+            {t("signOut")}
+          </button>
         </div>
       </section>
 
@@ -233,7 +296,98 @@ function LeaveCheckModal({ message, t, hideLeaveCheck, setHideLeaveCheck, onCanc
   );
 }
 
-function LoginScreen({ t, onGoogleStart }) {
+function decodeJwtPayload(token) {
+  try {
+    const base64Payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = decodeURIComponent(
+      atob(base64Payload)
+        .split("")
+        .map(char => `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`)
+        .join("")
+    );
+    return JSON.parse(payload);
+  } catch (error) {
+    console.error("Google 로그인 정보를 읽는 중 오류가 발생했습니다.", error);
+    return null;
+  }
+}
+
+function LoginScreen({ t, onGoogleSignIn }) {
+  const googleButtonRef = useRef(null);
+  const [googleStatus, setGoogleStatus] = useState("loading");
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+
+  useEffect(() => {
+    if (!googleClientId) return;
+
+    let isMounted = true;
+
+    const initializeGoogle = () => {
+      if (!isMounted || !window.google?.accounts?.id || !googleButtonRef.current) return;
+
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: (response) => {
+          const profile = decodeJwtPayload(response.credential);
+          if (!profile) {
+            setGoogleStatus("error");
+            return;
+          }
+
+          onGoogleSignIn({
+            id: profile.sub,
+            name: profile.name,
+            email: profile.email,
+            picture: profile.picture,
+            signedInAt: new Date().toISOString(),
+          });
+        },
+      });
+
+      googleButtonRef.current.innerHTML = "";
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: "outline",
+        size: "large",
+        type: "standard",
+        shape: "rectangular",
+        text: "continue_with",
+        logo_alignment: "left",
+        width: googleButtonRef.current.offsetWidth || 320,
+      });
+      setGoogleStatus("ready");
+    };
+
+    if (window.google?.accounts?.id) {
+      initializeGoogle();
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const existingScript = document.querySelector("script[src='https://accounts.google.com/gsi/client']");
+    if (existingScript) {
+      existingScript.addEventListener("load", initializeGoogle, { once: true });
+      return () => {
+        isMounted = false;
+        existingScript.removeEventListener("load", initializeGoogle);
+      };
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = initializeGoogle;
+    script.onerror = () => setGoogleStatus("error");
+    document.head.appendChild(script);
+
+    return () => {
+      isMounted = false;
+      script.onload = null;
+      script.onerror = null;
+    };
+  }, [googleClientId, onGoogleSignIn]);
+
   return (
     <main
       className="min-h-screen px-4 py-8 md:px-8 text-black bg-cover bg-center relative overflow-hidden"
@@ -253,14 +407,21 @@ function LoginScreen({ t, onGoogleStart }) {
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">{t("signIn")}</h1>
           </div>
 
-          <button
-            type="button"
-            onClick={onGoogleStart}
-            className="w-full bg-white/72 md:bg-white border border-white/35 md:border-gray-200 py-4 rounded-xl font-black text-sm uppercase tracking-tight hover:border-black transition-all flex items-center justify-center gap-3"
-          >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black text-xs font-black text-white">G</span>
-            {t("googleStart")}
-          </button>
+          {googleClientId ? (
+            <>
+              <div ref={googleButtonRef} className="min-h-11 w-full overflow-hidden rounded-xl" />
+              {googleStatus === "loading" && (
+                <p className="mt-3 text-xs font-bold text-gray-500">{t("googleLoading")}</p>
+              )}
+              {googleStatus === "error" && (
+                <p className="mt-3 text-xs font-bold text-red-600">{t("googleLoginError")}</p>
+              )}
+            </>
+          ) : (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
+              {t("googleClientMissing")}
+            </div>
+          )}
         </section>
       </div>
     </main>
