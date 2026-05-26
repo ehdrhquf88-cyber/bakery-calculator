@@ -69,6 +69,28 @@ export default function Home() {
     }
   }, [recipes, costItems, tempLogs, isLoaded]);
 
+  useEffect(() => {
+    const clearAuthSession = () => {
+      setAuthUser(null);
+      localStorage.removeItem("bakery_auth_user");
+      window.google?.accounts?.id?.disableAutoSelect?.();
+    };
+
+    const clearRestoredPageSession = (event) => {
+      if (event.persisted) clearAuthSession();
+    };
+
+    window.addEventListener("pagehide", clearAuthSession);
+    window.addEventListener("beforeunload", clearAuthSession);
+    window.addEventListener("pageshow", clearRestoredPageSession);
+
+    return () => {
+      window.removeEventListener("pagehide", clearAuthSession);
+      window.removeEventListener("beforeunload", clearAuthSession);
+      window.removeEventListener("pageshow", clearRestoredPageSession);
+    };
+  }, []);
+
   const saveLeaveCheckPreference = () => {
     if (!hideLeaveCheck) return;
     localStorage.setItem("bakery_skip_calc_leave_check", "true");
