@@ -347,14 +347,18 @@ export default function Home() {
 
 function AdminPanel({ t }) {
   const [profiles, setProfiles] = useState([]);
+  const [allowlist, setAllowlist] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [adminError, setAdminError] = useState("");
   const [savingProfileId, setSavingProfileId] = useState(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("user");
+  const [isSavingInvite, setIsSavingInvite] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
-    const loadProfiles = async () => {
+    const loadAdminData = async () => {
       if (!supabase) {
         setIsLoading(false);
         return;
@@ -363,23 +367,30 @@ function AdminPanel({ t }) {
       setIsLoading(true);
       setAdminError("");
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, email, full_name, avatar_url, role, created_at, updated_at")
-        .order("created_at", { ascending: false });
+      const [profilesResult, allowlistResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, email, full_name, avatar_url, role, created_at, updated_at")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("auth_allowlist")
+          .select("email, role, created_at")
+          .order("created_at", { ascending: false }),
+      ]);
 
       if (!isMounted) return;
 
-      if (error) {
-        setAdminError(error.message);
+      if (profilesResult.error || allowlistResult.error) {
+        setAdminError(profilesResult.error?.message || allowlistResult.error?.message);
       } else {
-        setProfiles(data || []);
+        setProfiles(profilesResult.data || []);
+        setAllowlist(allowlistResult.data || []);
       }
 
       setIsLoading(false);
     };
 
-    loadProfiles();
+    loadAdminData();
 
     return () => {
       isMounted = false;
@@ -408,6 +419,69 @@ function AdminPanel({ t }) {
     setSavingProfileId(null);
   };
 
+  const addInvite = async (event) => {
+    event.preventDefault();
+    if (!supabase) return;
+
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) return;
+
+    setIsSavingInvite(true);
+    setAdminError("");
+
+    const { data, error } = await supabase
+      .from("auth_allowlist")
+      .upsert({ email, role: inviteRole || null }, { onConflict: "email" })
+      .select("email, role, created_at")
+      .single();
+
+    if (error) {
+      setAdminError(error.message);
+    } else {
+      await supabase
+        .from("profiles")
+        .update({ role: data.role || null })
+        .eq("email", data.email);
+
+      setAllowlist(prev => {
+        const withoutExisting = prev.filter(invite => invite.email !== data.email);
+        return [data, ...withoutExisting];
+      });
+      setProfiles(prev => prev.map(profile => (
+        profile.email === data.email ? { ...profile, role: data.role || null } : profile
+      )));
+      setInviteEmail("");
+      setInviteRole("user");
+    }
+
+    setIsSavingInvite(false);
+  };
+
+  const removeInvite = async (email) => {
+    if (!supabase || !confirm(t("deleteConfirm"))) return;
+
+    setAdminError("");
+
+    const { error } = await supabase
+      .from("auth_allowlist")
+      .delete()
+      .eq("email", email);
+
+    if (error) {
+      setAdminError(error.message);
+    } else {
+      await supabase
+        .from("profiles")
+        .update({ role: null })
+        .eq("email", email);
+
+      setAllowlist(prev => prev.filter(invite => invite.email !== email));
+      setProfiles(prev => prev.map(profile => (
+        profile.email === email ? { ...profile, role: null } : profile
+      )));
+    }
+  };
+
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-6 gap-4">
@@ -425,6 +499,63 @@ function AdminPanel({ t }) {
           {adminError}
         </div>
       )}
+
+      <section className="mb-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm md:p-6">
+        <div className="mb-4 flex flex-col gap-1">
+          <h2 className="text-2xl font-black tracking-tighter">{t("inviteUsers")}</h2>
+          <p className="text-xs font-bold text-gray-400">{t("inviteUsersDescription")}</p>
+        </div>
+
+        <form onSubmit={addInvite} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_140px_120px]">
+          <input
+            type="email"
+            value={inviteEmail}
+            onChange={event => setInviteEmail(event.target.value)}
+            placeholder={t("email")}
+            className="h-11 rounded-xl border border-gray-200 bg-[#f7f6f3] px-3 text-sm font-bold outline-none"
+            required
+          />
+          <select
+            value={inviteRole}
+            onChange={event => setInviteRole(event.target.value)}
+            className="h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-black outline-none"
+          >
+            <option value="user">user</option>
+            <option value="admin">admin</option>
+          </select>
+          <button
+            type="submit"
+            disabled={isSavingInvite}
+            className="h-11 rounded-xl bg-black px-4 text-sm font-black uppercase tracking-tight text-white disabled:bg-gray-300"
+          >
+            {isSavingInvite ? t("saving") : t("add")}
+          </button>
+        </form>
+
+        <div className="mt-5 overflow-hidden rounded-xl border border-gray-100">
+          {isLoading ? (
+            <div className="p-4 text-sm font-bold text-gray-400">{t("loading")}</div>
+          ) : allowlist.length === 0 ? (
+            <div className="p-4 text-sm font-bold text-gray-400">{t("noInvites")}</div>
+          ) : (
+            allowlist.map(invite => (
+              <div key={invite.email} className="grid grid-cols-[1fr_100px_36px] items-center gap-3 border-b border-gray-100 px-4 py-3 last:border-b-0 md:grid-cols-[1fr_120px_170px_36px]">
+                <div className="truncate text-sm font-black tracking-tight">{invite.email}</div>
+                <div className="text-xs font-black text-gray-500">{invite.role || t("roleNull")}</div>
+                <div className="hidden text-xs font-bold text-gray-400 md:block">{formatDateTime(invite.created_at)}</div>
+                <button
+                  type="button"
+                  onClick={() => removeInvite(invite.email)}
+                  className="text-sm font-black text-gray-300 hover:text-red-500"
+                  title={t("deleteInvite")}
+                >
+                  x
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
 
       <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
         <div className="grid grid-cols-[1.5fr_120px_150px] gap-3 border-b border-gray-100 bg-[#f7f6f3] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-400 md:grid-cols-[2fr_140px_180px_180px]">

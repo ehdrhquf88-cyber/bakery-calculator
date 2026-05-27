@@ -19,23 +19,6 @@ create table if not exists public.auth_allowlist (
   created_at timestamptz not null default now()
 );
 
-alter table public.auth_allowlist enable row level security;
-
-drop policy if exists "Supabase Auth can read the login allowlist" on public.auth_allowlist;
-create policy "Supabase Auth can read the login allowlist"
-on public.auth_allowlist
-for select
-to supabase_auth_admin
-using (true);
-
-grant select on public.auth_allowlist to supabase_auth_admin;
-revoke all on public.auth_allowlist from anon, authenticated;
-
-insert into public.auth_allowlist (email, role)
-values ('ehdrhquf88@gmail.com', 'admin')
-on conflict (email) do update
-set role = excluded.role;
-
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null unique,
@@ -46,11 +29,19 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+alter table public.auth_allowlist enable row level security;
 alter table public.profiles enable row level security;
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
 grant usage on schema private to authenticated;
+
+grant select on public.auth_allowlist to supabase_auth_admin;
+revoke all on public.auth_allowlist from anon, authenticated;
+grant select, insert, update, delete on public.auth_allowlist to authenticated;
+
+revoke all on public.profiles from anon;
+grant select, update on public.profiles to authenticated;
 
 create or replace function private.is_admin()
 returns boolean
@@ -68,6 +59,42 @@ $$;
 
 revoke all on function private.is_admin() from public, anon, authenticated;
 grant execute on function private.is_admin() to authenticated;
+
+drop policy if exists "Supabase Auth can read the login allowlist" on public.auth_allowlist;
+create policy "Supabase Auth can read the login allowlist"
+on public.auth_allowlist
+for select
+to supabase_auth_admin
+using (true);
+
+drop policy if exists "Admins can view the login allowlist" on public.auth_allowlist;
+create policy "Admins can view the login allowlist"
+on public.auth_allowlist
+for select
+to authenticated
+using ((select private.is_admin()));
+
+drop policy if exists "Admins can insert the login allowlist" on public.auth_allowlist;
+create policy "Admins can insert the login allowlist"
+on public.auth_allowlist
+for insert
+to authenticated
+with check ((select private.is_admin()));
+
+drop policy if exists "Admins can update the login allowlist" on public.auth_allowlist;
+create policy "Admins can update the login allowlist"
+on public.auth_allowlist
+for update
+to authenticated
+using ((select private.is_admin()))
+with check ((select private.is_admin()));
+
+drop policy if exists "Admins can delete the login allowlist" on public.auth_allowlist;
+create policy "Admins can delete the login allowlist"
+on public.auth_allowlist
+for delete
+to authenticated
+using ((select private.is_admin()));
 
 drop policy if exists "Users can view their own profile" on public.profiles;
 create policy "Users can view their own profile"
@@ -91,6 +118,11 @@ to authenticated
 using ((select private.is_admin()))
 with check (true);
 
+insert into public.auth_allowlist (email, role)
+values ('ehdrhquf88@gmail.com', 'admin')
+on conflict (email) do update
+set role = excluded.role;
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -112,7 +144,13 @@ begin
     coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name'),
     coalesce(new.raw_user_meta_data ->> 'avatar_url', new.raw_user_meta_data ->> 'picture'),
     allowlist_role
-  );
+  )
+  on conflict (id) do update
+  set
+    email = excluded.email,
+    full_name = excluded.full_name,
+    avatar_url = excluded.avatar_url,
+    role = excluded.role;
 
   return new;
 end;
@@ -145,6 +183,50 @@ drop trigger if exists on_profile_updated on public.profiles;
 create trigger on_profile_updated
 before update on public.profiles
 for each row execute function public.handle_profile_updated_at();
+
+create or replace function public.sync_profile_role_from_allowlist()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    update public.profiles
+    set role = null
+    where lower(email) = lower(old.email);
+
+    return old;
+  end if;
+
+  insert into public.profiles (id, email, full_name, avatar_url, role)
+  select
+    users.id,
+    users.email,
+    coalesce(users.raw_user_meta_data ->> 'full_name', users.raw_user_meta_data ->> 'name'),
+    coalesce(users.raw_user_meta_data ->> 'avatar_url', users.raw_user_meta_data ->> 'picture'),
+    new.role
+  from auth.users
+  where lower(users.email) = lower(new.email)
+  on conflict (id) do update
+  set
+    email = excluded.email,
+    full_name = excluded.full_name,
+    avatar_url = excluded.avatar_url,
+    role = excluded.role;
+
+  return new;
+end;
+$$;
+
+revoke execute
+  on function public.sync_profile_role_from_allowlist
+  from authenticated, anon, public;
+
+drop trigger if exists on_auth_allowlist_role_changed on public.auth_allowlist;
+create trigger on_auth_allowlist_role_changed
+after insert or update or delete on public.auth_allowlist
+for each row execute function public.sync_profile_role_from_allowlist();
 
 create or replace function public.hook_restrict_login_to_allowlist(event jsonb)
 returns jsonb
@@ -183,3 +265,21 @@ grant execute
 revoke execute
   on function public.hook_restrict_login_to_allowlist
   from authenticated, anon, public;
+
+-- Backfill existing Auth users and keep profile roles aligned with the current allowlist.
+insert into public.profiles (id, email, full_name, avatar_url, role)
+select
+  users.id,
+  users.email,
+  coalesce(users.raw_user_meta_data ->> 'full_name', users.raw_user_meta_data ->> 'name'),
+  coalesce(users.raw_user_meta_data ->> 'avatar_url', users.raw_user_meta_data ->> 'picture'),
+  allowlist.role
+from auth.users
+left join public.auth_allowlist as allowlist
+  on lower(allowlist.email) = lower(users.email)
+on conflict (id) do update
+set
+  email = excluded.email,
+  full_name = excluded.full_name,
+  avatar_url = excluded.avatar_url,
+  role = excluded.role;

@@ -29,6 +29,11 @@ Official Supabase references:
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
 ```
+8. In `Project Settings > API > Data API`, expose only the tables the app needs:
+   - `public.profiles`
+   - `public.auth_allowlist`
+
+Keep `Automatically expose new tables` disabled. Both exposed tables must keep RLS enabled.
 
 ## Roles
 
@@ -61,3 +66,5 @@ where email = 'newuser@example.com';
 ```
 
 The `Before User Created` hook blocks new unauthorized accounts before they are created. If an unauthorized account already exists from before the hook was enabled, remove or disable it in `Authentication > Users`.
+
+Admins can also manage `public.auth_allowlist` from the app's Admin page. The table is safe to expose through the Data API only with the admin-only RLS policies from [supabase-auth-setup.sql](/Users/hayoungkim/levain-lab/bakery-app/docs/supabase-auth-setup.sql).
