@@ -35,6 +35,7 @@ alter table public.profiles enable row level security;
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
 grant usage on schema private to authenticated;
+grant usage on schema public to supabase_auth_admin;
 
 grant select on public.auth_allowlist to supabase_auth_admin;
 revoke all on public.auth_allowlist from anon, authenticated;
@@ -47,7 +48,7 @@ create or replace function private.is_admin()
 returns boolean
 language sql
 security definer
-set search_path = public
+set search_path = ''
 as $$
   select exists (
     select 1
@@ -59,6 +60,103 @@ $$;
 
 revoke all on function private.is_admin() from public, anon, authenticated;
 grant execute on function private.is_admin() to authenticated;
+
+create or replace function private.has_app_access()
+returns boolean
+language sql
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = (select auth.uid())
+      and role in ('admin'::public.app_role, 'user'::public.app_role)
+  );
+$$;
+
+revoke all on function private.has_app_access() from public, anon, authenticated;
+grant execute on function private.has_app_access() to authenticated;
+
+create or replace function private.prevent_last_admin_role_removal()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  admin_count integer;
+  target_profile_is_admin boolean;
+begin
+  if tg_table_schema = 'public' and tg_table_name = 'profiles' then
+    if tg_op = 'UPDATE'
+      and old.role = 'admin'::public.app_role
+      and coalesce(new.role::text, '') <> 'admin'
+    then
+      select count(*)
+      into admin_count
+      from public.profiles
+      where role = 'admin'::public.app_role;
+
+      if admin_count <= 1 then
+        raise exception 'At least one admin profile must remain.';
+      end if;
+    end if;
+
+    return new;
+  end if;
+
+  if tg_table_schema = 'public' and tg_table_name = 'auth_allowlist' then
+    if (
+      tg_op = 'DELETE'
+      and old.role = 'admin'::public.app_role
+    ) or (
+      tg_op = 'UPDATE'
+      and old.role = 'admin'::public.app_role
+      and coalesce(new.role::text, '') <> 'admin'
+    ) then
+      select count(*)
+      into admin_count
+      from public.profiles
+      where role = 'admin'::public.app_role;
+
+      select exists (
+        select 1
+        from public.profiles
+        where lower(email) = lower(old.email)
+          and role = 'admin'::public.app_role
+      )
+      into target_profile_is_admin;
+
+      if target_profile_is_admin and admin_count <= 1 then
+        raise exception 'At least one admin profile must remain.';
+      end if;
+    end if;
+
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+
+    return new;
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke execute
+  on function private.prevent_last_admin_role_removal
+  from authenticated, anon, public;
+
+drop trigger if exists on_profiles_prevent_last_admin_removal on public.profiles;
+create trigger on_profiles_prevent_last_admin_removal
+before update on public.profiles
+for each row execute function private.prevent_last_admin_role_removal();
+
+drop trigger if exists on_auth_allowlist_prevent_last_admin_removal on public.auth_allowlist;
+create trigger on_auth_allowlist_prevent_last_admin_removal
+before update or delete on public.auth_allowlist
+for each row execute function private.prevent_last_admin_role_removal();
 
 drop policy if exists "Supabase Auth can read the login allowlist" on public.auth_allowlist;
 create policy "Supabase Auth can read the login allowlist"
@@ -101,7 +199,10 @@ create policy "Users can view their own profile"
 on public.profiles
 for select
 to authenticated
-using ((select auth.uid()) = id);
+using (
+  (select auth.uid()) = id
+  and (select private.has_app_access())
+);
 
 drop policy if exists "Admins can view all profiles" on public.profiles;
 create policy "Admins can view all profiles"
@@ -127,7 +228,7 @@ create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
   allowlist_role public.app_role;
@@ -168,6 +269,8 @@ for each row execute function public.handle_new_user();
 create or replace function public.handle_profile_updated_at()
 returns trigger
 language plpgsql
+security invoker
+set search_path = ''
 as $$
 begin
   new.updated_at = now();
@@ -188,7 +291,7 @@ create or replace function public.sync_profile_role_from_allowlist()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 begin
   if tg_op = 'DELETE' then
@@ -231,6 +334,8 @@ for each row execute function public.sync_profile_role_from_allowlist();
 create or replace function public.hook_restrict_login_to_allowlist(event jsonb)
 returns jsonb
 language plpgsql
+security invoker
+set search_path = ''
 as $$
 declare
   user_email text;

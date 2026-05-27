@@ -47,6 +47,8 @@ Use Supabase Table Editor or SQL to change a user's role after the user has sign
 
 The Auth Hook allows only emails in `public.auth_allowlist` to create an account. The app also keeps a secondary gate: only `admin` and `user` roles can enter the product UI. A `null` role is treated as not invited and the app signs the session out with `초대된 사람만 로그인 가능합니다`.
 
+The profile RLS policy also requires `admin` or `user` access before a user can read their own profile through the Data API. This keeps previously-created users with a `null` role from reading app profile data after they are removed from the allowlist.
+
 ## Allowlist
 
 Only emails in `public.auth_allowlist` can create an account. Add a user:
@@ -68,3 +70,13 @@ where email = 'newuser@example.com';
 The `Before User Created` hook blocks new unauthorized accounts before they are created. If an unauthorized account already exists from before the hook was enabled, remove or disable it in `Authentication > Users`.
 
 Admins can also manage `public.auth_allowlist` from the app's Admin page. The table is safe to expose through the Data API only with the admin-only RLS policies from [supabase-auth-setup.sql](/Users/hayoungkim/levain-lab/bakery-app/docs/supabase-auth-setup.sql).
+
+The SQL setup prevents removing or demoting the last existing admin profile. Create another admin first before changing the final admin to `user` or `null`.
+
+## Security Hardening
+
+- Keep `private` out of Data API exposed schemas.
+- Keep `Automatically expose new tables` disabled.
+- Do not put a Supabase service role key in `NEXT_PUBLIC_*` variables or browser code.
+- Security definer functions use an empty `search_path` and fully-qualified table names.
+- If you remove an existing user from the allowlist, also remove or disable the user in `Authentication > Users` when you want to block the Supabase Auth account itself, not only app/API access.
