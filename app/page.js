@@ -14,6 +14,7 @@ import { SUPABASE_AUTH_STORAGE_KEY, isSupabaseConfigured, supabase } from "./lib
 
 const INVITE_ONLY_MESSAGE = "초대된 사람만 로그인 가능합니다";
 const APP_ACCESS_ROLES = ["admin", "user"];
+const PROFILE_ROLES = ["admin", "user", ""];
 
 function clearStoredAuthSession() {
   localStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY);
@@ -92,6 +93,7 @@ export default function Home() {
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [authError, setAuthError] = useState("");
   const t = getTranslator(language);
+  const isAdmin = authUser?.role === "admin";
 
   // 로컬스토리지 로드
   useEffect(() => {
@@ -294,6 +296,7 @@ export default function Home() {
           <NavButton active={view === "temp_db"} onClick={() => moveToView("temp_db")}>{t("navTempPh")}</NavButton>
           <NavButton active={view === "community"} onClick={() => moveToView("community")}>{t("navCommunity")}</NavButton>
           <NavButton active={view === "videos"} onClick={() => moveToView("videos")}>{t("navVideos")}</NavButton>
+          {isAdmin && <NavButton active={view === "admin"} onClick={() => moveToView("admin")}>{t("navAdmin")}</NavButton>}
           <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>{t("navSettings")}</NavButton>
         </div>
         <button
@@ -324,6 +327,7 @@ export default function Home() {
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={setCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
+        {view === "admin" && isAdmin && <AdminPanel t={t} />}
         {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} onSignOut={handleSignOut} />}
       </div>
       {leaveCheckStep && (
@@ -339,6 +343,151 @@ export default function Home() {
       <ServiceWorkerUpdater t={t} />
     </div>
   );
+}
+
+function AdminPanel({ t }) {
+  const [profiles, setProfiles] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [adminError, setAdminError] = useState("");
+  const [savingProfileId, setSavingProfileId] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadProfiles = async () => {
+      if (!supabase) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      setAdminError("");
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, email, full_name, avatar_url, role, created_at, updated_at")
+        .order("created_at", { ascending: false });
+
+      if (!isMounted) return;
+
+      if (error) {
+        setAdminError(error.message);
+      } else {
+        setProfiles(data || []);
+      }
+
+      setIsLoading(false);
+    };
+
+    loadProfiles();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const updateProfileRole = async (profileId, nextRole) => {
+    if (!supabase) return;
+
+    setSavingProfileId(profileId);
+    setAdminError("");
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({ role: nextRole || null })
+      .eq("id", profileId)
+      .select("id, email, full_name, avatar_url, role, created_at, updated_at")
+      .single();
+
+    if (error) {
+      setAdminError(error.message);
+    } else {
+      setProfiles(prev => prev.map(profile => (profile.id === profileId ? data : profile)));
+    }
+
+    setSavingProfileId(null);
+  };
+
+  return (
+    <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-6 gap-4">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">{t("adminTitle")}</h1>
+          <p className="mt-2 text-xs md:text-sm font-bold text-gray-400">{t("adminDescription")}</p>
+        </div>
+        <div className="bg-white border border-gray-100 rounded-full px-4 py-2 text-xs font-black text-gray-400 uppercase tracking-widest">
+          {profiles.length} {t("users")}
+        </div>
+      </div>
+
+      {adminError && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+          {adminError}
+        </div>
+      )}
+
+      <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="grid grid-cols-[1.5fr_120px_150px] gap-3 border-b border-gray-100 bg-[#f7f6f3] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-400 md:grid-cols-[2fr_140px_180px_180px]">
+          <div>{t("user")}</div>
+          <div>{t("userRole")}</div>
+          <div>{t("joinedAt")}</div>
+          <div className="hidden md:block">{t("updatedAt")}</div>
+        </div>
+
+        {isLoading ? (
+          <div className="p-6 text-sm font-bold text-gray-400">{t("loading")}</div>
+        ) : profiles.length === 0 ? (
+          <div className="p-6 text-sm font-bold text-gray-400">{t("noUsers")}</div>
+        ) : (
+          profiles.map(profile => (
+            <div key={profile.id} className="grid grid-cols-[1.5fr_120px_150px] gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0 md:grid-cols-[2fr_140px_180px_180px]">
+              <div className="flex min-w-0 items-center gap-3">
+                {profile.avatar_url ? (
+                  <span
+                    aria-hidden="true"
+                    className="h-10 w-10 shrink-0 rounded-full bg-cover bg-center"
+                    style={{ backgroundImage: `url(${profile.avatar_url})` }}
+                  />
+                ) : (
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black text-xs font-black text-white">
+                    {profile.full_name?.[0] || profile.email?.[0] || "U"}
+                  </span>
+                )}
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-black tracking-tight">{profile.full_name || profile.email}</div>
+                  <div className="mt-1 truncate text-xs font-bold text-gray-400">{profile.email}</div>
+                </div>
+              </div>
+
+              <select
+                value={profile.role || ""}
+                onChange={event => updateProfileRole(profile.id, event.target.value)}
+                disabled={savingProfileId === profile.id}
+                className="h-10 rounded-xl border border-gray-200 bg-white px-2 text-xs font-black outline-none disabled:bg-gray-100"
+              >
+                {PROFILE_ROLES.map(role => (
+                  <option key={role || "null"} value={role}>
+                    {role || t("roleNull")}
+                  </option>
+                ))}
+              </select>
+
+              <div className="self-center text-xs font-bold text-gray-400">{formatDateTime(profile.created_at)}</div>
+              <div className="hidden self-center text-xs font-bold text-gray-400 md:block">{formatDateTime(profile.updated_at)}</div>
+            </div>
+          ))
+        )}
+      </section>
+    </main>
+  );
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("ko-KR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, onSignOut }) {
