@@ -15,6 +15,50 @@ import { SUPABASE_AUTH_STORAGE_KEY, isSupabaseConfigured, supabase } from "./lib
 const INVITE_ONLY_MESSAGE = "초대된 사람만 로그인 가능합니다";
 const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
+const USER_DATA_STORAGE_KEYS = {
+  recipes: "bakery_recipes",
+  costItems: "bakery_cost_items",
+  tempLogs: "bakery_temp_ph",
+};
+
+function getUserDataStorageKey(baseKey, authUser) {
+  return `${baseKey}:${authUser.id || authUser.email}`;
+}
+
+function loadUserData(authUser) {
+  const nextData = {
+    recipes: [],
+    costItems: [],
+    tempLogs: [],
+  };
+  const legacyKeysToRemove = [];
+
+  Object.entries(USER_DATA_STORAGE_KEYS).forEach(([name, baseKey]) => {
+    const userKey = getUserDataStorageKey(baseKey, authUser);
+    const userValue = localStorage.getItem(userKey);
+    const legacyValue = localStorage.getItem(baseKey);
+
+    if (userValue) {
+      nextData[name] = JSON.parse(userValue);
+      return;
+    }
+
+    if (legacyValue) {
+      nextData[name] = JSON.parse(legacyValue);
+      localStorage.setItem(userKey, legacyValue);
+      legacyKeysToRemove.push(baseKey);
+    }
+  });
+
+  legacyKeysToRemove.forEach(key => localStorage.removeItem(key));
+  return nextData;
+}
+
+function saveUserData(authUser, recipes, costItems, tempLogs) {
+  localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.recipes, authUser), JSON.stringify(recipes));
+  localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.costItems, authUser), JSON.stringify(costItems));
+  localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.tempLogs, authUser), JSON.stringify(tempLogs));
+}
 
 function clearStoredAuthSession() {
   localStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY);
@@ -85,6 +129,8 @@ export default function Home() {
   const [tempLogs, setTempLogs] = useState([]);
   const [authUser, setAuthUser] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [userDataLoaded, setUserDataLoaded] = useState(false);
+  const [userDataOwnerId, setUserDataOwnerId] = useState(null);
   const [skipCalcLeaveCheck, setSkipCalcLeaveCheck] = useState(false);
   const [pendingView, setPendingView] = useState(null);
   const [pendingCalcAction, setPendingCalcAction] = useState(null);
@@ -101,15 +147,9 @@ export default function Home() {
 
     const loadApp = async () => {
       try {
-        const savedRecipes = localStorage.getItem("bakery_recipes");
-        const savedCostItems = localStorage.getItem("bakery_cost_items");
-        const savedTempLogs = localStorage.getItem("bakery_temp_ph");
         const savedSkipCalcLeaveCheck = localStorage.getItem("bakery_skip_calc_leave_check");
         const savedLanguage = localStorage.getItem("bakery_language");
         const redirectError = getAuthRedirectError();
-        if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
-        if (savedCostItems) setCostItems(JSON.parse(savedCostItems));
-        if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
         if (savedSkipCalcLeaveCheck === "true") setSkipCalcLeaveCheck(true);
         if (LANGUAGES.some(lang => lang.code === savedLanguage)) setLanguage(savedLanguage);
         if (redirectError) setAuthError(decodeURIComponent(redirectError.replace(/\+/g, " ")));
@@ -141,18 +181,61 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    let isMounted = true;
+
+    const loadScopedUserData = async () => {
+      await Promise.resolve();
+      if (!isMounted) return;
+
+      if (!authUser) {
+        setRecipes([]);
+        setCostItems([]);
+        setTempLogs([]);
+        setUserDataLoaded(false);
+        setUserDataOwnerId(null);
+        return;
+      }
+
+      try {
+        setUserDataLoaded(false);
+        const userData = loadUserData(authUser);
+        if (!isMounted) return;
+        setRecipes(userData.recipes);
+        setCostItems(userData.costItems);
+        setTempLogs(userData.tempLogs);
+        setUserDataOwnerId(authUser.id);
+        setUserDataLoaded(true);
+      } catch (e) {
+        if (!isMounted) return;
+        console.error("사용자별 앱 데이터를 읽는 중 오류가 발생했습니다.", e);
+        setRecipes([]);
+        setCostItems([]);
+        setTempLogs([]);
+        setUserDataOwnerId(authUser.id);
+        setUserDataLoaded(true);
+      }
+    };
+
+    loadScopedUserData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authUser, isLoaded]);
+
   // 로컬스토리지 저장
   useEffect(() => {
-    if (isLoaded) {
+    if (isLoaded && authUser && userDataLoaded && userDataOwnerId === authUser.id) {
       try {
-        localStorage.setItem("bakery_recipes", JSON.stringify(recipes));
-        localStorage.setItem("bakery_cost_items", JSON.stringify(costItems));
-        localStorage.setItem("bakery_temp_ph", JSON.stringify(tempLogs));
+        saveUserData(authUser, recipes, costItems, tempLogs);
       } catch (e) {
         console.error("로컬스토리지 데이터 저장 중 오류가 발생했습니다.", e);
       }
     }
-  }, [recipes, costItems, tempLogs, isLoaded]);
+  }, [recipes, costItems, tempLogs, authUser, userDataLoaded, userDataOwnerId, isLoaded]);
 
   useEffect(() => {
     if (!supabase) return undefined;
@@ -188,6 +271,8 @@ export default function Home() {
       clearStoredAuthSession();
       supabase.auth.signOut({ scope: "local" });
       setAuthUser(null);
+      setUserDataLoaded(false);
+      setUserDataOwnerId(null);
     };
 
     window.addEventListener("pagehide", clearAuthSession);
@@ -267,6 +352,8 @@ export default function Home() {
     if (supabase) await supabase.auth.signOut();
     clearStoredAuthSession();
     setAuthUser(null);
+    setUserDataLoaded(false);
+    setUserDataOwnerId(null);
     localStorage.removeItem("bakery_auth_user");
   };
 
@@ -285,6 +372,7 @@ export default function Home() {
 
   if (!isLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
   if (!authUser) return <LoginScreen t={t} onGoogleSignIn={handleGoogleSignIn} authError={authError} />;
+  if (!userDataLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
