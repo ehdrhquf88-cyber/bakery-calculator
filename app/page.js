@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import BreadVideos from "./components/BreadVideos";
 import CostDB from "./components/CostDB";
 import MyBreadYourBread from "./components/MyBreadYourBread";
@@ -10,14 +10,72 @@ import RecipeDB from "./components/RecipeDB";
 import ServiceWorkerUpdater from "./components/ServiceWorkerUpdater";
 import TempPhDB from "./components/TempPhDB";
 import { DEFAULT_LANGUAGE, LANGUAGES, getTranslator } from "./i18n";
+import { SUPABASE_AUTH_STORAGE_KEY, isSupabaseConfigured, supabase } from "./lib/supabaseClient";
 
-const ALLOWED_GOOGLE_EMAILS = [
-  "ehdrhquf88@gmail.com",
-];
+const INVITE_ONLY_MESSAGE = "초대된 사람만 로그인 가능합니다";
+const APP_ACCESS_ROLES = ["admin", "user"];
 
-const isAllowedGoogleEmail = (email) => (
-  ALLOWED_GOOGLE_EMAILS.includes(email?.trim().toLowerCase())
-);
+function clearStoredAuthSession() {
+  localStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY);
+  localStorage.removeItem(`${SUPABASE_AUTH_STORAGE_KEY}-user`);
+  localStorage.removeItem(`${SUPABASE_AUTH_STORAGE_KEY}-code-verifier`);
+
+  for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+    const key = localStorage.key(i);
+    if (key?.startsWith("sb-") && key.endsWith("-auth-token")) {
+      localStorage.removeItem(key);
+      localStorage.removeItem(`${key}-user`);
+      localStorage.removeItem(`${key}-code-verifier`);
+    }
+  }
+}
+
+function getAuthRedirectError() {
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const message = searchParams.get("error_description")
+    || hashParams.get("error_description")
+    || searchParams.get("error")
+    || hashParams.get("error")
+    || "";
+
+  if (message.includes("초대")) return INVITE_ONLY_MESSAGE;
+  return message;
+}
+
+async function getSupabaseAuthUser(session) {
+  const user = session?.user;
+  if (!user) return null;
+
+  let role = null;
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (error) console.warn("프로필 정보를 읽지 못해 권한을 미지정으로 표시합니다.", error.message);
+    else if (!data) {
+      await supabase.auth.signOut({ scope: "local" });
+      throw new Error(INVITE_ONLY_MESSAGE);
+    } else if (!APP_ACCESS_ROLES.includes(data.role)) {
+      await supabase.auth.signOut({ scope: "local" });
+      throw new Error(INVITE_ONLY_MESSAGE);
+    } else {
+      role = data.role || null;
+    }
+  }
+
+  return {
+    id: user.id,
+    name: user.user_metadata?.full_name || user.user_metadata?.name || user.email,
+    email: user.email,
+    picture: user.user_metadata?.avatar_url || user.user_metadata?.picture || "",
+    role,
+    signedInAt: new Date().toISOString(),
+  };
+}
 
 export default function Home() {
   const [view, setView] = useState("calc");
@@ -32,29 +90,54 @@ export default function Home() {
   const [leaveCheckStep, setLeaveCheckStep] = useState(null);
   const [hideLeaveCheck, setHideLeaveCheck] = useState(false);
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
+  const [authError, setAuthError] = useState("");
   const t = getTranslator(language);
 
   // 로컬스토리지 로드
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    try {
-      const savedRecipes = localStorage.getItem("bakery_recipes");
-      const savedCostItems = localStorage.getItem("bakery_cost_items");
-      const savedTempLogs = localStorage.getItem("bakery_temp_ph");
-      const savedSkipCalcLeaveCheck = localStorage.getItem("bakery_skip_calc_leave_check");
-      const savedLanguage = localStorage.getItem("bakery_language");
-      if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
-      if (savedCostItems) setCostItems(JSON.parse(savedCostItems));
-      if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
-      if (savedSkipCalcLeaveCheck === "true") setSkipCalcLeaveCheck(true);
-      if (LANGUAGES.some(lang => lang.code === savedLanguage)) setLanguage(savedLanguage);
-      localStorage.removeItem("bakery_auth_user");
-    } catch (e) {
-      console.error("로컬스토리지 데이터를 읽는 중 오류가 발생했습니다.", e);
-    }
-    setIsLoaded(true);
+    let isMounted = true;
+
+    const loadApp = async () => {
+      try {
+        const savedRecipes = localStorage.getItem("bakery_recipes");
+        const savedCostItems = localStorage.getItem("bakery_cost_items");
+        const savedTempLogs = localStorage.getItem("bakery_temp_ph");
+        const savedSkipCalcLeaveCheck = localStorage.getItem("bakery_skip_calc_leave_check");
+        const savedLanguage = localStorage.getItem("bakery_language");
+        const redirectError = getAuthRedirectError();
+        if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
+        if (savedCostItems) setCostItems(JSON.parse(savedCostItems));
+        if (savedTempLogs) setTempLogs(JSON.parse(savedTempLogs));
+        if (savedSkipCalcLeaveCheck === "true") setSkipCalcLeaveCheck(true);
+        if (LANGUAGES.some(lang => lang.code === savedLanguage)) setLanguage(savedLanguage);
+        if (redirectError) setAuthError(decodeURIComponent(redirectError.replace(/\+/g, " ")));
+        localStorage.removeItem("bakery_auth_user");
+
+        if (supabase) {
+          const { data, error } = await supabase.auth.getSession();
+          if (error) throw error;
+          if (isMounted) setAuthUser(await getSupabaseAuthUser(data.session));
+        }
+      } catch (e) {
+        if (e.message === INVITE_ONLY_MESSAGE) {
+          if (isMounted) {
+            setAuthUser(null);
+            setAuthError(INVITE_ONLY_MESSAGE);
+          }
+        } else {
+          console.error("앱 데이터를 읽는 중 오류가 발생했습니다.", e);
+        }
+      } finally {
+        if (isMounted) setIsLoaded(true);
+      }
+    };
+
+    loadApp();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // 로컬스토리지 저장
   useEffect(() => {
@@ -70,24 +153,47 @@ export default function Home() {
   }, [recipes, costItems, tempLogs, isLoaded]);
 
   useEffect(() => {
-    const clearAuthSession = () => {
-      setAuthUser(null);
-      localStorage.removeItem("bakery_auth_user");
-      window.google?.accounts?.id?.disableAutoSelect?.();
-    };
+    if (!supabase) return undefined;
 
-    const clearRestoredPageSession = (event) => {
-      if (event.persisted) clearAuthSession();
+    let isMounted = true;
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      getSupabaseAuthUser(session)
+        .then(user => {
+          if (isMounted) setAuthUser(user);
+        })
+        .catch(error => {
+          if (error.message === INVITE_ONLY_MESSAGE) {
+            if (isMounted) {
+              setAuthUser(null);
+              setAuthError(INVITE_ONLY_MESSAGE);
+            }
+          } else {
+            console.error("로그인 상태를 갱신하는 중 오류가 발생했습니다.", error);
+          }
+        });
+    });
+
+    return () => {
+      isMounted = false;
+      data.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return undefined;
+
+    const clearAuthSession = () => {
+      clearStoredAuthSession();
+      supabase.auth.signOut({ scope: "local" });
+      setAuthUser(null);
     };
 
     window.addEventListener("pagehide", clearAuthSession);
     window.addEventListener("beforeunload", clearAuthSession);
-    window.addEventListener("pageshow", clearRestoredPageSession);
 
     return () => {
       window.removeEventListener("pagehide", clearAuthSession);
       window.removeEventListener("beforeunload", clearAuthSession);
-      window.removeEventListener("pageshow", clearRestoredPageSession);
     };
   }, []);
 
@@ -137,16 +243,27 @@ export default function Home() {
     localStorage.setItem("bakery_language", nextLanguage);
   };
 
-  const handleGoogleSignIn = (user) => {
-    if (!isAllowedGoogleEmail(user.email)) {
-      alert("초대받은 사용자만 이용할 수 있습니다.");
+  const handleGoogleSignIn = async () => {
+    setAuthError("");
+
+    if (!supabase) {
+      setAuthError(t("supabaseClientMissing"));
       return;
     }
 
-    setAuthUser(user);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+
+    if (error) setAuthError(error.message);
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    if (supabase) await supabase.auth.signOut();
+    clearStoredAuthSession();
     setAuthUser(null);
     localStorage.removeItem("bakery_auth_user");
   };
@@ -165,7 +282,7 @@ export default function Home() {
   };
 
   if (!isLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
-  if (!authUser) return <LoginScreen t={t} onGoogleSignIn={handleGoogleSignIn} />;
+  if (!authUser) return <LoginScreen t={t} onGoogleSignIn={handleGoogleSignIn} authError={authError} />;
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
@@ -267,6 +384,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
               <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("signedInAs")}</div>
               <h2 className="mt-1 text-xl font-black tracking-tighter">{authUser.name || authUser.email}</h2>
               {authUser.email && <p className="mt-1 text-xs font-bold text-gray-400">{authUser.email}</p>}
+              <p className="mt-1 text-xs font-bold text-gray-400">{t("userRole")}: {authUser.role || t("roleNull")}</p>
             </div>
           </div>
           <button
@@ -329,98 +447,7 @@ function LeaveCheckModal({ message, t, hideLeaveCheck, setHideLeaveCheck, onCanc
   );
 }
 
-function decodeJwtPayload(token) {
-  try {
-    const base64Payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const payload = decodeURIComponent(
-      atob(base64Payload)
-        .split("")
-        .map(char => `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`)
-        .join("")
-    );
-    return JSON.parse(payload);
-  } catch (error) {
-    console.error("Google 로그인 정보를 읽는 중 오류가 발생했습니다.", error);
-    return null;
-  }
-}
-
-function LoginScreen({ t, onGoogleSignIn }) {
-  const googleButtonRef = useRef(null);
-  const [googleStatus, setGoogleStatus] = useState("loading");
-  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
-
-  useEffect(() => {
-    if (!googleClientId) return;
-
-    let isMounted = true;
-
-    const initializeGoogle = () => {
-      if (!isMounted || !window.google?.accounts?.id || !googleButtonRef.current) return;
-
-      window.google.accounts.id.initialize({
-        client_id: googleClientId,
-        callback: (response) => {
-          const profile = decodeJwtPayload(response.credential);
-          if (!profile) {
-            setGoogleStatus("error");
-            return;
-          }
-
-          onGoogleSignIn({
-            id: profile.sub,
-            name: profile.name,
-            email: profile.email,
-            picture: profile.picture,
-            signedInAt: new Date().toISOString(),
-          });
-        },
-      });
-
-      googleButtonRef.current.innerHTML = "";
-      window.google.accounts.id.renderButton(googleButtonRef.current, {
-        theme: "outline",
-        size: "large",
-        type: "standard",
-        shape: "rectangular",
-        text: "continue_with",
-        logo_alignment: "left",
-        width: googleButtonRef.current.offsetWidth || 320,
-      });
-      setGoogleStatus("ready");
-    };
-
-    if (window.google?.accounts?.id) {
-      initializeGoogle();
-      return () => {
-        isMounted = false;
-      };
-    }
-
-    const existingScript = document.querySelector("script[src='https://accounts.google.com/gsi/client']");
-    if (existingScript) {
-      existingScript.addEventListener("load", initializeGoogle, { once: true });
-      return () => {
-        isMounted = false;
-        existingScript.removeEventListener("load", initializeGoogle);
-      };
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = initializeGoogle;
-    script.onerror = () => setGoogleStatus("error");
-    document.head.appendChild(script);
-
-    return () => {
-      isMounted = false;
-      script.onload = null;
-      script.onerror = null;
-    };
-  }, [googleClientId, onGoogleSignIn]);
-
+function LoginScreen({ t, onGoogleSignIn, authError }) {
   return (
     <main
       className="min-h-screen px-4 py-8 md:px-8 text-black bg-cover bg-center relative overflow-hidden"
@@ -440,19 +467,20 @@ function LoginScreen({ t, onGoogleSignIn }) {
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">{t("signIn")}</h1>
           </div>
 
-          {googleClientId ? (
+          {isSupabaseConfigured ? (
             <>
-              <div ref={googleButtonRef} className="min-h-11 w-full overflow-hidden rounded-xl" />
-              {googleStatus === "loading" && (
-                <p className="mt-3 text-xs font-bold text-gray-500">{t("googleLoading")}</p>
-              )}
-              {googleStatus === "error" && (
-                <p className="mt-3 text-xs font-bold text-red-600">{t("googleLoginError")}</p>
-              )}
+              <button
+                type="button"
+                onClick={onGoogleSignIn}
+                className="w-full rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white transition-colors hover:bg-gray-800"
+              >
+                {t("googleStart")}
+              </button>
+              {authError && <p className="mt-3 text-xs font-bold text-red-600">{authError}</p>}
             </>
           ) : (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
-              {t("googleClientMissing")}
+              {t("supabaseClientMissing")}
             </div>
           )}
         </section>
