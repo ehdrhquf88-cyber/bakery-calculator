@@ -2,6 +2,13 @@ import { useState, useMemo } from "react";
 
 import { InputField } from "./common";
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
+import { supabase } from "../lib/supabaseClient";
+
+function mediaUrlFromKey(key) {
+  const baseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL;
+  if (!key || !baseUrl) return "";
+  return `${baseUrl.replace(/\/$/, "")}/${key}`;
+}
 
 export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -74,6 +81,9 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
   const [isPublic, setIsPublic] = useState(Boolean(initialData?.isPublic));
   const [communityText, setCommunityText] = useState(initialData?.communityText || "");
   const [communityImage, setCommunityImage] = useState(initialData?.communityImage || "");
+  const [communityImageKey, setCommunityImageKey] = useState(initialData?.communityImageKey || "");
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState("");
   const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => {
     if (idx !== i) return ing;
 
@@ -156,17 +166,54 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
       isPublic,
       communityText,
       communityImage,
+      communityImageKey,
       sourceRecipeId: initialData?.sourceRecipeId,
       savedFromCommunityAt: initialData?.savedFromCommunityAt,
     }, newCostItems);
   };
-  const updateCommunityImage = (file) => {
+  const updateCommunityImage = async (file) => {
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => setCommunityImage(reader.result || "");
-    reader.readAsDataURL(file);
+    if (!supabase) {
+      setImageUploadError(t("supabaseClientMissing"));
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setImageUploadError("");
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Login session is missing.");
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/r2/images", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: formData,
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Image upload failed.");
+      }
+
+      setCommunityImage(result.url || mediaUrlFromKey(result.key));
+      setCommunityImageKey(result.key);
+    } catch (error) {
+      setImageUploadError(error.message || "Image upload failed.");
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
+  const imagePreview = communityImage || mediaUrlFromKey(communityImageKey);
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
       <div className="bg-[#f7f6f3] w-full max-w-4xl rounded-[2rem] p-6 md:p-12 shadow-2xl max-h-[90vh] overflow-y-auto relative">
@@ -192,12 +239,14 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
           </div>
           <div className="mt-5 grid grid-cols-1 md:grid-cols-[180px_1fr] gap-4">
             <label className="min-h-36 rounded-2xl border border-dashed border-gray-200 bg-[#f7f6f3] flex items-center justify-center overflow-hidden cursor-pointer">
-              {communityImage ? (
-                <span className="block h-full min-h-36 w-full bg-cover bg-center" style={{ backgroundImage: `url(${communityImage})` }} />
+              {imagePreview ? (
+                <span className="block h-full min-h-36 w-full bg-cover bg-center" style={{ backgroundImage: `url(${imagePreview})` }} />
+              ) : isUploadingImage ? (
+                <span className="px-4 text-center text-xs font-black text-gray-400 uppercase tracking-tight">{t("imageUploading")}</span>
               ) : (
                 <span className="px-4 text-center text-xs font-black text-gray-400 uppercase tracking-tight">{t("uploadBreadPhoto")}</span>
               )}
-              <input type="file" accept="image/*" onChange={e => updateCommunityImage(e.target.files?.[0])} className="sr-only" />
+              <input type="file" accept="image/*" onChange={e => updateCommunityImage(e.target.files?.[0])} className="sr-only" disabled={isUploadingImage} />
             </label>
             <textarea
               value={communityText}
@@ -206,6 +255,7 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
               className="min-h-36 w-full resize-none rounded-2xl border border-gray-100 bg-[#f7f6f3] p-4 text-sm font-bold outline-none focus:border-black"
             />
           </div>
+          {imageUploadError && <p className="mt-3 text-xs font-bold text-red-500">{imageUploadError}</p>}
         </section>
         <div className="space-y-3">
           {ingredients.map((ing, i) => {
@@ -241,7 +291,7 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
         </div>
         <div className="mt-10 flex gap-3">
           <button onClick={onClose} className="flex-1 bg-white border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-tighter">{t("close")}</button>
-          <button onClick={saveRecipe} className="flex-1 bg-black text-white py-4 rounded-xl font-bold uppercase tracking-tighter">{t("saveRecipe")}</button>
+          <button onClick={saveRecipe} disabled={isUploadingImage} className="flex-1 bg-black text-white py-4 rounded-xl font-bold uppercase tracking-tighter disabled:cursor-wait disabled:opacity-60">{isUploadingImage ? t("imageUploading") : t("saveRecipe")}</button>
         </div>
       </div>
     </div>

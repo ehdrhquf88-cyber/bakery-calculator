@@ -1,0 +1,49 @@
+import { getRequestUser } from "../../../lib/authServer";
+import { makeImageKey, publicR2Url, putR2Object } from "../../../lib/r2Server";
+
+export const runtime = "nodejs";
+
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+
+export async function POST(request) {
+  try {
+    const { user, error } = await getRequestUser(request);
+
+    if (error) {
+      return Response.json({ error }, { status: 401 });
+    }
+
+    const formData = await request.formData();
+    const file = formData.get("file");
+
+    if (!(file instanceof File)) {
+      return Response.json({ error: "Missing image file" }, { status: 400 });
+    }
+
+    if (!file.type.startsWith("image/")) {
+      return Response.json({ error: "Only image uploads are allowed" }, { status: 400 });
+    }
+
+    if (file.size > MAX_IMAGE_BYTES) {
+      return Response.json({ error: "Image is too large" }, { status: 413 });
+    }
+
+    const key = makeImageKey(user.id, file.name, file.type);
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    await putR2Object({
+      key,
+      body: buffer,
+      contentType: file.type || "application/octet-stream",
+    });
+
+    return Response.json({
+      key,
+      url: publicR2Url(key),
+      contentType: file.type,
+      size: file.size,
+    });
+  } catch (error) {
+    return Response.json({ error: error.message || "Image upload failed" }, { status: 500 });
+  }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import BreadVideos from "./components/BreadVideos";
 import CostDB from "./components/CostDB";
 import MyBreadYourBread from "./components/MyBreadYourBread";
@@ -82,6 +82,7 @@ function recipeFromSupabaseRow(row) {
   return {
     ...(row.recipe_data || {}),
     id: Number(row.id),
+    ownerUserId: row.user_id,
     isPublic: Boolean(row.is_public),
     publishedAt: row.published_at || row.recipe_data?.publishedAt || "",
   };
@@ -133,13 +134,27 @@ function tempLogFromSupabaseRow(row) {
   };
 }
 
-async function loadSupabaseRecipes() {
+async function loadSupabaseRecipes(authUser) {
   if (!supabase) return [];
 
   const { data, error } = await supabase
     .from("recipes")
-    .select("id, recipe_data, is_public, published_at, created_at, updated_at")
+    .select("user_id, id, recipe_data, is_public, published_at, created_at, updated_at")
+    .eq("user_id", authUser.id)
     .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map(recipeFromSupabaseRow);
+}
+
+async function loadSupabaseCommunityRecipes() {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("recipes")
+    .select("user_id, id, recipe_data, is_public, published_at, created_at, updated_at")
+    .eq("is_public", true)
+    .order("published_at", { ascending: false });
 
   if (error) throw error;
   return (data || []).map(recipeFromSupabaseRow);
@@ -315,6 +330,7 @@ async function getSupabaseAuthUser(session) {
 export default function Home() {
   const [view, setView] = useState("calc");
   const [recipes, setRecipes] = useState([]);
+  const [communityRecipes, setCommunityRecipes] = useState([]);
   const [costItems, setCostItems] = useState([]);
   const [tempLogs, setTempLogs] = useState([]);
   const [authUser, setAuthUser] = useState(null);
@@ -385,6 +401,7 @@ export default function Home() {
 
       if (!authUser) {
         setRecipes([]);
+        setCommunityRecipes([]);
         setCostItems([]);
         setTempLogs([]);
         setUserDataLoaded(false);
@@ -401,11 +418,14 @@ export default function Home() {
 
         if (supabase) {
           try {
-            const [remoteRecipes, remoteCostItems, remoteTempLogs] = await Promise.all([
-              loadSupabaseRecipes(),
+            const [remoteRecipes, remoteCommunityRecipes, remoteCostItems, remoteTempLogs] = await Promise.all([
+              loadSupabaseRecipes(authUser),
+              loadSupabaseCommunityRecipes(),
               loadSupabaseCostItems(),
               loadSupabaseTempLogs(),
             ]);
+
+            setCommunityRecipes(remoteCommunityRecipes);
 
             if (remoteRecipes.length > 0) {
               nextRecipes = remoteRecipes;
@@ -442,6 +462,7 @@ export default function Home() {
         if (!isMounted) return;
         console.warn("사용자별 앱 데이터를 읽는 중 오류가 발생했습니다.", e?.message || e);
         setRecipes([]);
+        setCommunityRecipes([]);
         setCostItems([]);
         setTempLogs([]);
         setUserDataOwnerId(authUser.id);
@@ -548,6 +569,77 @@ export default function Home() {
       }));
     });
   }, []);
+
+  const visibleCommunityRecipes = useMemo(() => {
+    const ownPublicRecipes = recipes
+      .filter(recipe => recipe.isPublic)
+      .map(recipe => ({ ...recipe, ownerUserId: recipe.ownerUserId || authUser?.id }));
+    const ownPublicKeys = new Set(ownPublicRecipes.map(recipe => `${recipe.ownerUserId || ""}:${recipe.id}`));
+    const remotePublicRecipes = communityRecipes.filter(recipe => !ownPublicKeys.has(`${recipe.ownerUserId || ""}:${recipe.id}`));
+
+    return [...ownPublicRecipes, ...remotePublicRecipes];
+  }, [authUser?.id, communityRecipes, recipes]);
+
+  const copyCommunityImage = async (recipe) => {
+    if (!recipe.communityImageKey || !supabase) {
+      return {
+        communityImage: recipe.communityImage || "",
+        communityImageKey: recipe.communityImageKey || "",
+      };
+    }
+
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error("Login session is missing.");
+
+    const response = await fetch("/api/r2/copy", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sourceKey: recipe.communityImageKey,
+      }),
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Image copy failed.");
+    }
+
+    return {
+      communityImage: result.url || "",
+      communityImageKey: result.key,
+    };
+  };
+
+  const saveCommunityRecipeToDb = async (recipe) => {
+    const copiedImage = await copyCommunityImage(recipe);
+
+    updateRecipes(prev => {
+      const numericIds = prev.map(item => Number(item.id)).filter(Number.isFinite);
+      const nextId = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
+
+      return [
+        ...prev,
+        {
+          ...recipe,
+          ...copiedImage,
+          id: nextId,
+          ownerUserId: authUser?.id,
+          productName: `${recipe.productName} ${t("communityCopySuffix")}`,
+          isPublic: false,
+          publishedAt: "",
+          sourceRecipeId: recipe.sourceRecipeId || recipe.id,
+          sourceUserId: recipe.ownerUserId || "",
+          savedFromCommunityAt: recipe.publishedAt || "",
+        },
+      ];
+    });
+  };
 
   const updateCostItems = useCallback((nextCostItemsOrUpdater) => {
     setCostItems(prev => {
@@ -749,7 +841,7 @@ export default function Home() {
       <div className="py-4 md:py-8 print:py-0">
         {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
         {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} />}
-        {view === "community" && <MyBreadYourBread t={t} recipes={recipes} setRecipes={updateRecipes} />}
+        {view === "community" && <MyBreadYourBread t={t} recipes={visibleCommunityRecipes} onSaveCommunityRecipe={saveCommunityRecipeToDb} />}
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}

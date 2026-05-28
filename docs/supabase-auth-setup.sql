@@ -270,6 +270,16 @@ using (
   and (select private.has_app_access())
 );
 
+drop policy if exists "Users can view public community recipes" on public.recipes;
+create policy "Users can view public community recipes"
+on public.recipes
+for select
+to authenticated
+using (
+  is_public = true
+  and (select private.has_app_access())
+);
+
 drop policy if exists "Users can insert their own recipes" on public.recipes;
 create policy "Users can insert their own recipes"
 on public.recipes

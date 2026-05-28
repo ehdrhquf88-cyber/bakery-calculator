@@ -4,8 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
-export default function MyBreadYourBread({ t, recipes = [], setRecipes }) {
+function mediaUrlFromKey(key) {
+  const baseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL;
+  if (!key || !baseUrl) return "";
+  return `${baseUrl.replace(/\/$/, "")}/${key}`;
+}
+
+export default function MyBreadYourBread({ t, recipes = [], onSaveCommunityRecipe }) {
   const [savedRecipeId, setSavedRecipeId] = useState(null);
+  const [savingRecipeId, setSavingRecipeId] = useState(null);
 
   const publicRecipes = useMemo(() => {
     return (Array.isArray(recipes) ? recipes : [])
@@ -24,24 +31,16 @@ export default function MyBreadYourBread({ t, recipes = [], setRecipes }) {
     return () => window.clearTimeout(timer);
   }, [savedRecipeId]);
 
-  const saveRecipeToDb = (recipe) => {
-    setRecipes(prev => {
-      const numericIds = prev.map(item => Number(item.id)).filter(Number.isFinite);
-      const nextId = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
+  const saveRecipeToDb = async (recipe) => {
+    if (!onSaveCommunityRecipe || savingRecipeId) return;
 
-      return [
-        ...prev,
-        {
-          ...recipe,
-          id: nextId,
-          productName: `${recipe.productName} ${t("communityCopySuffix")}`,
-          isPublic: false,
-          sourceRecipeId: recipe.sourceRecipeId || recipe.id,
-          savedFromCommunityAt: recipe.publishedAt || "",
-        },
-      ];
-    });
-    setSavedRecipeId(recipe.id);
+    setSavingRecipeId(recipe.id);
+    try {
+      await onSaveCommunityRecipe(recipe);
+      setSavedRecipeId(recipe.id);
+    } finally {
+      setSavingRecipeId(null);
+    }
   };
 
   return (
@@ -64,11 +63,11 @@ export default function MyBreadYourBread({ t, recipes = [], setRecipes }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {publicRecipes.map(recipe => (
-            <article key={recipe.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+            <article key={`${recipe.ownerUserId || "unknown"}-${recipe.id}`} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
               {savedRecipeId === recipe.id && <span className="sr-only" aria-live="polite">{t("communityRecipeSaved")}</span>}
               <div className="aspect-[4/3] bg-[#efece5]">
-                {recipe.communityImage ? (
-                  <div cjalassName="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${recipe.communityImage})` }} />
+                {recipe.communityImage || recipe.communityImageKey ? (
+                  <div className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${recipe.communityImage || mediaUrlFromKey(recipe.communityImageKey)})` }} />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center px-6 text-center text-xs font-black text-gray-400 uppercase tracking-widest">
                     {t("noBreadPhoto")}
@@ -108,9 +107,10 @@ export default function MyBreadYourBread({ t, recipes = [], setRecipes }) {
                 <button
                   type="button"
                   onClick={() => saveRecipeToDb(recipe)}
-                  className={`mt-5 w-full rounded-xl py-3 text-sm font-black uppercase tracking-tight transition-colors ${savedRecipeId === recipe.id ? "bg-emerald-600 text-white" : "bg-black text-white"}`}
+                  disabled={savingRecipeId === recipe.id}
+                  className={`mt-5 w-full rounded-xl py-3 text-sm font-black uppercase tracking-tight transition-colors disabled:cursor-wait disabled:opacity-70 ${savedRecipeId === recipe.id ? "bg-emerald-600 text-white" : "bg-black text-white"}`}
                 >
-                  {savedRecipeId === recipe.id ? t("communityRecipeSaved") : t("saveCommunityRecipe")}
+                  {savingRecipeId === recipe.id ? t("saving") : savedRecipeId === recipe.id ? t("communityRecipeSaved") : t("saveCommunityRecipe")}
                 </button>
               </div>
             </article>
