@@ -120,6 +120,23 @@ export async function copyR2Object({ sourceKey, destinationKey, contentType }) {
   }
 }
 
+export async function deleteR2Object({ key }) {
+  requireR2Config();
+
+  const bucket = process.env.R2_BUCKET_NAME;
+  const pathname = `/${bucket}/${encodeS3Key(key)}`;
+  const payloadHash = hashHex("");
+  const headers = signedHeadersFor("DELETE", pathname, {}, payloadHash);
+  const response = await fetch(`${R2_ENDPOINT}${pathname}`, {
+    method: "DELETE",
+    headers,
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`R2 delete failed: ${response.status} ${await response.text()}`);
+  }
+}
+
 export function publicR2Url(key) {
   const baseUrl = process.env.R2_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL || "";
   return baseUrl ? `${baseUrl.replace(/\/$/, "")}/${key}` : "";

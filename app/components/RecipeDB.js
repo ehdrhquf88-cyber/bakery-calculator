@@ -30,6 +30,40 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
       };
     }));
   };
+  const deleteRecipe = async (recipe) => {
+    if (!confirm(t("deleteConfirm"))) return;
+
+    if (recipe.communityImageKey && supabase) {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        alert(sessionError.message);
+        return;
+      }
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        alert("Login session is missing.");
+        return;
+      }
+
+      const response = await fetch("/api/r2/delete", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ key: recipe.communityImageKey }),
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        alert(result.error || "Image delete failed.");
+        return;
+      }
+    }
+
+    setRecipes(prev => prev.filter(r => r.id !== recipe.id));
+  };
 
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
@@ -59,7 +93,7 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
               >
                 {recipe.isPublic ? t("publicRecipe") : t("privateRecipe")}
               </button>
-              <button onClick={(e) => { e.stopPropagation(); if (confirm(t("deleteConfirm"))) setRecipes(prev => prev.filter(r => r.id !== recipe.id)); }} className="text-gray-300 hover:text-red-500">x</button>
+              <button onClick={(e) => { e.stopPropagation(); deleteRecipe(recipe); }} className="text-gray-300 hover:text-red-500">x</button>
             </div>
           </div>
         ))}
