@@ -73,14 +73,11 @@ function signedHeadersFor(method, pathname, headers, payloadHash) {
   ].join("\n");
   const signature = hmac(getSigningKey(dateStamp), stringToSign, "hex");
 
+  const authorization = `AWS4-HMAC-SHA256 Credential=${process.env.R2_ACCESS_KEY_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
   return {
     ...canonicalHeaders,
-    Authorization: [
-      "AWS4-HMAC-SHA256",
-      `Credential=${process.env.R2_ACCESS_KEY_ID}/${credentialScope}`,
-      `SignedHeaders=${signedHeaders}`,
-      `Signature=${signature}`,
-    ].join(", "),
+    Authorization: authorization,
   };
 }
 
