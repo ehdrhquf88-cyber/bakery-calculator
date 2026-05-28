@@ -29,8 +29,40 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.recipes (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  id bigint not null,
+  recipe_data jsonb not null,
+  is_public boolean not null default false,
+  published_at timestamptz null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+create table if not exists public.cost_items (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  id bigint not null,
+  item_data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+create table if not exists public.temp_logs (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  id bigint not null,
+  log_data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
 alter table public.auth_allowlist enable row level security;
 alter table public.profiles enable row level security;
+alter table public.recipes enable row level security;
+alter table public.cost_items enable row level security;
+alter table public.temp_logs enable row level security;
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
@@ -43,6 +75,15 @@ grant select, insert, update, delete on public.auth_allowlist to authenticated;
 
 revoke all on public.profiles from anon;
 grant select, update on public.profiles to authenticated;
+
+revoke all on public.recipes from anon;
+grant select, insert, update, delete on public.recipes to authenticated;
+
+revoke all on public.cost_items from anon;
+grant select, insert, update, delete on public.cost_items to authenticated;
+
+revoke all on public.temp_logs from anon;
+grant select, insert, update, delete on public.temp_logs to authenticated;
 
 create or replace function private.is_admin()
 returns boolean
@@ -219,6 +260,138 @@ to authenticated
 using ((select private.is_admin()))
 with check (true);
 
+drop policy if exists "Users can view their own recipes" on public.recipes;
+create policy "Users can view their own recipes"
+on public.recipes
+for select
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can insert their own recipes" on public.recipes;
+create policy "Users can insert their own recipes"
+on public.recipes
+for insert
+to authenticated
+with check (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can update their own recipes" on public.recipes;
+create policy "Users can update their own recipes"
+on public.recipes
+for update
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+)
+with check (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can delete their own recipes" on public.recipes;
+create policy "Users can delete their own recipes"
+on public.recipes
+for delete
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can view their own cost items" on public.cost_items;
+create policy "Users can view their own cost items"
+on public.cost_items
+for select
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can insert their own cost items" on public.cost_items;
+create policy "Users can insert their own cost items"
+on public.cost_items
+for insert
+to authenticated
+with check (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can update their own cost items" on public.cost_items;
+create policy "Users can update their own cost items"
+on public.cost_items
+for update
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+)
+with check (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can delete their own cost items" on public.cost_items;
+create policy "Users can delete their own cost items"
+on public.cost_items
+for delete
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can view their own temp logs" on public.temp_logs;
+create policy "Users can view their own temp logs"
+on public.temp_logs
+for select
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can insert their own temp logs" on public.temp_logs;
+create policy "Users can insert their own temp logs"
+on public.temp_logs
+for insert
+to authenticated
+with check (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can update their own temp logs" on public.temp_logs;
+create policy "Users can update their own temp logs"
+on public.temp_logs
+for update
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+)
+with check (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can delete their own temp logs" on public.temp_logs;
+create policy "Users can delete their own temp logs"
+on public.temp_logs
+for delete
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
 insert into public.auth_allowlist (email, role)
 values ('ehdrhquf88@gmail.com', 'admin')
 on conflict (email) do update
@@ -285,6 +458,21 @@ revoke execute
 drop trigger if exists on_profile_updated on public.profiles;
 create trigger on_profile_updated
 before update on public.profiles
+for each row execute function public.handle_profile_updated_at();
+
+drop trigger if exists on_recipe_updated on public.recipes;
+create trigger on_recipe_updated
+before update on public.recipes
+for each row execute function public.handle_profile_updated_at();
+
+drop trigger if exists on_cost_item_updated on public.cost_items;
+create trigger on_cost_item_updated
+before update on public.cost_items
+for each row execute function public.handle_profile_updated_at();
+
+drop trigger if exists on_temp_log_updated on public.temp_logs;
+create trigger on_temp_log_updated
+before update on public.temp_logs
 for each row execute function public.handle_profile_updated_at();
 
 create or replace function public.sync_profile_role_from_allowlist()

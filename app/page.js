@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import BreadVideos from "./components/BreadVideos";
 import CostDB from "./components/CostDB";
 import MyBreadYourBread from "./components/MyBreadYourBread";
@@ -58,6 +58,196 @@ function saveUserData(authUser, recipes, costItems, tempLogs) {
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.recipes, authUser), JSON.stringify(recipes));
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.costItems, authUser), JSON.stringify(costItems));
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.tempLogs, authUser), JSON.stringify(tempLogs));
+}
+
+function normalizeRecipeId(recipe) {
+  const numericId = Number(recipe?.id);
+  return Number.isFinite(numericId) ? numericId : Date.now();
+}
+
+function recipeToSupabaseRow(authUser, recipe) {
+  const id = normalizeRecipeId(recipe);
+  const recipeData = { ...recipe, id };
+
+  return {
+    user_id: authUser.id,
+    id,
+    recipe_data: recipeData,
+    is_public: Boolean(recipeData.isPublic),
+    published_at: recipeData.publishedAt || null,
+  };
+}
+
+function recipeFromSupabaseRow(row) {
+  return {
+    ...(row.recipe_data || {}),
+    id: Number(row.id),
+    isPublic: Boolean(row.is_public),
+    publishedAt: row.published_at || row.recipe_data?.publishedAt || "",
+  };
+}
+
+function normalizeCostItemId(item) {
+  const numericId = Number(item?.id);
+  return Number.isFinite(numericId) ? numericId : Date.now();
+}
+
+function costItemToSupabaseRow(authUser, item) {
+  const id = normalizeCostItemId(item);
+  const itemData = { ...item, id };
+
+  return {
+    user_id: authUser.id,
+    id,
+    item_data: itemData,
+  };
+}
+
+function costItemFromSupabaseRow(row) {
+  return {
+    ...(row.item_data || {}),
+    id: Number(row.id),
+  };
+}
+
+function normalizeTempLogId(log) {
+  const numericId = Number(log?.id);
+  return Number.isFinite(numericId) ? numericId : Date.now();
+}
+
+function tempLogToSupabaseRow(authUser, log) {
+  const id = normalizeTempLogId(log);
+  const logData = { ...log, id };
+
+  return {
+    user_id: authUser.id,
+    id,
+    log_data: logData,
+  };
+}
+
+function tempLogFromSupabaseRow(row) {
+  return {
+    ...(row.log_data || {}),
+    id: Number(row.id),
+  };
+}
+
+async function loadSupabaseRecipes() {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("recipes")
+    .select("id, recipe_data, is_public, published_at, created_at, updated_at")
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map(recipeFromSupabaseRow);
+}
+
+async function loadSupabaseCostItems() {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("cost_items")
+    .select("id, item_data, created_at, updated_at")
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map(costItemFromSupabaseRow);
+}
+
+async function loadSupabaseTempLogs() {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("temp_logs")
+    .select("id, log_data, created_at, updated_at")
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map(tempLogFromSupabaseRow);
+}
+
+async function syncSupabaseRecipes(authUser, previousRecipes, nextRecipes) {
+  if (!supabase || !authUser) return;
+
+  const previousIds = new Set((previousRecipes || []).map(recipe => normalizeRecipeId(recipe)));
+  const nextIds = new Set((nextRecipes || []).map(recipe => normalizeRecipeId(recipe)));
+  const removedIds = [...previousIds].filter(id => !nextIds.has(id));
+  const rows = (nextRecipes || []).map(recipe => recipeToSupabaseRow(authUser, recipe));
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from("recipes")
+      .upsert(rows, { onConflict: "user_id,id" });
+
+    if (error) throw error;
+  }
+
+  if (removedIds.length > 0) {
+    const { error } = await supabase
+      .from("recipes")
+      .delete()
+      .eq("user_id", authUser.id)
+      .in("id", removedIds);
+
+    if (error) throw error;
+  }
+}
+
+async function syncSupabaseCostItems(authUser, previousCostItems, nextCostItems) {
+  if (!supabase || !authUser) return;
+
+  const previousIds = new Set((previousCostItems || []).map(item => normalizeCostItemId(item)));
+  const nextIds = new Set((nextCostItems || []).map(item => normalizeCostItemId(item)));
+  const removedIds = [...previousIds].filter(id => !nextIds.has(id));
+  const rows = (nextCostItems || []).map(item => costItemToSupabaseRow(authUser, item));
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from("cost_items")
+      .upsert(rows, { onConflict: "user_id,id" });
+
+    if (error) throw error;
+  }
+
+  if (removedIds.length > 0) {
+    const { error } = await supabase
+      .from("cost_items")
+      .delete()
+      .eq("user_id", authUser.id)
+      .in("id", removedIds);
+
+    if (error) throw error;
+  }
+}
+
+async function syncSupabaseTempLogs(authUser, previousTempLogs, nextTempLogs) {
+  if (!supabase || !authUser) return;
+
+  const previousIds = new Set((previousTempLogs || []).map(log => normalizeTempLogId(log)));
+  const nextIds = new Set((nextTempLogs || []).map(log => normalizeTempLogId(log)));
+  const removedIds = [...previousIds].filter(id => !nextIds.has(id));
+  const rows = (nextTempLogs || []).map(log => tempLogToSupabaseRow(authUser, log));
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from("temp_logs")
+      .upsert(rows, { onConflict: "user_id,id" });
+
+    if (error) throw error;
+  }
+
+  if (removedIds.length > 0) {
+    const { error } = await supabase
+      .from("temp_logs")
+      .delete()
+      .eq("user_id", authUser.id)
+      .in("id", removedIds);
+
+    if (error) throw error;
+  }
 }
 
 function clearStoredAuthSession() {
@@ -138,6 +328,9 @@ export default function Home() {
   const [hideLeaveCheck, setHideLeaveCheck] = useState(false);
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [authError, setAuthError] = useState("");
+  const recipesSnapshotRef = useRef([]);
+  const costItemsSnapshotRef = useRef([]);
+  const tempLogsSnapshotRef = useRef([]);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
 
@@ -202,15 +395,52 @@ export default function Home() {
       try {
         setUserDataLoaded(false);
         const userData = loadUserData(authUser);
+        let nextRecipes = userData.recipes;
+        let nextCostItems = userData.costItems;
+        let nextTempLogs = userData.tempLogs;
+
+        if (supabase) {
+          try {
+            const [remoteRecipes, remoteCostItems, remoteTempLogs] = await Promise.all([
+              loadSupabaseRecipes(),
+              loadSupabaseCostItems(),
+              loadSupabaseTempLogs(),
+            ]);
+
+            if (remoteRecipes.length > 0) {
+              nextRecipes = remoteRecipes;
+            } else if (userData.recipes.length > 0) {
+              await syncSupabaseRecipes(authUser, [], userData.recipes);
+            }
+
+            if (remoteCostItems.length > 0) {
+              nextCostItems = remoteCostItems;
+            } else if (userData.costItems.length > 0) {
+              await syncSupabaseCostItems(authUser, [], userData.costItems);
+            }
+
+            if (remoteTempLogs.length > 0) {
+              nextTempLogs = remoteTempLogs;
+            } else if (userData.tempLogs.length > 0) {
+              await syncSupabaseTempLogs(authUser, [], userData.tempLogs);
+            }
+          } catch (error) {
+            console.warn("Supabase 데이터 테이블을 사용할 수 없어 로컬 데이터로 계속합니다.", error?.message || error);
+          }
+        }
+
         if (!isMounted) return;
-        setRecipes(userData.recipes);
-        setCostItems(userData.costItems);
-        setTempLogs(userData.tempLogs);
+        recipesSnapshotRef.current = nextRecipes;
+        costItemsSnapshotRef.current = nextCostItems;
+        tempLogsSnapshotRef.current = nextTempLogs;
+        setRecipes(nextRecipes);
+        setCostItems(nextCostItems);
+        setTempLogs(nextTempLogs);
         setUserDataOwnerId(authUser.id);
         setUserDataLoaded(true);
       } catch (e) {
         if (!isMounted) return;
-        console.error("사용자별 앱 데이터를 읽는 중 오류가 발생했습니다.", e);
+        console.warn("사용자별 앱 데이터를 읽는 중 오류가 발생했습니다.", e?.message || e);
         setRecipes([]);
         setCostItems([]);
         setTempLogs([]);
@@ -236,6 +466,114 @@ export default function Home() {
       }
     }
   }, [recipes, costItems, tempLogs, authUser, userDataLoaded, userDataOwnerId, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || !authUser || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+
+    let isCancelled = false;
+    const previousRecipes = recipesSnapshotRef.current;
+    const nextRecipes = recipes;
+
+    const persistRecipes = async () => {
+      try {
+        await syncSupabaseRecipes(authUser, previousRecipes, nextRecipes);
+        if (!isCancelled) recipesSnapshotRef.current = nextRecipes;
+      } catch (error) {
+        console.warn("Supabase 레시피 저장 중 오류가 발생했습니다.", error?.message || error);
+      }
+    };
+
+    persistRecipes();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [recipes, authUser, userDataLoaded, userDataOwnerId, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || !authUser || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+
+    let isCancelled = false;
+    const previousCostItems = costItemsSnapshotRef.current;
+    const nextCostItems = costItems;
+
+    const persistCostItems = async () => {
+      try {
+        await syncSupabaseCostItems(authUser, previousCostItems, nextCostItems);
+        if (!isCancelled) costItemsSnapshotRef.current = nextCostItems;
+      } catch (error) {
+        console.warn("Supabase 재료비 저장 중 오류가 발생했습니다.", error?.message || error);
+      }
+    };
+
+    persistCostItems();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [costItems, authUser, userDataLoaded, userDataOwnerId, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || !authUser || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+
+    let isCancelled = false;
+    const previousTempLogs = tempLogsSnapshotRef.current;
+    const nextTempLogs = tempLogs;
+
+    const persistTempLogs = async () => {
+      try {
+        await syncSupabaseTempLogs(authUser, previousTempLogs, nextTempLogs);
+        if (!isCancelled) tempLogsSnapshotRef.current = nextTempLogs;
+      } catch (error) {
+        console.warn("Supabase 온도/pH 저장 중 오류가 발생했습니다.", error?.message || error);
+      }
+    };
+
+    persistTempLogs();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [tempLogs, authUser, userDataLoaded, userDataOwnerId, isLoaded]);
+
+  const updateRecipes = useCallback((nextRecipesOrUpdater) => {
+    setRecipes(prev => {
+      const nextRecipes = typeof nextRecipesOrUpdater === "function"
+        ? nextRecipesOrUpdater(prev)
+        : nextRecipesOrUpdater;
+
+      return (nextRecipes || []).map(recipe => ({
+        ...recipe,
+        id: normalizeRecipeId(recipe),
+      }));
+    });
+  }, []);
+
+  const updateCostItems = useCallback((nextCostItemsOrUpdater) => {
+    setCostItems(prev => {
+      const nextCostItems = typeof nextCostItemsOrUpdater === "function"
+        ? nextCostItemsOrUpdater(prev)
+        : nextCostItemsOrUpdater;
+
+      return (nextCostItems || []).map(item => ({
+        ...item,
+        id: normalizeCostItemId(item),
+      }));
+    });
+  }, []);
+
+  const updateTempLogs = useCallback((nextTempLogsOrUpdater) => {
+    setTempLogs(prev => {
+      const nextTempLogs = typeof nextTempLogsOrUpdater === "function"
+        ? nextTempLogsOrUpdater(prev)
+        : nextTempLogsOrUpdater;
+
+      return (nextTempLogs || []).map(log => ({
+        ...log,
+        id: normalizeTempLogId(log),
+      }));
+    });
+  }, []);
 
   useEffect(() => {
     if (!supabase) return undefined;
@@ -409,12 +747,12 @@ export default function Home() {
       </nav>
 
       <div className="py-4 md:py-8 print:py-0">
-        {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={setRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={setTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
-        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={setRecipes} costItems={costItems} setCostItems={setCostItems} />}
-        {view === "community" && <MyBreadYourBread t={t} recipes={recipes} setRecipes={setRecipes} />}
+        {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
+        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} />}
+        {view === "community" && <MyBreadYourBread t={t} recipes={recipes} setRecipes={updateRecipes} />}
         {view === "videos" && <BreadVideos t={t} />}
-        {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={setCostItems} />}
-        {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={setTempLogs} />}
+        {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
+        {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && <AdminPanel t={t} />}
         {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} onSignOut={handleSignOut} />}
       </div>

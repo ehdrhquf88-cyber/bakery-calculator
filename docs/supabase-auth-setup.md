@@ -1,6 +1,6 @@
 # Supabase Auth Setup
 
-This app uses Supabase Google OAuth for login. Keep recipe, cost, and temp/pH data in localStorage for now.
+This app uses Supabase Google OAuth for login. Recipes, cost items, and temp/pH logs are stored in Supabase.
 
 Official Supabase references:
 
@@ -32,8 +32,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
 8. In `Project Settings > API > Data API`, expose only the tables the app needs:
    - `public.profiles`
    - `public.auth_allowlist`
+   - `public.recipes`
+   - `public.cost_items`
+   - `public.temp_logs`
 
-Keep `Automatically expose new tables` disabled. Both exposed tables must keep RLS enabled.
+Keep `Automatically expose new tables` disabled. All exposed tables must keep RLS enabled.
 
 ## Roles
 
@@ -72,6 +75,37 @@ The `Before User Created` hook blocks new unauthorized accounts before they are 
 Admins can also manage `public.auth_allowlist` from the app's Admin page. The table is safe to expose through the Data API only with the admin-only RLS policies from [supabase-auth-setup.sql](/Users/hayoungkim/levain-lab/bakery-app/docs/supabase-auth-setup.sql).
 
 The SQL setup prevents removing or demoting the last existing admin profile. Create another admin first before changing the final admin to `user` or `null`.
+
+## Recipes
+
+`public.recipes` stores each user's recipe DB rows in Supabase:
+
+- `user_id`: the Supabase Auth user id
+- `id`: the app's numeric recipe id
+- `recipe_data`: the full recipe object used by the app
+- `is_public` and `published_at`: mirror fields for publishing state
+
+RLS allows authenticated `admin` or `user` profiles to select, insert, update, and delete only rows where `user_id = auth.uid()`. Existing browser-local recipes are uploaded to Supabase the first time a user opens the app and no remote recipes exist yet.
+
+## Cost Items
+
+`public.cost_items` stores each user's material cost DB rows in Supabase:
+
+- `user_id`: the Supabase Auth user id
+- `id`: the app's numeric cost item id
+- `item_data`: the full cost item object used by the app
+
+RLS allows authenticated `admin` or `user` profiles to select, insert, update, and delete only rows where `user_id = auth.uid()`. Existing browser-local cost items are uploaded to Supabase the first time a user opens the app and no remote cost items exist yet.
+
+## Temp/pH Logs
+
+`public.temp_logs` stores each user's fermentation temperature and pH history in Supabase:
+
+- `user_id`: the Supabase Auth user id
+- `id`: the app's numeric log id
+- `log_data`: the full temp/pH log object used by the app
+
+RLS allows authenticated `admin` or `user` profiles to select, insert, update, and delete only rows where `user_id = auth.uid()`. Existing browser-local temp/pH logs are uploaded to Supabase the first time a user opens the app and no remote temp/pH logs exist yet.
 
 ## Security Hardening
 
