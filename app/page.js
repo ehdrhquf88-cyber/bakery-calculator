@@ -376,7 +376,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
-      <nav className="sticky top-0 z-40 relative bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm print:hidden">
+      <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm print:hidden">
         <div className="flex gap-4 md:gap-8 p-4 md:p-6 md:px-40 justify-start md:justify-center overflow-x-auto whitespace-nowrap no-scrollbar">
           <NavButton active={view === "calc"} onClick={() => moveToView("calc")}>{t("navRecipeCalculator")}</NavButton>
           <NavButton active={view === "db"} onClick={() => moveToView("db")}>{t("navRecipeDb")}</NavButton>
