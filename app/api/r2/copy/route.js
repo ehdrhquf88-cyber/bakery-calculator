@@ -1,7 +1,8 @@
 import crypto from "crypto";
 
 import { getRequestUser } from "../../../lib/authServer";
-import { copyR2Object, publicR2Url } from "../../../lib/r2Server";
+import { canReadRecipeImage } from "../../../lib/mediaAccessServer";
+import { copyR2Object } from "../../../lib/r2Server";
 
 export const runtime = "nodejs";
 
@@ -12,20 +13,22 @@ function destinationKeyFor(userId, sourceKey) {
 
 export async function POST(request) {
   try {
-    const { user, error } = await getRequestUser(request);
+    const { user, supabase, error } = await getRequestUser(request);
 
     if (error) {
       return Response.json({ error }, { status: 401 });
     }
 
-    const { sourceKey, contentType } = await request.json();
+    const { sourceKey } = await request.json();
 
     if (!sourceKey || typeof sourceKey !== "string") {
       return Response.json({ error: "Missing sourceKey" }, { status: 400 });
     }
 
-    if (!sourceKey.startsWith("images/recipes/")) {
-      return Response.json({ error: "Unsupported source object" }, { status: 400 });
+    const canRead = await canReadRecipeImage({ key: sourceKey, user, supabase });
+
+    if (!canRead) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const destinationKey = destinationKeyFor(user.id, sourceKey);
@@ -33,12 +36,10 @@ export async function POST(request) {
     await copyR2Object({
       sourceKey,
       destinationKey,
-      contentType,
     });
 
     return Response.json({
       key: destinationKey,
-      url: publicR2Url(destinationKey),
     });
   } catch (error) {
     return Response.json({ error: error.message || "Image copy failed" }, { status: 500 });

@@ -623,7 +623,7 @@ export default function Home() {
   const copyCommunityImage = async (recipe) => {
     if (!recipe.communityImageKey || !supabase) {
       return {
-        communityImage: recipe.communityImage || "",
+        communityImage: recipe.communityImage?.startsWith("data:image/") ? recipe.communityImage : "",
         communityImageKey: recipe.communityImageKey || "",
       };
     }
@@ -651,7 +651,7 @@ export default function Home() {
     }
 
     return {
-      communityImage: result.url || "",
+      communityImage: "",
       communityImageKey: result.key,
     };
   };

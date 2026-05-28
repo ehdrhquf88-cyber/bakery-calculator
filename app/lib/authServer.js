@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
+const APP_ACCESS_ROLES = ["admin", "user"];
+
 export async function getRequestUser(request) {
   const authHeader = request.headers.get("authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
@@ -29,5 +31,15 @@ export async function getRequestUser(request) {
     return { user: null, error: error?.message || "Invalid authorization token" };
   }
 
-  return { user: data.user, error: null };
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, role")
+    .eq("id", data.user.id)
+    .maybeSingle();
+
+  if (profileError || !profile || !APP_ACCESS_ROLES.includes(profile.role)) {
+    return { user: null, error: "Forbidden" };
+  }
+
+  return { user: data.user, supabase, error: null };
 }

@@ -106,10 +106,12 @@ export async function copyR2Object({ sourceKey, destinationKey, contentType }) {
   const bucket = process.env.R2_BUCKET_NAME;
   const pathname = `/${bucket}/${encodeS3Key(destinationKey)}`;
   const payloadHash = hashHex("");
-  const headers = signedHeadersFor("PUT", pathname, {
-    "content-type": contentType || "application/octet-stream",
+  const copyHeaders = {
     "x-amz-copy-source": `/${bucket}/${encodeS3Key(sourceKey)}`,
-  }, payloadHash);
+  };
+  if (contentType) copyHeaders["content-type"] = contentType;
+
+  const headers = signedHeadersFor("PUT", pathname, copyHeaders, payloadHash);
   const response = await fetch(`${R2_ENDPOINT}${pathname}`, {
     method: "PUT",
     headers,
@@ -137,9 +139,23 @@ export async function deleteR2Object({ key }) {
   }
 }
 
-export function publicR2Url(key) {
-  const baseUrl = process.env.R2_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL || "";
-  return baseUrl ? `${baseUrl.replace(/\/$/, "")}/${key}` : "";
+export async function getR2Object({ key }) {
+  requireR2Config();
+
+  const bucket = process.env.R2_BUCKET_NAME;
+  const pathname = `/${bucket}/${encodeS3Key(key)}`;
+  const payloadHash = hashHex("");
+  const headers = signedHeadersFor("GET", pathname, {}, payloadHash);
+  const response = await fetch(`${R2_ENDPOINT}${pathname}`, {
+    method: "GET",
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(`R2 read failed: ${response.status} ${await response.text()}`);
+  }
+
+  return response;
 }
 
 export function makeImageKey(userId, fileName, contentType) {

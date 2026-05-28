@@ -2,13 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import AuthImage from "./AuthImage";
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
-
-function mediaUrlFromKey(key) {
-  const baseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL;
-  if (!key || !baseUrl) return "";
-  return `${baseUrl.replace(/\/$/, "")}/${key}`;
-}
 
 export default function MyBreadYourBread({ t, recipes = [], onSaveCommunityRecipe }) {
   const [savedRecipeId, setSavedRecipeId] = useState(null);
@@ -67,7 +62,11 @@ export default function MyBreadYourBread({ t, recipes = [], onSaveCommunityRecip
               {savedRecipeId === recipe.id && <span className="sr-only" aria-live="polite">{t("communityRecipeSaved")}</span>}
               <div className="aspect-[4/3] bg-[#efece5]">
                 {recipe.communityImage || recipe.communityImageKey ? (
-                  <div className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${recipe.communityImage || mediaUrlFromKey(recipe.communityImageKey)})` }} />
+                  <AuthImage imageKey={recipe.communityImageKey} fallbackImage={recipe.communityImage} className="block h-full w-full bg-cover bg-center">
+                    <div className="h-full w-full flex items-center justify-center px-6 text-center text-xs font-black text-gray-400 uppercase tracking-widest">
+                      {t("noBreadPhoto")}
+                    </div>
+                  </AuthImage>
                 ) : (
                   <div className="h-full w-full flex items-center justify-center px-6 text-center text-xs font-black text-gray-400 uppercase tracking-widest">
                     {t("noBreadPhoto")}

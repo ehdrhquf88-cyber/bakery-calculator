@@ -1,14 +1,9 @@
 import { useState, useMemo } from "react";
 
+import AuthImage from "./AuthImage";
 import { InputField } from "./common";
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 import { supabase } from "../lib/supabaseClient";
-
-function mediaUrlFromKey(key) {
-  const baseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL;
-  if (!key || !baseUrl) return "";
-  return `${baseUrl.replace(/\/$/, "")}/${key}`;
-}
 
 export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -240,7 +235,7 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
         throw new Error(result.error || "Image upload failed.");
       }
 
-      setCommunityImage(result.url || mediaUrlFromKey(result.key));
+      setCommunityImage("");
       setCommunityImageKey(result.key);
     } catch (error) {
       setImageUploadError(error.message || "Image upload failed.");
@@ -293,7 +288,7 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
       setIsDeletingImage(false);
     }
   };
-  const imagePreview = communityImage || mediaUrlFromKey(communityImageKey);
+  const imagePreview = communityImageKey || communityImage;
   const isImageBusy = isUploadingImage || isDeletingImage;
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
@@ -321,7 +316,9 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
           <div className="mt-5 grid grid-cols-1 md:grid-cols-[180px_1fr] gap-4">
             <label className="min-h-36 rounded-2xl border border-dashed border-gray-200 bg-[#f7f6f3] flex items-center justify-center overflow-hidden cursor-pointer">
               {imagePreview ? (
-                <span className="block h-full min-h-36 w-full bg-cover bg-center" style={{ backgroundImage: `url(${imagePreview})` }} />
+                <AuthImage imageKey={communityImageKey} fallbackImage={communityImage} className="block h-full min-h-36 w-full bg-cover bg-center">
+                  <span className="px-4 text-center text-xs font-black text-gray-400 uppercase tracking-tight">{t("noBreadPhoto")}</span>
+                </AuthImage>
               ) : isImageBusy ? (
                 <span className="px-4 text-center text-xs font-black text-gray-400 uppercase tracking-tight">{isDeletingImage ? t("imageDeleting") : t("imageUploading")}</span>
               ) : (

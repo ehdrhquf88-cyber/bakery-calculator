@@ -1,9 +1,15 @@
 import { getRequestUser } from "../../../lib/authServer";
-import { makeImageKey, publicR2Url, putR2Object } from "../../../lib/r2Server";
+import { makeImageKey, putR2Object } from "../../../lib/r2Server";
 
 export const runtime = "nodejs";
 
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
 
 export async function POST(request) {
   try {
@@ -20,8 +26,8 @@ export async function POST(request) {
       return Response.json({ error: "Missing image file" }, { status: 400 });
     }
 
-    if (!file.type.startsWith("image/")) {
-      return Response.json({ error: "Only image uploads are allowed" }, { status: 400 });
+    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+      return Response.json({ error: "Only jpeg, png, webp, and gif uploads are allowed" }, { status: 400 });
     }
 
     if (file.size > MAX_IMAGE_BYTES) {
@@ -39,7 +45,6 @@ export async function POST(request) {
 
     return Response.json({
       key,
-      url: publicR2Url(key),
       contentType: file.type,
       size: file.size,
     });
