@@ -741,11 +741,6 @@ export default function Home() {
   const moveToView = (nextView) => {
     if (nextView === view) return;
 
-    if (nextView === "videos" && !isAdmin) {
-      alert(t("videosPreparingAlert"));
-      return;
-    }
-
     if (view === "calc" && nextView !== "calc" && !skipCalcLeaveCheck) {
       requestCalcSafetyCheck(() => setView(nextView));
       setPendingView(nextView);
