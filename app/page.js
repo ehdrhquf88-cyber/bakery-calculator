@@ -15,6 +15,7 @@ import { SUPABASE_AUTH_STORAGE_KEY, isSupabaseConfigured, supabase } from "./lib
 const INVITE_ONLY_MESSAGE = "초대된 사람만 로그인 가능합니다";
 const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
+const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
   costItems: "bakery_cost_items",
@@ -293,6 +294,41 @@ function getAuthRedirectError() {
   return message;
 }
 
+function getParisDateParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const valueByType = Object.fromEntries(parts.map(part => [part.type, part.value]));
+
+  return {
+    year: Number(valueByType.year),
+    month: Number(valueByType.month),
+    day: Number(valueByType.day),
+    monthInitial: new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Paris",
+      month: "long",
+    }).format(new Date()).charAt(0).toUpperCase(),
+    dateKey: `${valueByType.year}-${valueByType.month}-${valueByType.day}`,
+  };
+}
+
+function getAdminUnlockPassword() {
+  const { year, month, day, monthInitial } = getParisDateParts();
+  const sum = String(year + month + day).padStart(4, "0");
+  const firstTwo = Number(sum.slice(0, 2));
+  const lastTwo = Number(sum.slice(-2));
+
+  return `${firstTwo * lastTwo}${monthInitial}`;
+}
+
+function getAdminUnlockStorageKey(authUser) {
+  const { dateKey } = getParisDateParts();
+  return `${ADMIN_UNLOCK_STORAGE_PREFIX}:${authUser.id}:${dateKey}`;
+}
+
 async function getSupabaseAuthUser(session) {
   const user = session?.user;
   if (!user) return null;
@@ -342,6 +378,9 @@ export default function Home() {
   const [pendingCalcAction, setPendingCalcAction] = useState(null);
   const [leaveCheckStep, setLeaveCheckStep] = useState(null);
   const [hideLeaveCheck, setHideLeaveCheck] = useState(false);
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+  const [isAdminUnlockOpen, setIsAdminUnlockOpen] = useState(false);
+  const [adminUnlockError, setAdminUnlockError] = useState("");
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [authError, setAuthError] = useState("");
   const recipesSnapshotRef = useRef([]);
@@ -406,6 +445,7 @@ export default function Home() {
         setTempLogs([]);
         setUserDataLoaded(false);
         setUserDataOwnerId(null);
+        setIsAdminUnlocked(false);
         return;
       }
 
@@ -741,6 +781,22 @@ export default function Home() {
   const moveToView = (nextView) => {
     if (nextView === view) return;
 
+    if (nextView === "admin" && isAdmin && !isAdminUnlocked) {
+      try {
+        if (sessionStorage.getItem(getAdminUnlockStorageKey(authUser)) === "true") {
+          setIsAdminUnlocked(true);
+        } else {
+          setAdminUnlockError("");
+          setIsAdminUnlockOpen(true);
+          return;
+        }
+      } catch {
+        setAdminUnlockError("");
+        setIsAdminUnlockOpen(true);
+        return;
+      }
+    }
+
     if (view === "calc" && nextView !== "calc" && !skipCalcLeaveCheck) {
       requestCalcSafetyCheck(() => setView(nextView));
       setPendingView(nextView);
@@ -787,7 +843,26 @@ export default function Home() {
     setAuthUser(null);
     setUserDataLoaded(false);
     setUserDataOwnerId(null);
+    setIsAdminUnlocked(false);
     localStorage.removeItem("bakery_auth_user");
+  };
+
+  const confirmAdminUnlock = (password) => {
+    if (password.trim() !== getAdminUnlockPassword()) {
+      setAdminUnlockError(t("adminUnlockWrongPassword"));
+      return;
+    }
+
+    try {
+      sessionStorage.setItem(getAdminUnlockStorageKey(authUser), "true");
+    } catch {
+      // Session storage is only a convenience; role/RLS still protects admin data.
+    }
+
+    setIsAdminUnlocked(true);
+    setIsAdminUnlockOpen(false);
+    setAdminUnlockError("");
+    setView("admin");
   };
 
   const confirmLeaveCheck = () => {
@@ -848,9 +923,20 @@ export default function Home() {
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
-        {view === "admin" && isAdmin && <AdminPanel t={t} />}
+        {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} />}
         {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} onSignOut={handleSignOut} />}
       </div>
+      {isAdminUnlockOpen && (
+        <AdminUnlockModal
+          t={t}
+          error={adminUnlockError}
+          onCancel={() => {
+            setIsAdminUnlockOpen(false);
+            setAdminUnlockError("");
+          }}
+          onConfirm={confirmAdminUnlock}
+        />
+      )}
       {leaveCheckStep && (
         <LeaveCheckModal
           message={leaveCheckStep === "salt" ? t("saltCheck") : t("yeastCheck")}
@@ -1140,6 +1226,42 @@ function formatDateTime(value) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
+  const [password, setPassword] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-md">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onConfirm(password);
+        }}
+        className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-6 text-black shadow-2xl"
+      >
+        <h2 className="text-2xl font-black tracking-tighter">{t("adminUnlockTitle")}</h2>
+        <p className="mt-2 text-xs font-bold leading-5 text-gray-400">{t("adminUnlockDescription")}</p>
+        <input
+          type="password"
+          value={password}
+          onChange={event => setPassword(event.target.value)}
+          autoFocus
+          className="mt-5 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
+          placeholder={t("adminUnlockPassword")}
+        />
+        {error && <p className="mt-3 text-xs font-bold text-red-500">{error}</p>}
+        <div className="mt-6 flex gap-2">
+          <button type="button" onClick={onCancel} className="flex-1 rounded-xl border border-gray-200 bg-white py-3 text-sm font-black uppercase tracking-tight">
+            {t("cancel")}
+          </button>
+          <button type="submit" className="flex-1 rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white">
+            {t("confirm")}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, onSignOut }) {
