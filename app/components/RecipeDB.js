@@ -173,7 +173,14 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
           </div>
         ))}
       </div>
-      {isModalOpen && <RecipeModal t={t} initialData={editingRecipe} costItems={costItems} isMediaDisabled={isMediaDisabled} onRequireOnline={onRequireOnline} onSave={(data, newCostItems) => {
+      {isModalOpen && <RecipeModal t={t} initialData={editingRecipe} costItems={costItems} isMediaDisabled={isMediaDisabled} onRequireOnline={onRequireOnline} onImageDeleted={(deletedKey) => {
+        if (!editingRecipe || !deletedKey) return;
+        setRecipes(prev => prev.map(recipe => (
+          recipe.id === editingRecipe.id && recipe.communityImageKey === deletedKey
+            ? { ...recipe, communityImage: "", communityImageKey: "" }
+            : recipe
+        )));
+      }} onSave={(data, newCostItems) => {
         if (newCostItems.length > 0) setCostItems(prev => [...prev, ...newCostItems]);
         if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id, publishedAt: data.isPublic ? r.publishedAt || new Date().toISOString() : r.publishedAt } : r));
         else setRecipes(prev => [...prev, { ...data, id: Date.now() }]);
@@ -183,7 +190,7 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
   );
 }
 
-function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnline, onSave, onClose }) {
+function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnline, onImageDeleted, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
@@ -419,11 +426,15 @@ function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnli
     setImageUploadError("");
 
     try {
-      await deleteR2ImageKey(communityImageKey);
+      const deletedKey = communityImageKey;
+      await deleteR2ImageKey(deletedKey);
 
       setCommunityImage("");
       setCommunityImageKey("");
-      setPendingUploadedImageKeys(prev => prev.filter(key => key !== communityImageKey));
+      setPendingUploadedImageKeys(prev => prev.filter(key => key !== deletedKey));
+      if (deletedKey === initialData?.communityImageKey) {
+        onImageDeleted?.(deletedKey);
+      }
     } catch (error) {
       setImageUploadError(error.message || "Image delete failed.");
     } finally {
