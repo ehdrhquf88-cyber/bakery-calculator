@@ -31,8 +31,8 @@ export default function MyBreadYourBread({ t, recipes = [], onSaveCommunityRecip
 
     setSavingRecipeId(recipe.id);
     try {
-      await onSaveCommunityRecipe(recipe);
-      setSavedRecipeId(recipe.id);
+      const didSave = await onSaveCommunityRecipe(recipe);
+      if (didSave) setSavedRecipeId(recipe.id);
     } finally {
       setSavingRecipeId(null);
     }

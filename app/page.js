@@ -717,7 +717,7 @@ export default function Home() {
       await requireOnlineFeature();
     } catch {
       alert(t("communityOnlineRequired"));
-      return;
+      return false;
     }
 
     const copiedImage = await copyCommunityImage(recipe);
@@ -742,6 +742,8 @@ export default function Home() {
         },
       ];
     });
+
+    return true;
   };
 
   const updateCostItems = useCallback((nextCostItemsOrUpdater) => {
