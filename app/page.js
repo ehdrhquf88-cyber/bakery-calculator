@@ -20,6 +20,8 @@ const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
 const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_PIN_STORAGE_PREFIX = "bakery_offline_pin";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
+const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
+const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
   costItems: "bakery_cost_items",
@@ -28,6 +30,10 @@ const USER_DATA_STORAGE_KEYS = {
 
 function getUserDataStorageKey(baseKey, authUser) {
   return `${baseKey}:${authUser.id || authUser.email}`;
+}
+
+function getDeletedUserDataStorageKey(baseKey, authUser) {
+  return `${getUserDataStorageKey(baseKey, authUser)}:deleted`;
 }
 
 function loadUserData(authUser) {
@@ -63,6 +69,31 @@ function saveUserData(authUser, recipes, costItems, tempLogs) {
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.recipes, authUser), JSON.stringify(recipes));
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.costItems, authUser), JSON.stringify(costItems));
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.tempLogs, authUser), JSON.stringify(tempLogs));
+}
+
+function readDeletedUserDataIds(authUser, baseKey) {
+  try {
+    const storedIds = localStorage.getItem(getDeletedUserDataStorageKey(baseKey, authUser));
+    return new Set(storedIds ? JSON.parse(storedIds).map(Number) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeDeletedUserDataIds(authUser, baseKey, ids) {
+  localStorage.setItem(getDeletedUserDataStorageKey(baseKey, authUser), JSON.stringify([...ids]));
+}
+
+function recordDeletedUserDataIds(authUser, baseKey, ids) {
+  if (!authUser || ids.length === 0) return;
+
+  const deletedIds = readDeletedUserDataIds(authUser, baseKey);
+  ids.forEach(id => deletedIds.add(Number(id)));
+  writeDeletedUserDataIds(authUser, baseKey, deletedIds);
+}
+
+function clearDeletedUserDataIds(authUser, baseKey) {
+  localStorage.removeItem(getDeletedUserDataStorageKey(baseKey, authUser));
 }
 
 function normalizeOfflineUser(user) {
@@ -190,9 +221,62 @@ function normalizeRecipeId(recipe) {
   return Number.isFinite(numericId) ? numericId : Date.now();
 }
 
+function stripSyncMetadata(item) {
+  if (Array.isArray(item)) return item.map(stripSyncMetadata);
+  if (!item || typeof item !== "object") return item;
+  const cleanItem = { ...item };
+  delete cleanItem[LOCAL_UPDATED_AT_FIELD];
+  delete cleanItem[REMOTE_UPDATED_AT_FIELD];
+
+  return Object.fromEntries(
+    Object.entries(cleanItem).map(([key, value]) => [key, stripSyncMetadata(value)]),
+  );
+}
+
+function getSyncTimestamp(item, key) {
+  const time = Date.parse(item?.[key] || "");
+  return Number.isFinite(time) ? time : 0;
+}
+
+function hasMeaningfulDiff(leftItem, rightItem) {
+  return JSON.stringify(stripSyncMetadata(leftItem)) !== JSON.stringify(stripSyncMetadata(rightItem));
+}
+
+function markLocalUpdate(item) {
+  return {
+    ...item,
+    [LOCAL_UPDATED_AT_FIELD]: new Date().toISOString(),
+  };
+}
+
+function mergeLocalAndRemoteItems(localItems, remoteItems, normalizeId, deletedIds = new Set()) {
+  const localById = new Map((localItems || []).map(item => [normalizeId(item), item]));
+  const remoteById = new Map((remoteItems || []).map(item => [normalizeId(item), item]));
+  const ids = new Set([...localById.keys(), ...remoteById.keys()]);
+
+  return [...ids].map((id) => {
+    const localItem = localById.get(id);
+    const remoteItem = remoteById.get(id);
+
+    if (!localItem && remoteItem && deletedIds.has(Number(id))) return null;
+    if (!remoteItem) return localItem;
+    if (!localItem) return remoteItem;
+
+    const localEditedAt = getSyncTimestamp(localItem, LOCAL_UPDATED_AT_FIELD);
+    const localRemoteSeenAt = getSyncTimestamp(localItem, REMOTE_UPDATED_AT_FIELD);
+    const remoteEditedAt = getSyncTimestamp(remoteItem, REMOTE_UPDATED_AT_FIELD);
+
+    if (localEditedAt > remoteEditedAt) return localItem;
+    if (remoteEditedAt > localRemoteSeenAt && localEditedAt === 0) return remoteItem;
+    if (remoteEditedAt > localEditedAt) return remoteItem;
+    if (hasMeaningfulDiff(localItem, remoteItem)) return localItem;
+    return remoteItem;
+  }).filter(Boolean);
+}
+
 function recipeToSupabaseRow(authUser, recipe) {
   const id = normalizeRecipeId(recipe);
-  const recipeData = { ...recipe, id };
+  const recipeData = { ...stripSyncMetadata(recipe), id };
 
   return {
     user_id: authUser.id,
@@ -210,6 +294,7 @@ function recipeFromSupabaseRow(row) {
     ownerUserId: row.user_id,
     isPublic: Boolean(row.is_public),
     publishedAt: row.published_at || row.recipe_data?.publishedAt || "",
+    [REMOTE_UPDATED_AT_FIELD]: row.updated_at,
   };
 }
 
@@ -220,7 +305,7 @@ function normalizeCostItemId(item) {
 
 function costItemToSupabaseRow(authUser, item) {
   const id = normalizeCostItemId(item);
-  const itemData = { ...item, id };
+  const itemData = { ...stripSyncMetadata(item), id };
 
   return {
     user_id: authUser.id,
@@ -233,6 +318,7 @@ function costItemFromSupabaseRow(row) {
   return {
     ...(row.item_data || {}),
     id: Number(row.id),
+    [REMOTE_UPDATED_AT_FIELD]: row.updated_at,
   };
 }
 
@@ -243,7 +329,7 @@ function normalizeTempLogId(log) {
 
 function tempLogToSupabaseRow(authUser, log) {
   const id = normalizeTempLogId(log);
-  const logData = { ...log, id };
+  const logData = { ...stripSyncMetadata(log), id };
 
   return {
     user_id: authUser.id,
@@ -256,6 +342,7 @@ function tempLogFromSupabaseRow(row) {
   return {
     ...(row.log_data || {}),
     id: Number(row.id),
+    [REMOTE_UPDATED_AT_FIELD]: row.updated_at,
   };
 }
 
@@ -621,6 +708,9 @@ export default function Home() {
         let nextRecipes = userData.recipes;
         let nextCostItems = userData.costItems;
         let nextTempLogs = userData.tempLogs;
+        const deletedRecipeIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
+        const deletedCostItemIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
+        const deletedTempLogIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
 
         if (supabase && !authUser.isOfflineMode && navigator.onLine) {
           try {
@@ -634,22 +724,35 @@ export default function Home() {
             setCommunityRecipes(remoteCommunityRecipes);
 
             if (remoteRecipes.length > 0) {
-              nextRecipes = remoteRecipes;
+              nextRecipes = mergeLocalAndRemoteItems(userData.recipes, remoteRecipes, normalizeRecipeId, deletedRecipeIds);
+              if (hasMeaningfulDiff(nextRecipes, remoteRecipes)) {
+                await syncSupabaseRecipes(authUser, remoteRecipes, nextRecipes);
+              }
             } else if (userData.recipes.length > 0) {
               await syncSupabaseRecipes(authUser, [], userData.recipes);
             }
 
             if (remoteCostItems.length > 0) {
-              nextCostItems = remoteCostItems;
+              nextCostItems = mergeLocalAndRemoteItems(userData.costItems, remoteCostItems, normalizeCostItemId, deletedCostItemIds);
+              if (hasMeaningfulDiff(nextCostItems, remoteCostItems)) {
+                await syncSupabaseCostItems(authUser, remoteCostItems, nextCostItems);
+              }
             } else if (userData.costItems.length > 0) {
               await syncSupabaseCostItems(authUser, [], userData.costItems);
             }
 
             if (remoteTempLogs.length > 0) {
-              nextTempLogs = remoteTempLogs;
+              nextTempLogs = mergeLocalAndRemoteItems(userData.tempLogs, remoteTempLogs, normalizeTempLogId, deletedTempLogIds);
+              if (hasMeaningfulDiff(nextTempLogs, remoteTempLogs)) {
+                await syncSupabaseTempLogs(authUser, remoteTempLogs, nextTempLogs);
+              }
             } else if (userData.tempLogs.length > 0) {
               await syncSupabaseTempLogs(authUser, [], userData.tempLogs);
             }
+
+            clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
+            clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
+            clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
           } catch (error) {
             console.warn("Supabase 데이터 테이블을 사용할 수 없어 로컬 데이터로 계속합니다.", error?.message || error);
           }
@@ -768,13 +871,18 @@ export default function Home() {
       const nextRecipes = typeof nextRecipesOrUpdater === "function"
         ? nextRecipesOrUpdater(prev)
         : nextRecipesOrUpdater;
+      const nextIds = new Set((nextRecipes || []).map(recipe => normalizeRecipeId(recipe)));
+      const removedIds = prev
+        .map(recipe => normalizeRecipeId(recipe))
+        .filter(id => !nextIds.has(id));
+      recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes, removedIds);
 
       return (nextRecipes || []).map(recipe => ({
-        ...recipe,
+        ...markLocalUpdate(recipe),
         id: normalizeRecipeId(recipe),
       }));
     });
-  }, []);
+  }, [authUser]);
 
   const requireOnlineFeature = async () => {
     if (!navigator.onLine) throw new Error(t("communityOnlineRequired"));
@@ -903,26 +1011,36 @@ export default function Home() {
       const nextCostItems = typeof nextCostItemsOrUpdater === "function"
         ? nextCostItemsOrUpdater(prev)
         : nextCostItemsOrUpdater;
+      const nextIds = new Set((nextCostItems || []).map(item => normalizeCostItemId(item)));
+      const removedIds = prev
+        .map(item => normalizeCostItemId(item))
+        .filter(id => !nextIds.has(id));
+      recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems, removedIds);
 
       return (nextCostItems || []).map(item => ({
-        ...item,
+        ...markLocalUpdate(item),
         id: normalizeCostItemId(item),
       }));
     });
-  }, []);
+  }, [authUser]);
 
   const updateTempLogs = useCallback((nextTempLogsOrUpdater) => {
     setTempLogs(prev => {
       const nextTempLogs = typeof nextTempLogsOrUpdater === "function"
         ? nextTempLogsOrUpdater(prev)
         : nextTempLogsOrUpdater;
+      const nextIds = new Set((nextTempLogs || []).map(log => normalizeTempLogId(log)));
+      const removedIds = prev
+        .map(log => normalizeTempLogId(log))
+        .filter(id => !nextIds.has(id));
+      recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs, removedIds);
 
       return (nextTempLogs || []).map(log => ({
-        ...log,
+        ...markLocalUpdate(log),
         id: normalizeTempLogId(log),
       }));
     });
-  }, []);
+  }, [authUser]);
 
   useEffect(() => {
     if (!supabase) return undefined;
