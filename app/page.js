@@ -17,6 +17,7 @@ const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
 const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
 const OFFLINE_USER_STORAGE_KEY = "bakery_offline_user";
+const OFFLINE_PIN_STORAGE_PREFIX = "bakery_offline_pin";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
@@ -83,6 +84,68 @@ function writeOfflineUser(user) {
     role: user.role,
     signedInAt: user.signedInAt,
   }));
+}
+
+function getOfflinePinStorageKey(userId) {
+  return `${OFFLINE_PIN_STORAGE_PREFIX}:${userId}`;
+}
+
+function readOfflinePinRecord(userId) {
+  if (!userId) return null;
+
+  try {
+    const storedPin = localStorage.getItem(getOfflinePinStorageKey(userId));
+    return storedPin ? JSON.parse(storedPin) : null;
+  } catch {
+    return null;
+  }
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  bytes.forEach(byte => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+function base64ToBytes(value) {
+  const binary = atob(value);
+  return Uint8Array.from(binary, char => char.charCodeAt(0));
+}
+
+async function deriveOfflinePinHash(pin, saltBytes) {
+  const encodedPin = new TextEncoder().encode(pin);
+  const key = await crypto.subtle.importKey("raw", encodedPin, "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt: saltBytes,
+      iterations: 100000,
+    },
+    key,
+    256,
+  );
+
+  return bytesToBase64(new Uint8Array(bits));
+}
+
+async function createOfflinePinRecord(pin) {
+  const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+  const hash = await deriveOfflinePinHash(pin, saltBytes);
+
+  return {
+    salt: bytesToBase64(saltBytes),
+    hash,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function verifyOfflinePin(pin, record) {
+  if (!record?.salt || !record?.hash) return false;
+  const hash = await deriveOfflinePinHash(pin, base64ToBytes(record.salt));
+  return hash === record.hash;
 }
 
 function normalizeRecipeId(recipe) {
@@ -408,6 +471,7 @@ export default function Home() {
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [authError, setAuthError] = useState("");
   const [isOnline, setIsOnline] = useState(true);
+  const [hasOfflinePin, setHasOfflinePin] = useState(false);
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
@@ -453,10 +517,29 @@ export default function Home() {
           setIsOnline(false);
 
           if (offlineUser && confirm(promptTranslator("offlineStartPrompt"))) {
+            const offlinePinRecord = readOfflinePinRecord(offlineUser.id);
+            if (!offlinePinRecord) {
+              setAuthError(promptTranslator("offlinePinMissing"));
+              return;
+            }
+
+            const offlinePin = prompt(promptTranslator("offlinePinPrompt"));
+            if (!offlinePin) {
+              setAuthError(promptTranslator("offlineStartCancelled"));
+              return;
+            }
+
+            const isPinValid = await verifyOfflinePin(offlinePin.trim(), offlinePinRecord);
+            if (!isPinValid) {
+              setAuthError(promptTranslator("offlinePinWrong"));
+              return;
+            }
+
             setAuthUser({
               ...offlineUser,
               isOfflineMode: true,
             });
+            setHasOfflinePin(true);
           } else {
             setAuthError(offlineUser ? promptTranslator("offlineStartCancelled") : promptTranslator("offlineNoCachedUser"));
           }
@@ -469,7 +552,10 @@ export default function Home() {
           if (error) throw error;
           const nextUser = await getSupabaseAuthUser(data.session);
           if (nextUser) writeOfflineUser(nextUser);
-          if (isMounted) setAuthUser(nextUser);
+          if (isMounted) {
+            setAuthUser(nextUser);
+            setHasOfflinePin(Boolean(nextUser?.id && readOfflinePinRecord(nextUser.id)));
+          }
         }
       } catch (e) {
         if (e.message === INVITE_ONLY_MESSAGE) {
@@ -831,7 +917,10 @@ export default function Home() {
       getSupabaseAuthUser(session)
         .then(user => {
           if (user) writeOfflineUser(user);
-          if (isMounted) setAuthUser(user);
+          if (isMounted) {
+            setAuthUser(user);
+            setHasOfflinePin(Boolean(user?.id && readOfflinePinRecord(user.id)));
+          }
         })
         .catch(error => {
           if (error.message === INVITE_ONLY_MESSAGE) {
@@ -861,6 +950,7 @@ export default function Home() {
       clearStoredAuthSession();
       supabase.auth.signOut({ scope: "local" });
       setAuthUser(null);
+      setHasOfflinePin(false);
       setUserDataLoaded(false);
       setUserDataOwnerId(null);
     };
@@ -970,11 +1060,24 @@ export default function Home() {
   const handleSignOut = async () => {
     if (supabase && !authUser?.isOfflineMode) await supabase.auth.signOut();
     clearStoredAuthSession();
+    if (authUser?.id) {
+      localStorage.removeItem(OFFLINE_USER_STORAGE_KEY);
+      localStorage.removeItem(getOfflinePinStorageKey(authUser.id));
+    }
     setAuthUser(null);
+    setHasOfflinePin(false);
     setUserDataLoaded(false);
     setUserDataOwnerId(null);
     setIsAdminUnlocked(false);
     localStorage.removeItem("bakery_auth_user");
+  };
+
+  const handleSetOfflinePin = async (pin) => {
+    if (!authUser?.id) return;
+    const record = await createOfflinePinRecord(pin);
+    localStorage.setItem(getOfflinePinStorageKey(authUser.id), JSON.stringify(record));
+    writeOfflineUser(authUser);
+    setHasOfflinePin(true);
   };
 
   const confirmAdminUnlock = (password) => {
@@ -1059,7 +1162,7 @@ export default function Home() {
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} onSignOut={handleSignOut} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} hasOfflinePin={hasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -1399,7 +1502,40 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, onSignOut }) {
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, hasOfflinePin, onSetOfflinePin, onSignOut }) {
+  const [offlinePin, setOfflinePin] = useState("");
+  const [offlinePinConfirm, setOfflinePinConfirm] = useState("");
+  const [offlinePinStatus, setOfflinePinStatus] = useState("");
+  const [isSavingOfflinePin, setIsSavingOfflinePin] = useState(false);
+
+  const saveOfflinePin = async (event) => {
+    event.preventDefault();
+    setOfflinePinStatus("");
+
+    const normalizedPin = offlinePin.trim();
+    if (!/^\d{4,8}$/.test(normalizedPin)) {
+      setOfflinePinStatus(t("offlinePinInvalid"));
+      return;
+    }
+
+    if (normalizedPin !== offlinePinConfirm.trim()) {
+      setOfflinePinStatus(t("offlinePinMismatch"));
+      return;
+    }
+
+    setIsSavingOfflinePin(true);
+    try {
+      await onSetOfflinePin(normalizedPin);
+      setOfflinePin("");
+      setOfflinePinConfirm("");
+      setOfflinePinStatus(t("offlinePinSaved"));
+    } catch {
+      setOfflinePinStatus(t("offlinePinSaveFailed"));
+    } finally {
+      setIsSavingOfflinePin(false);
+    }
+  };
+
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-8 text-black">
       <div className="border-b-2 border-black pb-4 mb-6">
@@ -1422,6 +1558,48 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
             ))}
           </select>
         </div>
+      </section>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
+        <form onSubmit={saveOfflinePin} className="space-y-4">
+          <div>
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinTitle")}</div>
+            <h2 className="mt-1 text-xl font-black tracking-tighter">{hasOfflinePin ? t("offlinePinEnabled") : t("offlinePinDisabled")}</h2>
+            <p className="mt-2 text-xs font-bold leading-5 text-gray-400">{t("offlinePinDescription")}</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <label className="block">
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinInput")}</span>
+              <input
+                type="password"
+                inputMode="numeric"
+                value={offlinePin}
+                onChange={event => setOfflinePin(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
+                placeholder="0000"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinConfirm")}</span>
+              <input
+                type="password"
+                inputMode="numeric"
+                value={offlinePinConfirm}
+                onChange={event => setOfflinePinConfirm(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
+                placeholder="0000"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={isSavingOfflinePin}
+              className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:cursor-wait disabled:opacity-60"
+            >
+              {isSavingOfflinePin ? t("saving") : t("save")}
+            </button>
+          </div>
+          {offlinePinStatus && <p className={`text-xs font-bold ${offlinePinStatus === t("offlinePinSaved") ? "text-green-600" : "text-red-500"}`}>{offlinePinStatus}</p>}
+        </form>
       </section>
 
       <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
