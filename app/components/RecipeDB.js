@@ -35,13 +35,12 @@ function canvasToBlob(canvas, type, quality) {
 }
 
 async function optimizeImageForUpload(file) {
-  const originalExtension = file.name?.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
-  const fallbackFileName = `bread-photo.${originalExtension}`;
-  if (!file.type.startsWith("image/") || file.type === "image/gif") {
-    return {
-      blob: file,
-      fileName: fallbackFileName,
-    };
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Image upload failed.");
+  }
+
+  if (file.type === "image/gif") {
+    throw new Error("GIF uploads are not supported.");
   }
 
   const image = await loadImageElement(file);
@@ -53,29 +52,15 @@ async function optimizeImageForUpload(file) {
   canvas.height = height;
 
   const context = canvas.getContext("2d");
-  if (!context) return file;
+  if (!context) throw new Error("Image compression failed.");
 
   context.drawImage(image, 0, 0, width, height);
 
-  let blob;
-  let fileName = "bread-photo.webp";
-  try {
-    blob = await canvasToBlob(canvas, "image/webp", IMAGE_UPLOAD_QUALITY);
-  } catch {
-    blob = await canvasToBlob(canvas, "image/jpeg", IMAGE_UPLOAD_QUALITY);
-    fileName = "bread-photo.jpg";
-  }
-
-  if (blob.size >= file.size && scale === 1) {
-    return {
-      blob: file,
-      fileName: fallbackFileName,
-    };
-  }
+  const blob = await canvasToBlob(canvas, "image/webp", IMAGE_UPLOAD_QUALITY);
 
   return {
     blob,
-    fileName,
+    fileName: "bread-photo.webp",
   };
 }
 
@@ -479,7 +464,7 @@ function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnli
               ) : (
                 <span className="px-4 text-center text-xs font-black text-gray-400 uppercase tracking-tight">{t("uploadBreadPhoto")}</span>
               )}
-              <input type="file" accept="image/*" onChange={e => updateCommunityImage(e.target.files?.[0])} className="sr-only" disabled={isImageBusy || isMediaDisabled} />
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e => updateCommunityImage(e.target.files?.[0])} className="sr-only" disabled={isImageBusy || isMediaDisabled} />
             </label>
             <textarea
               value={communityText}

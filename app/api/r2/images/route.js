@@ -8,7 +8,6 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
-  "image/gif",
 ]);
 
 export async function POST(request) {
@@ -27,7 +26,7 @@ export async function POST(request) {
     }
 
     if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
-      return Response.json({ error: "Only jpeg, png, webp, and gif uploads are allowed" }, { status: 400 });
+      return Response.json({ error: "Only jpeg, png, and webp uploads are allowed" }, { status: 400 });
     }
 
     if (file.size > MAX_IMAGE_BYTES) {
