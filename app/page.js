@@ -1244,6 +1244,12 @@ export default function Home() {
     setHasOfflinePin(true);
   };
 
+  const handleVerifyOfflinePin = async (pin) => {
+    if (!authUser?.id) return false;
+    const record = readOfflinePinRecord(authUser.id);
+    return verifyOfflinePin(pin.trim(), record);
+  };
+
   const confirmAdminUnlock = (password) => {
     if (password.trim() !== getAdminUnlockPassword()) {
       setAdminUnlockError(t("adminUnlockWrongPassword"));
@@ -1337,7 +1343,7 @@ export default function Home() {
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} hasOfflinePin={hasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onSignOut={handleSignOut} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} hasOfflinePin={hasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onVerifyOfflinePin={handleVerifyOfflinePin} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -1677,7 +1683,9 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, hasOfflinePin, onSetOfflinePin, onSignOut }) {
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, hasOfflinePin, onSetOfflinePin, onVerifyOfflinePin, onSignOut }) {
+  const [isResettingOfflinePin, setIsResettingOfflinePin] = useState(false);
+  const [currentOfflinePin, setCurrentOfflinePin] = useState("");
   const [offlinePin, setOfflinePin] = useState("");
   const [offlinePinConfirm, setOfflinePinConfirm] = useState("");
   const [offlinePinStatus, setOfflinePinStatus] = useState("");
@@ -1688,6 +1696,16 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
     setOfflinePinStatus("");
 
     const normalizedPin = offlinePin.trim();
+    const normalizedCurrentPin = currentOfflinePin.trim();
+
+    if (hasOfflinePin) {
+      const isCurrentPinValid = await onVerifyOfflinePin(normalizedCurrentPin);
+      if (!isCurrentPinValid) {
+        setOfflinePinStatus(t("offlinePinCurrentWrong"));
+        return;
+      }
+    }
+
     if (!/^\d{4,8}$/.test(normalizedPin)) {
       setOfflinePinStatus(t("offlinePinInvalid"));
       return;
@@ -1701,9 +1719,11 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
     setIsSavingOfflinePin(true);
     try {
       await onSetOfflinePin(normalizedPin);
+      setCurrentOfflinePin("");
       setOfflinePin("");
       setOfflinePinConfirm("");
       setOfflinePinStatus(t("offlinePinSaved"));
+      setIsResettingOfflinePin(false);
     } catch {
       setOfflinePinStatus(t("offlinePinSaveFailed"));
     } finally {
@@ -1741,38 +1761,66 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
             <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinTitle")}</div>
             <h2 className="mt-1 text-xl font-black tracking-tighter">{hasOfflinePin ? t("offlinePinEnabled") : t("offlinePinDisabled")}</h2>
             <p className="mt-2 text-xs font-bold leading-5 text-gray-400">{t("offlinePinDescription")}</p>
+            <p className="mt-2 text-xs font-black leading-5 text-red-500">{t("offlinePinCannotRecover")}</p>
           </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-            <label className="block">
-              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinInput")}</span>
-              <input
-                type="password"
-                inputMode="numeric"
-                value={offlinePin}
-                onChange={event => setOfflinePin(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
-                placeholder="0000"
-              />
-            </label>
-            <label className="block">
-              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinConfirm")}</span>
-              <input
-                type="password"
-                inputMode="numeric"
-                value={offlinePinConfirm}
-                onChange={event => setOfflinePinConfirm(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
-                placeholder="0000"
-              />
-            </label>
+
+          {hasOfflinePin && !isResettingOfflinePin ? (
             <button
-              type="submit"
-              disabled={isSavingOfflinePin}
-              className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:cursor-wait disabled:opacity-60"
+              type="button"
+              onClick={() => {
+                setIsResettingOfflinePin(true);
+                setOfflinePinStatus("");
+              }}
+              className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white"
             >
-              {isSavingOfflinePin ? t("saving") : t("save")}
+              {t("resetOfflinePin")}
             </button>
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+              {hasOfflinePin && (
+                <label className="block md:col-span-2">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinCurrent")}</span>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    value={currentOfflinePin}
+                    onChange={event => setCurrentOfflinePin(event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
+                    placeholder="0000"
+                  />
+                </label>
+              )}
+              <label className="block">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{hasOfflinePin ? t("offlinePinNew") : t("offlinePinInput")}</span>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  value={offlinePin}
+                  onChange={event => setOfflinePin(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
+                  placeholder="0000"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinConfirm")}</span>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  value={offlinePinConfirm}
+                  onChange={event => setOfflinePinConfirm(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
+                  placeholder="0000"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={isSavingOfflinePin}
+                className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:cursor-wait disabled:opacity-60"
+              >
+                {isSavingOfflinePin ? t("saving") : hasOfflinePin ? t("resetOfflinePin") : t("save")}
+              </button>
+            </div>
+          )}
           {offlinePinStatus && <p className={`text-xs font-bold ${offlinePinStatus === t("offlinePinSaved") ? "text-green-600" : "text-red-500"}`}>{offlinePinStatus}</p>}
         </form>
       </section>
