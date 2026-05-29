@@ -16,7 +16,8 @@ const INVITE_ONLY_MESSAGE = "초대된 사람만 로그인 가능합니다";
 const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
 const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
-const OFFLINE_USER_STORAGE_KEY = "bakery_offline_user";
+const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
+const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_PIN_STORAGE_PREFIX = "bakery_offline_pin";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
 const USER_DATA_STORAGE_KEYS = {
@@ -64,26 +65,62 @@ function saveUserData(authUser, recipes, costItems, tempLogs) {
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.tempLogs, authUser), JSON.stringify(tempLogs));
 }
 
-function readOfflineUser() {
-  try {
-    const storedUser = localStorage.getItem(OFFLINE_USER_STORAGE_KEY);
-    return storedUser ? JSON.parse(storedUser) : null;
-  } catch {
-    return null;
-  }
-}
+function normalizeOfflineUser(user) {
+  if (!user?.id) return null;
 
-function writeOfflineUser(user) {
-  if (!user?.id) return;
-
-  localStorage.setItem(OFFLINE_USER_STORAGE_KEY, JSON.stringify({
+  return {
     id: user.id,
     name: user.name,
     email: user.email,
     picture: user.picture,
     role: user.role,
     signedInAt: user.signedInAt,
-  }));
+  };
+}
+
+function readOfflineUsers() {
+  try {
+    const storedUsers = localStorage.getItem(OFFLINE_USERS_STORAGE_KEY);
+    const users = storedUsers ? JSON.parse(storedUsers) : [];
+    const legacyUser = localStorage.getItem(OFFLINE_LEGACY_USER_STORAGE_KEY);
+    const normalizedUsers = Array.isArray(users)
+      ? users.map(normalizeOfflineUser).filter(Boolean)
+      : [];
+
+    if (legacyUser) {
+      const normalizedLegacyUser = normalizeOfflineUser(JSON.parse(legacyUser));
+      if (normalizedLegacyUser && !normalizedUsers.some(user => user.id === normalizedLegacyUser.id)) {
+        normalizedUsers.push(normalizedLegacyUser);
+      }
+      localStorage.removeItem(OFFLINE_LEGACY_USER_STORAGE_KEY);
+      localStorage.setItem(OFFLINE_USERS_STORAGE_KEY, JSON.stringify(normalizedUsers));
+    }
+
+    return normalizedUsers;
+  } catch {
+    return [];
+  }
+}
+
+function writeOfflineUser(user) {
+  const normalizedUser = normalizeOfflineUser(user);
+  if (!normalizedUser) return;
+
+  const users = readOfflineUsers();
+  const nextUsers = [
+    normalizedUser,
+    ...users.filter(item => item.id !== normalizedUser.id),
+  ];
+
+  localStorage.setItem(OFFLINE_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
+}
+
+function removeOfflineUser(userId) {
+  if (!userId) return;
+
+  const users = readOfflineUsers().filter(user => user.id !== userId);
+  localStorage.setItem(OFFLINE_USERS_STORAGE_KEY, JSON.stringify(users));
+  localStorage.removeItem(getOfflinePinStorageKey(userId));
 }
 
 function getOfflinePinStorageKey(userId) {
@@ -472,7 +509,7 @@ export default function Home() {
   const [authError, setAuthError] = useState("");
   const [isOnline, setIsOnline] = useState(true);
   const [hasOfflinePin, setHasOfflinePin] = useState(false);
-  const [offlineLoginUser, setOfflineLoginUser] = useState(null);
+  const [offlineLoginUsers, setOfflineLoginUsers] = useState([]);
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
@@ -514,14 +551,14 @@ export default function Home() {
 
         if (!navigator.onLine) {
           const promptTranslator = getTranslator(LANGUAGES.some(lang => lang.code === savedLanguage) ? savedLanguage : DEFAULT_LANGUAGE);
-          const offlineUser = readOfflineUser();
+          const offlineUsers = readOfflineUsers().filter(user => readOfflinePinRecord(user.id));
           setIsOnline(false);
 
-          if (offlineUser && readOfflinePinRecord(offlineUser.id)) {
-            setOfflineLoginUser(offlineUser);
+          if (offlineUsers.length > 0) {
+            setOfflineLoginUsers(offlineUsers);
             setHasOfflinePin(true);
           } else {
-            setAuthError(offlineUser ? promptTranslator("offlinePinMissing") : promptTranslator("offlineNoCachedUser"));
+            setAuthError(readOfflineUsers().length > 0 ? promptTranslator("offlinePinMissing") : promptTranslator("offlineNoCachedUser"));
           }
 
           return;
@@ -1037,8 +1074,8 @@ export default function Home() {
     if (error) setAuthError(error.message);
   };
 
-  const handleOfflinePinSignIn = async (pin) => {
-    const offlineUser = offlineLoginUser || readOfflineUser();
+  const handleOfflinePinSignIn = async (userId, pin) => {
+    const offlineUser = readOfflineUsers().find(user => user.id === userId);
     if (!offlineUser) {
       setAuthError(t("offlineNoCachedUser"));
       return false;
@@ -1060,7 +1097,7 @@ export default function Home() {
       ...offlineUser,
       isOfflineMode: true,
     });
-    setOfflineLoginUser(null);
+    setOfflineLoginUsers([]);
     setHasOfflinePin(true);
     setAuthError("");
     return true;
@@ -1070,11 +1107,10 @@ export default function Home() {
     if (supabase && !authUser?.isOfflineMode) await supabase.auth.signOut();
     clearStoredAuthSession();
     if (authUser?.id) {
-      localStorage.removeItem(OFFLINE_USER_STORAGE_KEY);
-      localStorage.removeItem(getOfflinePinStorageKey(authUser.id));
+      removeOfflineUser(authUser.id);
     }
     setAuthUser(null);
-    setOfflineLoginUser(null);
+    setOfflineLoginUsers([]);
     setHasOfflinePin(false);
     setUserDataLoaded(false);
     setUserDataOwnerId(null);
@@ -1127,7 +1163,7 @@ export default function Home() {
       <LoginScreen
         t={t}
         isOnline={isOnline}
-        offlineLoginUser={offlineLoginUser}
+        offlineLoginUsers={offlineLoginUsers}
         onGoogleSignIn={handleGoogleSignIn}
         onOfflinePinSignIn={handleOfflinePinSignIn}
         authError={authError}
@@ -1704,15 +1740,19 @@ function LeaveCheckModal({ message, t, hideLeaveCheck, setHideLeaveCheck, onCanc
   );
 }
 
-function LoginScreen({ t, isOnline, offlineLoginUser, onGoogleSignIn, onOfflinePinSignIn, authError }) {
+function LoginScreen({ t, isOnline, offlineLoginUsers, onGoogleSignIn, onOfflinePinSignIn, authError }) {
   const [offlinePin, setOfflinePin] = useState("");
   const [isUnlockingOffline, setIsUnlockingOffline] = useState(false);
-  const canUseOfflinePin = !isOnline && offlineLoginUser;
+  const [selectedOfflineUserId, setSelectedOfflineUserId] = useState(offlineLoginUsers[0]?.id || "");
+  const canUseOfflinePin = !isOnline && offlineLoginUsers.length > 0;
+  const selectedOfflineUser = offlineLoginUsers.find(user => user.id === selectedOfflineUserId) || offlineLoginUsers[0];
 
   const submitOfflinePin = async (event) => {
     event.preventDefault();
+    if (!selectedOfflineUser) return;
+
     setIsUnlockingOffline(true);
-    const isUnlocked = await onOfflinePinSignIn(offlinePin);
+    const isUnlocked = await onOfflinePinSignIn(selectedOfflineUser.id, offlinePin);
     if (!isUnlocked) {
       setOfflinePin("");
       setIsUnlockingOffline(false);
@@ -1750,9 +1790,23 @@ function LoginScreen({ t, isOnline, offlineLoginUser, onGoogleSignIn, onOfflineP
               {canUseOfflinePin && (
                 <form onSubmit={submitOfflinePin} className="mt-4 rounded-xl border border-black/10 bg-white/70 p-4">
                   <p className="whitespace-pre-line text-xs font-bold leading-5 text-gray-500">{t("offlineStartPrompt")}</p>
-                  <div className="mt-3 text-[10px] font-black uppercase tracking-widest text-gray-400">
-                    {offlineLoginUser.email || offlineLoginUser.name}
-                  </div>
+                  <label className="mt-3 block">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t("offlineAccount")}</span>
+                    <select
+                      value={selectedOfflineUser?.id || ""}
+                      onChange={event => {
+                        setSelectedOfflineUserId(event.target.value);
+                        setOfflinePin("");
+                      }}
+                      className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
+                    >
+                      {offlineLoginUsers.map(user => (
+                        <option key={user.id} value={user.id}>
+                          {user.email || user.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <div className="mt-2 flex gap-2">
                     <input
                       type="password"
