@@ -172,6 +172,7 @@ function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnli
   const [communityText, setCommunityText] = useState(initialData?.communityText || "");
   const [communityImage, setCommunityImage] = useState(initialData?.communityImage || "");
   const [communityImageKey, setCommunityImageKey] = useState(initialData?.communityImageKey || "");
+  const [pendingUploadedImageKeys, setPendingUploadedImageKeys] = useState([]);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isDeletingImage, setIsDeletingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState("");
@@ -280,6 +281,48 @@ function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnli
       sourceRecipeId: initialData?.sourceRecipeId,
       savedFromCommunityAt: initialData?.savedFromCommunityAt,
     }, newCostItems);
+    setPendingUploadedImageKeys([]);
+  };
+  const deleteR2ImageKey = async (key) => {
+    if (!key || !supabase) return;
+
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error("Login session is missing.");
+
+    const response = await fetch("/api/r2/delete", {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ key }),
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Image delete failed.");
+    }
+  };
+  const closeWithoutSaving = async () => {
+    const keysToDelete = pendingUploadedImageKeys.filter(key => key !== initialData?.communityImageKey);
+
+    if (keysToDelete.length > 0) {
+      setIsDeletingImage(true);
+      setImageUploadError("");
+      try {
+        await Promise.all(keysToDelete.map(deleteR2ImageKey));
+      } catch (error) {
+        setImageUploadError(error.message || "Image delete failed.");
+        setIsDeletingImage(false);
+        return;
+      }
+      setIsDeletingImage(false);
+    }
+
+    onClose();
   };
   const updateCommunityImage = async (file) => {
     if (!file) return;
@@ -321,8 +364,14 @@ function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnli
         throw new Error(result.error || "Image upload failed.");
       }
 
+      if (communityImageKey && communityImageKey !== initialData?.communityImageKey) {
+        await deleteR2ImageKey(communityImageKey);
+        setPendingUploadedImageKeys(prev => prev.filter(key => key !== communityImageKey));
+      }
+
       setCommunityImage("");
       setCommunityImageKey(result.key);
+      setPendingUploadedImageKeys(prev => [...new Set([...prev, result.key])]);
     } catch (error) {
       setImageUploadError(error.message || "Image upload failed.");
     } finally {
@@ -351,28 +400,11 @@ function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnli
     setImageUploadError("");
 
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw sessionError;
-
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error("Login session is missing.");
-
-      const response = await fetch("/api/r2/delete", {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ key: communityImageKey }),
-      });
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Image delete failed.");
-      }
+      await deleteR2ImageKey(communityImageKey);
 
       setCommunityImage("");
       setCommunityImageKey("");
+      setPendingUploadedImageKeys(prev => prev.filter(key => key !== communityImageKey));
     } catch (error) {
       setImageUploadError(error.message || "Image delete failed.");
     } finally {
@@ -384,7 +416,7 @@ function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnli
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
       <div className="bg-[#f7f6f3] w-full max-w-4xl rounded-[2rem] p-6 md:p-12 shadow-2xl max-h-[90vh] overflow-y-auto relative">
-        <button onClick={onClose} className="absolute top-6 right-6 text-xl">x</button>
+        <button onClick={closeWithoutSaving} disabled={isImageBusy} className="absolute top-6 right-6 text-xl disabled:cursor-wait disabled:opacity-50">x</button>
         <h2 className="text-2xl md:text-3xl font-black tracking-tighter mb-8 uppercase">{t("recipeEditor")}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <InputField label={t("category")}><select value={category} onChange={e => setCategory(e.target.value)} className="w-full h-10 bg-transparent border-b-2 border-black py-2 outline-none font-bold leading-normal"><option value="하드계열">{t("hardCategory")}</option><option value="소프트계열">{t("softCategory")}</option><option value="사전반죽">{t("prefermentCategory")}</option></select></InputField>
@@ -471,7 +503,7 @@ function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnli
           <button onClick={() => setIngredients([...ingredients, { type: "밀", name: "", percent: "", cost: "" }])} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 font-black uppercase tracking-widest">{t("addIngredient")}</button>
         </div>
         <div className="mt-10 flex gap-3">
-          <button onClick={onClose} className="flex-1 bg-white border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-tighter">{t("close")}</button>
+          <button onClick={closeWithoutSaving} disabled={isImageBusy} className="flex-1 bg-white border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-tighter disabled:cursor-wait disabled:opacity-60">{isDeletingImage ? t("imageDeleting") : t("close")}</button>
           <button onClick={saveRecipe} disabled={isImageBusy} className="flex-1 bg-black text-white py-4 rounded-xl font-bold uppercase tracking-tighter disabled:cursor-wait disabled:opacity-60">{isDeletingImage ? t("imageDeleting") : isUploadingImage ? t("imageUploading") : t("saveRecipe")}</button>
         </div>
       </div>
