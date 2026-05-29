@@ -930,8 +930,8 @@ export default function Home() {
     const ownPublicRecipes = recipes
       .filter(recipe => recipe.isPublic)
       .map(recipe => ({ ...recipe, ownerUserId: recipe.ownerUserId || authUser?.id }));
-    const ownPublicKeys = new Set(ownPublicRecipes.map(recipe => `${recipe.ownerUserId || ""}:${recipe.id}`));
-    const remotePublicRecipes = communityRecipes.filter(recipe => !ownPublicKeys.has(`${recipe.ownerUserId || ""}:${recipe.id}`));
+    const ownRecipeKeys = new Set(recipes.map(recipe => `${recipe.ownerUserId || authUser?.id || ""}:${recipe.id}`));
+    const remotePublicRecipes = communityRecipes.filter(recipe => !ownRecipeKeys.has(`${recipe.ownerUserId || ""}:${recipe.id}`));
 
     return [...ownPublicRecipes, ...remotePublicRecipes];
   }, [authUser?.id, communityRecipes, recipes]);
