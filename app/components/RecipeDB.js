@@ -5,7 +5,7 @@ import { InputField } from "./common";
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 import { supabase } from "../lib/supabaseClient";
 
-export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems, isOnline, onRequireOnline, onToggleCommunityVisibility }) {
+export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems, isOnline, isMediaDisabled, onRequireOnline, onToggleCommunityVisibility }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingRecipe, setEditingRecipe] = useState(null);
@@ -33,7 +33,7 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
   const deleteRecipe = async (recipe) => {
     if (!confirm(t("deleteConfirm"))) return;
 
-    if (recipe.communityImageKey && supabase) {
+    if (recipe.communityImageKey && supabase && !isMediaDisabled) {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) {
         alert(sessionError.message);
@@ -99,7 +99,7 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
           </div>
         ))}
       </div>
-      {isModalOpen && <RecipeModal t={t} initialData={editingRecipe} costItems={costItems} onRequireOnline={onRequireOnline} onSave={(data, newCostItems) => {
+      {isModalOpen && <RecipeModal t={t} initialData={editingRecipe} costItems={costItems} isMediaDisabled={isMediaDisabled} onRequireOnline={onRequireOnline} onSave={(data, newCostItems) => {
         if (newCostItems.length > 0) setCostItems(prev => [...prev, ...newCostItems]);
         if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id, publishedAt: data.isPublic ? r.publishedAt || new Date().toISOString() : r.publishedAt } : r));
         else setRecipes(prev => [...prev, { ...data, id: Date.now() }]);
@@ -109,7 +109,7 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
   );
 }
 
-function RecipeModal({ t, initialData, costItems, onRequireOnline, onSave, onClose }) {
+function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnline, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
@@ -229,6 +229,11 @@ function RecipeModal({ t, initialData, costItems, onRequireOnline, onSave, onClo
   const updateCommunityImage = async (file) => {
     if (!file) return;
 
+    if (isMediaDisabled) {
+      setImageUploadError(t("offlineMediaDisabled"));
+      return;
+    }
+
     if (!supabase) {
       setImageUploadError(t("supabaseClientMissing"));
       return;
@@ -269,6 +274,11 @@ function RecipeModal({ t, initialData, costItems, onRequireOnline, onSave, onClo
     }
   };
   const deleteCommunityImage = async () => {
+    if (isMediaDisabled) {
+      setImageUploadError(t("offlineMediaDisabled"));
+      return;
+    }
+
     if (!communityImageKey) {
       setCommunityImage("");
       return;
@@ -340,7 +350,9 @@ function RecipeModal({ t, initialData, costItems, onRequireOnline, onSave, onClo
           </div>
           <div className="mt-5 grid grid-cols-1 md:grid-cols-[180px_1fr] gap-4">
             <label className="min-h-36 rounded-2xl border border-dashed border-gray-200 bg-[#f7f6f3] flex items-center justify-center overflow-hidden cursor-pointer">
-              {imagePreview ? (
+              {isMediaDisabled ? (
+                <span className="px-4 text-center text-xs font-black text-gray-400 uppercase tracking-tight">{t("offlineMediaDisabled")}</span>
+              ) : imagePreview ? (
                 <AuthImage imageKey={communityImageKey} fallbackImage={communityImage} className="block h-full min-h-36 w-full bg-cover bg-center">
                   <span className="px-4 text-center text-xs font-black text-gray-400 uppercase tracking-tight">{t("noBreadPhoto")}</span>
                 </AuthImage>
@@ -349,7 +361,7 @@ function RecipeModal({ t, initialData, costItems, onRequireOnline, onSave, onClo
               ) : (
                 <span className="px-4 text-center text-xs font-black text-gray-400 uppercase tracking-tight">{t("uploadBreadPhoto")}</span>
               )}
-              <input type="file" accept="image/*" onChange={e => updateCommunityImage(e.target.files?.[0])} className="sr-only" disabled={isImageBusy} />
+              <input type="file" accept="image/*" onChange={e => updateCommunityImage(e.target.files?.[0])} className="sr-only" disabled={isImageBusy || isMediaDisabled} />
             </label>
             <textarea
               value={communityText}
@@ -358,7 +370,7 @@ function RecipeModal({ t, initialData, costItems, onRequireOnline, onSave, onClo
               className="min-h-36 w-full resize-none rounded-2xl border border-gray-100 bg-[#f7f6f3] p-4 text-sm font-bold outline-none focus:border-black"
             />
           </div>
-          {imagePreview && (
+          {imagePreview && !isMediaDisabled && (
             <button
               type="button"
               onClick={deleteCommunityImage}

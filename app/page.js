@@ -16,6 +16,8 @@ const INVITE_ONLY_MESSAGE = "초대된 사람만 로그인 가능합니다";
 const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
 const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
+const OFFLINE_USER_STORAGE_KEY = "bakery_offline_user";
+const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
   costItems: "bakery_cost_items",
@@ -59,6 +61,28 @@ function saveUserData(authUser, recipes, costItems, tempLogs) {
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.recipes, authUser), JSON.stringify(recipes));
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.costItems, authUser), JSON.stringify(costItems));
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.tempLogs, authUser), JSON.stringify(tempLogs));
+}
+
+function readOfflineUser() {
+  try {
+    const storedUser = localStorage.getItem(OFFLINE_USER_STORAGE_KEY);
+    return storedUser ? JSON.parse(storedUser) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOfflineUser(user) {
+  if (!user?.id) return;
+
+  localStorage.setItem(OFFLINE_USER_STORAGE_KEY, JSON.stringify({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    picture: user.picture,
+    role: user.role,
+    signedInAt: user.signedInAt,
+  }));
 }
 
 function normalizeRecipeId(recipe) {
@@ -391,7 +415,13 @@ export default function Home() {
   const isAdmin = authUser?.role === "admin";
 
   useEffect(() => {
-    const updateOnlineStatus = () => setIsOnline(navigator.onLine);
+    const updateOnlineStatus = () => {
+      const nextIsOnline = navigator.onLine;
+      setIsOnline(nextIsOnline);
+      if (!nextIsOnline) {
+        setView(prevView => (OFFLINE_ALLOWED_VIEWS.includes(prevView) ? prevView : "calc"));
+      }
+    };
 
     updateOnlineStatus();
     window.addEventListener("online", updateOnlineStatus);
@@ -417,10 +447,29 @@ export default function Home() {
         if (redirectError) setAuthError(decodeURIComponent(redirectError.replace(/\+/g, " ")));
         localStorage.removeItem("bakery_auth_user");
 
+        if (!navigator.onLine) {
+          const promptTranslator = getTranslator(LANGUAGES.some(lang => lang.code === savedLanguage) ? savedLanguage : DEFAULT_LANGUAGE);
+          const offlineUser = readOfflineUser();
+          setIsOnline(false);
+
+          if (offlineUser && confirm(promptTranslator("offlineStartPrompt"))) {
+            setAuthUser({
+              ...offlineUser,
+              isOfflineMode: true,
+            });
+          } else {
+            setAuthError(offlineUser ? promptTranslator("offlineStartCancelled") : promptTranslator("offlineNoCachedUser"));
+          }
+
+          return;
+        }
+
         if (supabase) {
           const { data, error } = await supabase.auth.getSession();
           if (error) throw error;
-          if (isMounted) setAuthUser(await getSupabaseAuthUser(data.session));
+          const nextUser = await getSupabaseAuthUser(data.session);
+          if (nextUser) writeOfflineUser(nextUser);
+          if (isMounted) setAuthUser(nextUser);
         }
       } catch (e) {
         if (e.message === INVITE_ONLY_MESSAGE) {
@@ -470,7 +519,7 @@ export default function Home() {
         let nextCostItems = userData.costItems;
         let nextTempLogs = userData.tempLogs;
 
-        if (supabase) {
+        if (supabase && !authUser.isOfflineMode && navigator.onLine) {
           try {
             const [remoteRecipes, remoteCommunityRecipes, remoteCostItems, remoteTempLogs] = await Promise.all([
               loadSupabaseRecipes(authUser),
@@ -543,7 +592,7 @@ export default function Home() {
   }, [recipes, costItems, tempLogs, authUser, userDataLoaded, userDataOwnerId, isLoaded]);
 
   useEffect(() => {
-    if (!isLoaded || !authUser || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+    if (!isLoaded || !authUser || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
 
     let isCancelled = false;
     const previousRecipes = recipesSnapshotRef.current;
@@ -563,10 +612,10 @@ export default function Home() {
     return () => {
       isCancelled = true;
     };
-  }, [recipes, authUser, userDataLoaded, userDataOwnerId, isLoaded]);
+  }, [recipes, authUser, userDataLoaded, userDataOwnerId, isLoaded, isOnline]);
 
   useEffect(() => {
-    if (!isLoaded || !authUser || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+    if (!isLoaded || !authUser || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
 
     let isCancelled = false;
     const previousCostItems = costItemsSnapshotRef.current;
@@ -586,10 +635,10 @@ export default function Home() {
     return () => {
       isCancelled = true;
     };
-  }, [costItems, authUser, userDataLoaded, userDataOwnerId, isLoaded]);
+  }, [costItems, authUser, userDataLoaded, userDataOwnerId, isLoaded, isOnline]);
 
   useEffect(() => {
-    if (!isLoaded || !authUser || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+    if (!isLoaded || !authUser || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
 
     let isCancelled = false;
     const previousTempLogs = tempLogsSnapshotRef.current;
@@ -609,7 +658,7 @@ export default function Home() {
     return () => {
       isCancelled = true;
     };
-  }, [tempLogs, authUser, userDataLoaded, userDataOwnerId, isLoaded]);
+  }, [tempLogs, authUser, userDataLoaded, userDataOwnerId, isLoaded, isOnline]);
 
   const updateRecipes = useCallback((nextRecipesOrUpdater) => {
     setRecipes(prev => {
@@ -777,8 +826,11 @@ export default function Home() {
 
     let isMounted = true;
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session && !navigator.onLine) return;
+
       getSupabaseAuthUser(session)
         .then(user => {
+          if (user) writeOfflineUser(user);
           if (isMounted) setAuthUser(user);
         })
         .catch(error => {
@@ -798,6 +850,9 @@ export default function Home() {
       data.subscription.unsubscribe();
     };
   }, []);
+
+  const isLimitedOfflineMode = Boolean(authUser?.isOfflineMode || !isOnline);
+  const canUseView = (nextView) => !isLimitedOfflineMode || OFFLINE_ALLOWED_VIEWS.includes(nextView);
 
   useEffect(() => {
     if (!supabase) return undefined;
@@ -846,6 +901,11 @@ export default function Home() {
   const moveToView = (nextView) => {
     if (nextView === view) return;
 
+    if (!canUseView(nextView)) {
+      alert(t("offlineFeatureBlocked"));
+      return;
+    }
+
     if (nextView === "admin" && isAdmin && !isAdminUnlocked) {
       try {
         if (sessionStorage.getItem(getAdminUnlockStorageKey(authUser)) === "true") {
@@ -884,6 +944,11 @@ export default function Home() {
   const handleGoogleSignIn = async () => {
     setAuthError("");
 
+    if (!navigator.onLine) {
+      setAuthError(t("offlineNoLogin"));
+      return;
+    }
+
     if (!supabase) {
       setAuthError(t("supabaseClientMissing"));
       return;
@@ -903,7 +968,7 @@ export default function Home() {
   };
 
   const handleSignOut = async () => {
-    if (supabase) await supabase.auth.signOut();
+    if (supabase && !authUser?.isOfflineMode) await supabase.auth.signOut();
     clearStoredAuthSession();
     setAuthUser(null);
     setUserDataLoaded(false);
@@ -949,16 +1014,21 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
+      {isLimitedOfflineMode && (
+        <div className="bg-black px-4 py-2 text-center text-xs font-black text-white print:hidden">
+          {t("offlineModeBanner")}
+        </div>
+      )}
       <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm print:hidden">
         <div className="flex gap-4 md:gap-8 p-4 md:p-6 md:px-40 justify-start md:justify-center overflow-x-auto whitespace-nowrap no-scrollbar">
           <NavButton active={view === "calc"} onClick={() => moveToView("calc")}>{t("navRecipeCalculator")}</NavButton>
           <NavButton active={view === "db"} onClick={() => moveToView("db")}>{t("navRecipeDb")}</NavButton>
           <NavButton active={view === "cost_db"} onClick={() => moveToView("cost_db")}>{t("navCostDb")}</NavButton>
           <NavButton active={view === "temp_db"} onClick={() => moveToView("temp_db")}>{t("navTempPh")}</NavButton>
-          <NavButton active={view === "community"} onClick={() => moveToView("community")}>{t("navCommunity")}</NavButton>
-          <NavButton active={view === "videos"} onClick={() => moveToView("videos")}>{t("navVideos")}</NavButton>
-          {isAdmin && <NavButton active={view === "admin"} onClick={() => moveToView("admin")}>{t("navAdmin")}</NavButton>}
-          <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>{t("navSettings")}</NavButton>
+          {!isLimitedOfflineMode && <NavButton active={view === "community"} onClick={() => moveToView("community")}>{t("navCommunity")}</NavButton>}
+          {!isLimitedOfflineMode && <NavButton active={view === "videos"} onClick={() => moveToView("videos")}>{t("navVideos")}</NavButton>}
+          {!isLimitedOfflineMode && isAdmin && <NavButton active={view === "admin"} onClick={() => moveToView("admin")}>{t("navAdmin")}</NavButton>}
+          {!isLimitedOfflineMode && <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>{t("navSettings")}</NavButton>}
         </div>
         <button
           type="button"
@@ -983,7 +1053,7 @@ export default function Home() {
 
       <div className="py-4 md:py-8 print:py-0">
         {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
-        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} isOnline={isOnline} onRequireOnline={requireOnlineFeature} onToggleCommunityVisibility={toggleRecipeCommunityVisibility} />}
+        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} isOnline={isOnline} isMediaDisabled={isLimitedOfflineMode} onRequireOnline={requireOnlineFeature} onToggleCommunityVisibility={toggleRecipeCommunityVisibility} />}
         {view === "community" && <MyBreadYourBread t={t} recipes={visibleCommunityRecipes} onSaveCommunityRecipe={saveCommunityRecipeToDb} />}
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
