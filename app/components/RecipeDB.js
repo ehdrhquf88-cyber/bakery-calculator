@@ -5,7 +5,7 @@ import { InputField } from "./common";
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 import { supabase } from "../lib/supabaseClient";
 
-export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems, isOnline, onToggleCommunityVisibility }) {
+export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems, isOnline, onRequireOnline, onToggleCommunityVisibility }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingRecipe, setEditingRecipe] = useState(null);
@@ -99,7 +99,7 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
           </div>
         ))}
       </div>
-      {isModalOpen && <RecipeModal t={t} initialData={editingRecipe} costItems={costItems} isOnline={isOnline} onSave={(data, newCostItems) => {
+      {isModalOpen && <RecipeModal t={t} initialData={editingRecipe} costItems={costItems} onRequireOnline={onRequireOnline} onSave={(data, newCostItems) => {
         if (newCostItems.length > 0) setCostItems(prev => [...prev, ...newCostItems]);
         if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id, publishedAt: data.isPublic ? r.publishedAt || new Date().toISOString() : r.publishedAt } : r));
         else setRecipes(prev => [...prev, { ...data, id: Date.now() }]);
@@ -109,7 +109,7 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
   );
 }
 
-function RecipeModal({ t, initialData, costItems, isOnline, onSave, onClose }) {
+function RecipeModal({ t, initialData, costItems, onRequireOnline, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
@@ -120,8 +120,10 @@ function RecipeModal({ t, initialData, costItems, isOnline, onSave, onClose }) {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isDeletingImage, setIsDeletingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState("");
-  const toggleModalVisibility = () => {
-    if (!isOnline) {
+  const toggleModalVisibility = async () => {
+    try {
+      await onRequireOnline();
+    } catch {
       alert(t("communityOnlineRequired"));
       return;
     }
@@ -150,10 +152,14 @@ function RecipeModal({ t, initialData, costItems, isOnline, onSave, onClose }) {
       costUnit: item.unit,
     } : ing));
   };
-  const saveRecipe = () => {
-    if (Boolean(initialData?.isPublic) !== isPublic && !navigator.onLine) {
-      alert(t("communityOnlineRequired"));
-      return;
+  const saveRecipe = async () => {
+    if (Boolean(initialData?.isPublic) !== isPublic) {
+      try {
+        await onRequireOnline();
+      } catch {
+        alert(t("communityOnlineRequired"));
+        return;
+      }
     }
 
     const knownItems = [...costItems];

@@ -624,8 +624,24 @@ export default function Home() {
     });
   }, []);
 
-  const toggleRecipeCommunityVisibility = async (recipeId, nextIsPublic) => {
+  const requireOnlineFeature = async () => {
     if (!navigator.onLine) throw new Error(t("communityOnlineRequired"));
+
+    try {
+      const response = await fetch("/api/connectivity", {
+        method: "POST",
+        cache: "no-store",
+      });
+
+      if (!response.ok) throw new Error(t("communityOnlineRequired"));
+    } catch {
+      setIsOnline(false);
+      throw new Error(t("communityOnlineRequired"));
+    }
+  };
+
+  const toggleRecipeCommunityVisibility = async (recipeId, nextIsPublic) => {
+    await requireOnlineFeature();
     if (!supabase || !authUser) throw new Error(t("supabaseClientMissing"));
 
     const currentRecipe = recipes.find(recipe => recipe.id === recipeId);
@@ -697,7 +713,9 @@ export default function Home() {
   };
 
   const saveCommunityRecipeToDb = async (recipe) => {
-    if (!navigator.onLine) {
+    try {
+      await requireOnlineFeature();
+    } catch {
       alert(t("communityOnlineRequired"));
       return;
     }
@@ -963,7 +981,7 @@ export default function Home() {
 
       <div className="py-4 md:py-8 print:py-0">
         {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
-        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} isOnline={isOnline} onToggleCommunityVisibility={toggleRecipeCommunityVisibility} />}
+        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} isOnline={isOnline} onRequireOnline={requireOnlineFeature} onToggleCommunityVisibility={toggleRecipeCommunityVisibility} />}
         {view === "community" && <MyBreadYourBread t={t} recipes={visibleCommunityRecipes} onSaveCommunityRecipe={saveCommunityRecipeToDb} />}
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
