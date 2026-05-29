@@ -35,7 +35,14 @@ function canvasToBlob(canvas, type, quality) {
 }
 
 async function optimizeImageForUpload(file) {
-  if (!file.type.startsWith("image/") || file.type === "image/gif") return file;
+  const originalExtension = file.name?.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+  const fallbackFileName = `bread-photo.${originalExtension}`;
+  if (!file.type.startsWith("image/") || file.type === "image/gif") {
+    return {
+      blob: file,
+      fileName: fallbackFileName,
+    };
+  }
 
   const image = await loadImageElement(file);
   const scale = Math.min(1, IMAGE_UPLOAD_MAX_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
@@ -50,14 +57,26 @@ async function optimizeImageForUpload(file) {
 
   context.drawImage(image, 0, 0, width, height);
 
-  const blob = await canvasToBlob(canvas, "image/webp", IMAGE_UPLOAD_QUALITY);
-  if (blob.size >= file.size && scale === 1) return file;
+  let blob;
+  let fileName = "bread-photo.webp";
+  try {
+    blob = await canvasToBlob(canvas, "image/webp", IMAGE_UPLOAD_QUALITY);
+  } catch {
+    blob = await canvasToBlob(canvas, "image/jpeg", IMAGE_UPLOAD_QUALITY);
+    fileName = "bread-photo.jpg";
+  }
 
-  const baseName = file.name.replace(/\.[^.]+$/, "") || "bread-photo";
-  return new File([blob], `${baseName}.webp`, {
-    type: "image/webp",
-    lastModified: Date.now(),
-  });
+  if (blob.size >= file.size && scale === 1) {
+    return {
+      blob: file,
+      fileName: fallbackFileName,
+    };
+  }
+
+  return {
+    blob,
+    fileName,
+  };
 }
 
 export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems, isOnline, isMediaDisabled, onRequireOnline, onToggleCommunityVisibility }) {
@@ -349,7 +368,7 @@ function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnli
 
       const optimizedFile = await optimizeImageForUpload(file);
       const formData = new FormData();
-      formData.append("file", optimizedFile);
+      formData.append("file", optimizedFile.blob, optimizedFile.fileName);
 
       const response = await fetch("/api/r2/images", {
         method: "POST",
