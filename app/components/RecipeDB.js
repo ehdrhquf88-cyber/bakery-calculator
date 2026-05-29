@@ -5,6 +5,61 @@ import { InputField } from "./common";
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 import { supabase } from "../lib/supabaseClient";
 
+const IMAGE_UPLOAD_MAX_EDGE = 1800;
+const IMAGE_UPLOAD_QUALITY = 0.82;
+
+function loadImageElement(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Image load failed."));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Image compression failed."));
+    }, type, quality);
+  });
+}
+
+async function optimizeImageForUpload(file) {
+  if (!file.type.startsWith("image/") || file.type === "image/gif") return file;
+
+  const image = await loadImageElement(file);
+  const scale = Math.min(1, IMAGE_UPLOAD_MAX_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) return file;
+
+  context.drawImage(image, 0, 0, width, height);
+
+  const blob = await canvasToBlob(canvas, "image/webp", IMAGE_UPLOAD_QUALITY);
+  if (blob.size >= file.size && scale === 1) return file;
+
+  const baseName = file.name.replace(/\.[^.]+$/, "") || "bread-photo";
+  return new File([blob], `${baseName}.webp`, {
+    type: "image/webp",
+    lastModified: Date.now(),
+  });
+}
+
 export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems, isOnline, isMediaDisabled, onRequireOnline, onToggleCommunityVisibility }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -249,8 +304,9 @@ function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnli
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error("Login session is missing.");
 
+      const optimizedFile = await optimizeImageForUpload(file);
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", optimizedFile);
 
       const response = await fetch("/api/r2/images", {
         method: "POST",
