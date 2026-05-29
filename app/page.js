@@ -472,6 +472,7 @@ export default function Home() {
   const [authError, setAuthError] = useState("");
   const [isOnline, setIsOnline] = useState(true);
   const [hasOfflinePin, setHasOfflinePin] = useState(false);
+  const [offlineLoginUser, setOfflineLoginUser] = useState(null);
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
@@ -516,32 +517,11 @@ export default function Home() {
           const offlineUser = readOfflineUser();
           setIsOnline(false);
 
-          if (offlineUser && confirm(promptTranslator("offlineStartPrompt"))) {
-            const offlinePinRecord = readOfflinePinRecord(offlineUser.id);
-            if (!offlinePinRecord) {
-              setAuthError(promptTranslator("offlinePinMissing"));
-              return;
-            }
-
-            const offlinePin = prompt(promptTranslator("offlinePinPrompt"));
-            if (!offlinePin) {
-              setAuthError(promptTranslator("offlineStartCancelled"));
-              return;
-            }
-
-            const isPinValid = await verifyOfflinePin(offlinePin.trim(), offlinePinRecord);
-            if (!isPinValid) {
-              setAuthError(promptTranslator("offlinePinWrong"));
-              return;
-            }
-
-            setAuthUser({
-              ...offlineUser,
-              isOfflineMode: true,
-            });
+          if (offlineUser && readOfflinePinRecord(offlineUser.id)) {
+            setOfflineLoginUser(offlineUser);
             setHasOfflinePin(true);
           } else {
-            setAuthError(offlineUser ? promptTranslator("offlineStartCancelled") : promptTranslator("offlineNoCachedUser"));
+            setAuthError(offlineUser ? promptTranslator("offlinePinMissing") : promptTranslator("offlineNoCachedUser"));
           }
 
           return;
@@ -1057,6 +1037,35 @@ export default function Home() {
     if (error) setAuthError(error.message);
   };
 
+  const handleOfflinePinSignIn = async (pin) => {
+    const offlineUser = offlineLoginUser || readOfflineUser();
+    if (!offlineUser) {
+      setAuthError(t("offlineNoCachedUser"));
+      return false;
+    }
+
+    const offlinePinRecord = readOfflinePinRecord(offlineUser.id);
+    if (!offlinePinRecord) {
+      setAuthError(t("offlinePinMissing"));
+      return false;
+    }
+
+    const isPinValid = await verifyOfflinePin(pin.trim(), offlinePinRecord);
+    if (!isPinValid) {
+      setAuthError(t("offlinePinWrong"));
+      return false;
+    }
+
+    setAuthUser({
+      ...offlineUser,
+      isOfflineMode: true,
+    });
+    setOfflineLoginUser(null);
+    setHasOfflinePin(true);
+    setAuthError("");
+    return true;
+  };
+
   const handleSignOut = async () => {
     if (supabase && !authUser?.isOfflineMode) await supabase.auth.signOut();
     clearStoredAuthSession();
@@ -1065,6 +1074,7 @@ export default function Home() {
       localStorage.removeItem(getOfflinePinStorageKey(authUser.id));
     }
     setAuthUser(null);
+    setOfflineLoginUser(null);
     setHasOfflinePin(false);
     setUserDataLoaded(false);
     setUserDataOwnerId(null);
@@ -1112,7 +1122,18 @@ export default function Home() {
   };
 
   if (!isLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
-  if (!authUser) return <LoginScreen t={t} onGoogleSignIn={handleGoogleSignIn} authError={authError} />;
+  if (!authUser) {
+    return (
+      <LoginScreen
+        t={t}
+        isOnline={isOnline}
+        offlineLoginUser={offlineLoginUser}
+        onGoogleSignIn={handleGoogleSignIn}
+        onOfflinePinSignIn={handleOfflinePinSignIn}
+        authError={authError}
+      />
+    );
+  }
   if (!userDataLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
 
   return (
@@ -1683,7 +1704,21 @@ function LeaveCheckModal({ message, t, hideLeaveCheck, setHideLeaveCheck, onCanc
   );
 }
 
-function LoginScreen({ t, onGoogleSignIn, authError }) {
+function LoginScreen({ t, isOnline, offlineLoginUser, onGoogleSignIn, onOfflinePinSignIn, authError }) {
+  const [offlinePin, setOfflinePin] = useState("");
+  const [isUnlockingOffline, setIsUnlockingOffline] = useState(false);
+  const canUseOfflinePin = !isOnline && offlineLoginUser;
+
+  const submitOfflinePin = async (event) => {
+    event.preventDefault();
+    setIsUnlockingOffline(true);
+    const isUnlocked = await onOfflinePinSignIn(offlinePin);
+    if (!isUnlocked) {
+      setOfflinePin("");
+      setIsUnlockingOffline(false);
+    }
+  };
+
   return (
     <main
       className="min-h-screen px-4 py-8 md:px-8 text-black bg-cover bg-center relative overflow-hidden"
@@ -1712,6 +1747,31 @@ function LoginScreen({ t, onGoogleSignIn, authError }) {
               >
                 {t("googleStart")}
               </button>
+              {canUseOfflinePin && (
+                <form onSubmit={submitOfflinePin} className="mt-4 rounded-xl border border-black/10 bg-white/70 p-4">
+                  <p className="whitespace-pre-line text-xs font-bold leading-5 text-gray-500">{t("offlineStartPrompt")}</p>
+                  <div className="mt-3 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    {offlineLoginUser.email || offlineLoginUser.name}
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      value={offlinePin}
+                      onChange={event => setOfflinePin(event.target.value)}
+                      className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
+                      placeholder={t("offlinePinInput")}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isUnlockingOffline || offlinePin.trim().length === 0}
+                      className="rounded-xl bg-black px-4 py-3 text-xs font-black uppercase tracking-tight text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isUnlockingOffline ? t("loading") : t("confirm")}
+                    </button>
+                  </div>
+                </form>
+              )}
               {authError && <p className="mt-3 text-xs font-bold text-red-600">{authError}</p>}
             </>
           ) : (
