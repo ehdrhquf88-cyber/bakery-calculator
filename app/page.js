@@ -383,11 +383,25 @@ export default function Home() {
   const [adminUnlockError, setAdminUnlockError] = useState("");
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [authError, setAuthError] = useState("");
+  const [isOnline, setIsOnline] = useState(true);
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
+
+  useEffect(() => {
+    const updateOnlineStatus = () => setIsOnline(navigator.onLine);
+
+    updateOnlineStatus();
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+
+    return () => {
+      window.removeEventListener("online", updateOnlineStatus);
+      window.removeEventListener("offline", updateOnlineStatus);
+    };
+  }, []);
 
   // 로컬스토리지 로드
   useEffect(() => {
@@ -610,6 +624,32 @@ export default function Home() {
     });
   }, []);
 
+  const toggleRecipeCommunityVisibility = async (recipeId, nextIsPublic) => {
+    if (!navigator.onLine) throw new Error(t("communityOnlineRequired"));
+    if (!supabase || !authUser) throw new Error(t("supabaseClientMissing"));
+
+    const currentRecipe = recipes.find(recipe => recipe.id === recipeId);
+    if (!currentRecipe) throw new Error(t("communityVisibilitySaveFailed"));
+
+    const nextRecipe = {
+      ...currentRecipe,
+      isPublic: nextIsPublic,
+      publishedAt: nextIsPublic ? currentRecipe.publishedAt || new Date().toISOString() : currentRecipe.publishedAt,
+    };
+    const { error } = await supabase
+      .from("recipes")
+      .upsert(recipeToSupabaseRow(authUser, nextRecipe), { onConflict: "user_id,id" });
+
+    if (error) throw error;
+
+    recipesSnapshotRef.current = recipesSnapshotRef.current.map(recipe => (
+      recipe.id === recipeId ? nextRecipe : recipe
+    ));
+    setRecipes(prev => prev.map(recipe => (
+      recipe.id === recipeId ? nextRecipe : recipe
+    )));
+  };
+
   const visibleCommunityRecipes = useMemo(() => {
     const ownPublicRecipes = recipes
       .filter(recipe => recipe.isPublic)
@@ -657,6 +697,11 @@ export default function Home() {
   };
 
   const saveCommunityRecipeToDb = async (recipe) => {
+    if (!navigator.onLine) {
+      alert(t("communityOnlineRequired"));
+      return;
+    }
+
     const copiedImage = await copyCommunityImage(recipe);
 
     updateRecipes(prev => {
@@ -918,7 +963,7 @@ export default function Home() {
 
       <div className="py-4 md:py-8 print:py-0">
         {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
-        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} />}
+        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} isOnline={isOnline} onToggleCommunityVisibility={toggleRecipeCommunityVisibility} />}
         {view === "community" && <MyBreadYourBread t={t} recipes={visibleCommunityRecipes} onSaveCommunityRecipe={saveCommunityRecipeToDb} />}
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}

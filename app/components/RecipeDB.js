@@ -5,25 +5,30 @@ import { InputField } from "./common";
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 import { supabase } from "../lib/supabaseClient";
 
-export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems }) {
+export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems, isOnline, onToggleCommunityVisibility }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingRecipe, setEditingRecipe] = useState(null);
+  const [savingVisibilityId, setSavingVisibilityId] = useState(null);
   
   const displayedRecipes = useMemo(() => {
     return recipes.filter(r => r.productName.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [recipes, searchTerm]);
-  const toggleCommunityVisibility = (recipeId) => {
-    setRecipes(prev => prev.map(recipe => {
-      if (recipe.id !== recipeId) return recipe;
+  const toggleCommunityVisibility = async (recipe) => {
+    if (!isOnline) {
+      alert(t("communityOnlineRequired"));
+      return;
+    }
 
-      const isPublishing = !recipe.isPublic;
-      return {
-        ...recipe,
-        isPublic: isPublishing,
-        publishedAt: isPublishing ? recipe.publishedAt || new Date().toISOString() : recipe.publishedAt,
-      };
-    }));
+    setSavingVisibilityId(recipe.id);
+
+    try {
+      await onToggleCommunityVisibility(recipe.id, !recipe.isPublic);
+    } catch (error) {
+      alert(error.message || t("communityVisibilitySaveFailed"));
+    } finally {
+      setSavingVisibilityId(null);
+    }
   };
   const deleteRecipe = async (recipe) => {
     if (!confirm(t("deleteConfirm"))) return;
@@ -82,18 +87,19 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  toggleCommunityVisibility(recipe.id);
+                  toggleCommunityVisibility(recipe);
                 }}
-                className={`px-4 py-2 rounded-full text-xs font-black uppercase tracking-tight border transition-all ${recipe.isPublic ? "bg-black text-white border-black" : "bg-white text-gray-400 border-gray-200 hover:border-black hover:text-black"}`}
+                disabled={savingVisibilityId === recipe.id}
+                className={`px-4 py-2 rounded-full text-xs font-black uppercase tracking-tight border transition-all disabled:cursor-wait disabled:opacity-60 ${recipe.isPublic ? "bg-black text-white border-black" : "bg-white text-gray-400 border-gray-200 hover:border-black hover:text-black"}`}
               >
-                {recipe.isPublic ? t("publicRecipe") : t("privateRecipe")}
+                {savingVisibilityId === recipe.id ? t("saving") : recipe.isPublic ? t("publicRecipe") : t("privateRecipe")}
               </button>
               <button onClick={(e) => { e.stopPropagation(); deleteRecipe(recipe); }} className="text-gray-300 hover:text-red-500">x</button>
             </div>
           </div>
         ))}
       </div>
-      {isModalOpen && <RecipeModal t={t} initialData={editingRecipe} costItems={costItems} onSave={(data, newCostItems) => {
+      {isModalOpen && <RecipeModal t={t} initialData={editingRecipe} costItems={costItems} isOnline={isOnline} onSave={(data, newCostItems) => {
         if (newCostItems.length > 0) setCostItems(prev => [...prev, ...newCostItems]);
         if (editingRecipe) setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...data, id: r.id, publishedAt: data.isPublic ? r.publishedAt || new Date().toISOString() : r.publishedAt } : r));
         else setRecipes(prev => [...prev, { ...data, id: Date.now() }]);
@@ -103,7 +109,7 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
   );
 }
 
-function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
+function RecipeModal({ t, initialData, costItems, isOnline, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
@@ -114,6 +120,14 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isDeletingImage, setIsDeletingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState("");
+  const toggleModalVisibility = () => {
+    if (!isOnline) {
+      alert(t("communityOnlineRequired"));
+      return;
+    }
+
+    setIsPublic(prev => !prev);
+  };
   const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => {
     if (idx !== i) return ing;
 
@@ -137,6 +151,11 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
     } : ing));
   };
   const saveRecipe = () => {
+    if (Boolean(initialData?.isPublic) !== isPublic && !navigator.onLine) {
+      alert(t("communityOnlineRequired"));
+      return;
+    }
+
     const knownItems = [...costItems];
     const newCostItems = [];
 
@@ -307,7 +326,7 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
             </div>
             <button
               type="button"
-              onClick={() => setIsPublic(prev => !prev)}
+              onClick={toggleModalVisibility}
               className={`px-5 py-3 rounded-xl text-sm font-black uppercase tracking-tight ${isPublic ? "bg-black text-white" : "bg-[#f7f6f3] text-gray-400 border border-gray-200"}`}
             >
               {isPublic ? t("publicRecipe") : t("privateRecipe")}
