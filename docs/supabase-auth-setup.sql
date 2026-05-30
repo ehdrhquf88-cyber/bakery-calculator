@@ -141,7 +141,7 @@ revoke all on public.community_saves from anon;
 grant insert, update, delete on public.community_saves to authenticated;
 
 revoke all on public.announcements from anon;
-grant select, insert, update on public.announcements to authenticated;
+grant select, insert, update, delete on public.announcements to authenticated;
 
 revoke all on public.announcement_reads from anon;
 grant select, insert, update on public.announcement_reads to authenticated;
@@ -586,6 +586,13 @@ for update
 to authenticated
 using ((select private.is_admin()))
 with check ((select private.is_admin()));
+
+drop policy if exists "Admins can delete announcements" on public.announcements;
+create policy "Admins can delete announcements"
+on public.announcements
+for delete
+to authenticated
+using ((select private.is_admin()));
 
 drop policy if exists "Users can view their own announcement reads" on public.announcement_reads;
 create policy "Users can view their own announcement reads"

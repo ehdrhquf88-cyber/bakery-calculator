@@ -1682,6 +1682,7 @@ function AdminPanel({ t, onAnnouncementsChange }) {
   const [announcementBody, setAnnouncementBody] = useState("");
   const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
   const [deactivatingAnnouncementId, setDeactivatingAnnouncementId] = useState(null);
+  const [deletingAnnouncementId, setDeletingAnnouncementId] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -1870,6 +1871,27 @@ function AdminPanel({ t, onAnnouncementsChange }) {
     setDeactivatingAnnouncementId(null);
   };
 
+  const deleteAnnouncement = async (announcementId) => {
+    if (!supabase || !confirm(t("deleteConfirm"))) return;
+
+    setDeletingAnnouncementId(announcementId);
+    setAdminError("");
+
+    const { error } = await supabase
+      .from("announcements")
+      .delete()
+      .eq("id", announcementId);
+
+    if (error) {
+      setAdminError(error.message);
+    } else {
+      setAdminAnnouncements(prev => prev.filter(announcement => Number(announcement.id) !== Number(announcementId)));
+      onAnnouncementsChange?.(prev => (Array.isArray(prev) ? prev.filter(announcement => Number(announcement.id) !== Number(announcementId)) : []));
+    }
+
+    setDeletingAnnouncementId(null);
+  };
+
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-6 gap-4">
@@ -1937,14 +1959,24 @@ function AdminPanel({ t, onAnnouncementsChange }) {
                   <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs font-bold text-gray-400">{announcement.body}</p>
                   <p className="mt-2 text-[10px] font-bold text-gray-300">{formatDateTime(announcement.created_at)}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => deactivateAnnouncement(announcement.id)}
-                  disabled={!announcement.is_active || deactivatingAnnouncementId === announcement.id}
-                  className="self-start rounded-full border border-gray-200 px-3 py-2 text-xs font-black text-gray-400 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {deactivatingAnnouncementId === announcement.id ? t("saving") : t("deactivateAnnouncement")}
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => deactivateAnnouncement(announcement.id)}
+                    disabled={!announcement.is_active || deactivatingAnnouncementId === announcement.id || deletingAnnouncementId === announcement.id}
+                    className="self-start rounded-full border border-gray-200 px-3 py-2 text-xs font-black text-gray-400 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {deactivatingAnnouncementId === announcement.id ? t("saving") : t("deactivateAnnouncement")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteAnnouncement(announcement.id)}
+                    disabled={deletingAnnouncementId === announcement.id || deactivatingAnnouncementId === announcement.id}
+                    className="self-start rounded-full border border-red-100 px-3 py-2 text-xs font-black text-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {deletingAnnouncementId === announcement.id ? t("saving") : t("deleteAnnouncement")}
+                  </button>
+                </div>
               </div>
             ))
           )}
