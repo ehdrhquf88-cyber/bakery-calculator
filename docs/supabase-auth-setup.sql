@@ -184,9 +184,11 @@ grant execute
   on function public.update_public_display_name(text)
   to authenticated;
 
+drop function if exists public.record_community_save(uuid, bigint);
+
 create or replace function public.record_community_save(
-  source_user_id uuid,
-  source_recipe_id bigint
+  p_source_user_id uuid,
+  p_source_recipe_id bigint
 )
 returns void
 language plpgsql
@@ -198,15 +200,15 @@ begin
     raise exception 'App access is required.';
   end if;
 
-  if source_user_id = (select auth.uid()) then
+  if p_source_user_id = (select auth.uid()) then
     return;
   end if;
 
   if not exists (
     select 1
     from public.recipes
-    where user_id = source_user_id
-      and id = source_recipe_id
+    where user_id = p_source_user_id
+      and id = p_source_recipe_id
       and is_public = true
   ) then
     raise exception 'Public source recipe not found.';
@@ -218,8 +220,8 @@ begin
     saved_by_user_id
   )
   values (
-    source_user_id,
-    source_recipe_id,
+    p_source_user_id,
+    p_source_recipe_id,
     (select auth.uid())
   )
   on conflict (source_user_id, source_recipe_id, saved_by_user_id) do nothing;

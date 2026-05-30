@@ -1045,8 +1045,8 @@ export default function Home() {
 
     const { error } = await supabase
       .rpc("record_community_save", {
-        source_user_id: recipe.ownerUserId,
-        source_recipe_id: normalizeRecipeId(recipe),
+        p_source_user_id: recipe.ownerUserId,
+        p_source_recipe_id: normalizeRecipeId(recipe),
       });
 
     if (error) {
