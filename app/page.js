@@ -1458,7 +1458,8 @@ export default function Home() {
 
     let isMounted = true;
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session && !navigator.onLine) return;
+      if (!navigator.onLine) return;
+
       markBrowserSessionActive();
 
       getSupabaseAuthUser(session)
