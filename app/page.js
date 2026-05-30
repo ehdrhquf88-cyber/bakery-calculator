@@ -106,6 +106,7 @@ function normalizeOfflineUser(user) {
     picture: user.picture,
     role: user.role,
     signedInAt: user.signedInAt,
+    pinRecord: user.pinRecord || null,
   };
 }
 
@@ -138,11 +139,26 @@ function writeOfflineUser(user) {
   if (!normalizedUser) return;
 
   const users = readOfflineUsers();
+  const existingUser = users.find(item => item.id === normalizedUser.id);
   const nextUsers = [
-    normalizedUser,
+    {
+      ...normalizedUser,
+      pinRecord: normalizedUser.pinRecord || existingUser?.pinRecord || readOfflinePinRecord(normalizedUser.id),
+    },
     ...users.filter(item => item.id !== normalizedUser.id),
   ];
 
+  localStorage.setItem(OFFLINE_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
+}
+
+function writeOfflinePinRecord(userId, record) {
+  if (!userId || !record) return;
+
+  localStorage.setItem(getOfflinePinStorageKey(userId), JSON.stringify(record));
+  const users = readOfflineUsers();
+  const nextUsers = users.map(user => (
+    user.id === userId ? { ...user, pinRecord: record } : user
+  ));
   localStorage.setItem(OFFLINE_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
 }
 
@@ -163,7 +179,15 @@ function readOfflinePinRecord(userId) {
 
   try {
     const storedPin = localStorage.getItem(getOfflinePinStorageKey(userId));
-    return storedPin ? JSON.parse(storedPin) : null;
+    if (storedPin) return JSON.parse(storedPin);
+
+    const offlineUser = readOfflineUsers().find(user => user.id === userId);
+    if (offlineUser?.pinRecord) {
+      localStorage.setItem(getOfflinePinStorageKey(userId), JSON.stringify(offlineUser.pinRecord));
+      return offlineUser.pinRecord;
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -1239,7 +1263,7 @@ export default function Home() {
   const handleSetOfflinePin = async (pin) => {
     if (!authUser?.id) return;
     const record = await createOfflinePinRecord(pin);
-    localStorage.setItem(getOfflinePinStorageKey(authUser.id), JSON.stringify(record));
+    writeOfflinePinRecord(authUser.id, record);
     writeOfflineUser(authUser);
     setHasOfflinePin(true);
   };
