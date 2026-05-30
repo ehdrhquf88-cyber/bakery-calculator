@@ -1643,7 +1643,6 @@ export default function Home() {
     if (!authUser?.id) return;
     const record = await createOfflinePinRecord(pin);
     writeOfflinePinRecord(authUser.id, record);
-    writeOfflineUser(authUser);
     setHasOfflinePin(true);
   };
 
