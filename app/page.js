@@ -834,11 +834,13 @@ export default function Home() {
       lastHiddenAtRef.current = Date.now();
     };
 
-    const lockIfOfflineAfterBackground = () => {
+    const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         markAppHidden();
         return;
       }
+
+      if (document.visibilityState !== "visible") return;
 
       const hiddenAt = lastHiddenAtRef.current;
       if (!hiddenAt) return;
@@ -850,14 +852,10 @@ export default function Home() {
       lastHiddenAtRef.current = null;
     };
 
-    document.addEventListener("visibilitychange", lockIfOfflineAfterBackground);
-    window.addEventListener("focus", lockIfOfflineAfterBackground);
-    window.addEventListener("pagehide", markAppHidden);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      document.removeEventListener("visibilitychange", lockIfOfflineAfterBackground);
-      window.removeEventListener("focus", lockIfOfflineAfterBackground);
-      window.removeEventListener("pagehide", markAppHidden);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [lockOfflineSessionForPin]);
 
