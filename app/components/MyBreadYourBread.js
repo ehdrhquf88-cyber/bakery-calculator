@@ -80,7 +80,6 @@ export default function MyBreadYourBread({
       const didSave = await onSaveCommunityRecipe(recipe);
       if (didSave) {
         setSavedRecipeId(recipeKey);
-        setPreviewRecipe(null);
       }
     } finally {
       setSavingRecipeId(null);
@@ -166,7 +165,6 @@ export default function MyBreadYourBread({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredRecipes.map(recipe => {
             const recipeKey = getCommunityRecipeKey(recipe);
-            const isBookmarked = bookmarkedRecipeKeys.includes(recipeKey);
             const saveCount = saveCounts[recipeKey] || 0;
             const authorDisplayName = recipe.authorDisplayName || t("anonymousBaker");
 
@@ -192,30 +190,6 @@ export default function MyBreadYourBread({
                     <span className="rounded-full bg-black px-3 py-1 text-[10px] font-black text-white uppercase tracking-tight">
                       {saveCount}{t("breadCountSuffix")}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => toggleBookmark(recipe)}
-                      disabled={bookmarkingRecipeId === recipeKey}
-                      className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-tight ${isBookmarked ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-500"}`}
-                    >
-                      {isBookmarked ? t("bookmarked") : t("bookmark")}
-                    </button>
-                  </div>
-                </div>
-
-                {recipe.communityText && (
-                  <p className="mt-4 text-sm font-bold leading-6 text-gray-600 whitespace-pre-wrap">{recipe.communityText}</p>
-                )}
-
-                <div className="mt-5 rounded-2xl bg-[#f7f6f3] p-4">
-                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">{t("ingredient")}</div>
-                  <div className="space-y-2">
-                    {recipe.ingredients?.map((ing, index) => (
-                      <div key={`${ing.name}-${index}`} className="flex justify-between gap-3 text-xs font-bold">
-                        <span className="truncate">{ing.name || t("unspecified")}</span>
-                        <span className="font-mono text-gray-500">{ing.percent || 0}%</span>
-                      </div>
-                    ))}
                   </div>
                 </div>
 
@@ -225,7 +199,7 @@ export default function MyBreadYourBread({
                   disabled={savingRecipeId === recipeKey}
                   className={`mt-5 w-full rounded-xl py-3 text-sm font-black uppercase tracking-tight transition-colors disabled:cursor-wait disabled:opacity-70 ${savedRecipeId === recipeKey ? "bg-emerald-600 text-white" : "bg-black text-white"}`}
                 >
-                  {savingRecipeId === recipeKey ? t("saving") : savedRecipeId === recipeKey ? t("communityRecipeSaved") : t("previewAndSave")}
+                  {savingRecipeId === recipeKey ? t("saving") : savedRecipeId === recipeKey ? t("communityRecipeSaved") : t("viewBread")}
                 </button>
               </div>
             </article>
@@ -241,6 +215,13 @@ export default function MyBreadYourBread({
               {renderRecipeImage(previewRecipe)}
             </div>
             <div className="p-5 md:p-6">
+              {(() => {
+                const previewRecipeKey = getCommunityRecipeKey(previewRecipe);
+                const isBookmarked = bookmarkedRecipeKeys.includes(previewRecipeKey);
+                const isSaved = savedRecipeId === previewRecipeKey;
+
+                return (
+              <>
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
@@ -255,9 +236,18 @@ export default function MyBreadYourBread({
                   </p>
                 </div>
                 <span className="rounded-full bg-black px-3 py-1 text-[10px] font-black text-white uppercase tracking-tight">
-                  {(saveCounts[getCommunityRecipeKey(previewRecipe)] || 0)}{t("breadCountSuffix")}
+                  {(saveCounts[previewRecipeKey] || 0)}{t("breadCountSuffix")}
                 </span>
               </div>
+
+              <button
+                type="button"
+                onClick={() => toggleBookmark(previewRecipe)}
+                disabled={bookmarkingRecipeId === previewRecipeKey}
+                className={`mt-5 rounded-full border px-4 py-2 text-xs font-black uppercase tracking-tight ${isBookmarked ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-500"}`}
+              >
+                {isBookmarked ? t("bookmarked") : t("bookmark")}
+              </button>
 
               {previewRecipe.communityText && (
                 <p className="mt-4 whitespace-pre-wrap text-sm font-bold leading-6 text-gray-600">{previewRecipe.communityText}</p>
@@ -286,12 +276,15 @@ export default function MyBreadYourBread({
                 <button
                   type="button"
                   onClick={() => saveRecipeToDb(previewRecipe)}
-                  disabled={savingRecipeId === getCommunityRecipeKey(previewRecipe)}
-                  className="rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white disabled:cursor-wait disabled:opacity-70"
+                  disabled={savingRecipeId === previewRecipeKey || isSaved}
+                  className={`rounded-xl py-3 text-sm font-black uppercase tracking-tight text-white disabled:cursor-wait disabled:opacity-70 ${isSaved ? "bg-emerald-600" : "bg-black"}`}
                 >
-                  {savingRecipeId === getCommunityRecipeKey(previewRecipe) ? t("saving") : t("saveCommunityRecipe")}
+                  {savingRecipeId === previewRecipeKey ? t("saving") : isSaved ? t("communityRecipeSaved") : t("saveCommunityRecipe")}
                 </button>
               </div>
+              </>
+                );
+              })()}
             </div>
           </section>
         </div>
