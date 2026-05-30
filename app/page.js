@@ -16,6 +16,7 @@ const INVITE_ONLY_MESSAGE = "초대된 사람만 로그인 가능합니다";
 const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
 const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
+const BROWSER_SESSION_STORAGE_KEY = "bakery_browser_session_active";
 const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
 const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_PIN_STORAGE_PREFIX = "bakery_offline_pin";
@@ -69,6 +70,15 @@ function saveUserData(authUser, recipes, costItems, tempLogs) {
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.recipes, authUser), JSON.stringify(recipes));
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.costItems, authUser), JSON.stringify(costItems));
   localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.tempLogs, authUser), JSON.stringify(tempLogs));
+}
+
+function clearUserData(authUser) {
+  if (!authUser) return;
+
+  Object.values(USER_DATA_STORAGE_KEYS).forEach(baseKey => {
+    localStorage.removeItem(getUserDataStorageKey(baseKey, authUser));
+    localStorage.removeItem(getDeletedUserDataStorageKey(baseKey, authUser));
+  });
 }
 
 function readDeletedUserDataIds(authUser, baseKey) {
@@ -589,6 +599,56 @@ function clearStoredAuthSession() {
   }
 }
 
+function hasStoredAuthSession() {
+  if (localStorage.getItem(SUPABASE_AUTH_STORAGE_KEY)) return true;
+
+  for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+    const key = localStorage.key(i);
+    if (key?.startsWith("sb-") && key.endsWith("-auth-token")) return true;
+  }
+
+  return false;
+}
+
+function hasActiveBrowserSession() {
+  try {
+    return sessionStorage.getItem(BROWSER_SESSION_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function markBrowserSessionActive() {
+  try {
+    sessionStorage.setItem(BROWSER_SESSION_STORAGE_KEY, "true");
+  } catch {
+    // sessionStorage can be unavailable in some private browsing contexts.
+  }
+}
+
+function clearBrowserSessionMarker() {
+  try {
+    sessionStorage.removeItem(BROWSER_SESSION_STORAGE_KEY);
+  } catch {
+    // sessionStorage can be unavailable in some private browsing contexts.
+  }
+}
+
+function isAuthRedirectRequest() {
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+
+  return Boolean(
+    searchParams.get("code")
+    || searchParams.get("error")
+    || searchParams.get("error_description")
+    || hashParams.get("access_token")
+    || hashParams.get("refresh_token")
+    || hashParams.get("error")
+    || hashParams.get("error_description")
+  );
+}
+
 function getAuthRedirectError() {
   const searchParams = new URLSearchParams(window.location.search);
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -768,6 +828,13 @@ export default function Home() {
 
           return;
         }
+
+        if (!hasActiveBrowserSession() && !isAuthRedirectRequest() && hasStoredAuthSession()) {
+          clearStoredAuthSession();
+          await supabase?.auth.signOut({ scope: "local" }).catch(() => {});
+        }
+
+        markBrowserSessionActive();
 
         if (supabase) {
           const { data, error } = await supabase.auth.getSession();
@@ -1331,6 +1398,7 @@ export default function Home() {
     let isMounted = true;
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session && !navigator.onLine) return;
+      markBrowserSessionActive();
 
       getSupabaseAuthUser(session)
         .then(user => {
@@ -1492,11 +1560,15 @@ export default function Home() {
   };
 
   const handleSignOut = async () => {
+    if (!confirm(t("signOutConfirm"))) return;
+
     if (supabase && !authUser?.isOfflineMode) await supabase.auth.signOut();
     clearStoredAuthSession();
+    clearBrowserSessionMarker();
     if (authUser?.id) {
       removeOfflineUser(authUser.id);
     }
+    clearUserData(authUser);
     setAuthUser(null);
     setOfflineLoginUsers([]);
     setHasOfflinePin(false);
