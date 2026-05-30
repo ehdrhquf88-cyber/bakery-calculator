@@ -21,6 +21,7 @@ const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
 const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_PIN_STORAGE_PREFIX = "bakery_offline_pin";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
+const OFFLINE_PIN_REAUTH_AFTER_MS = 60_000;
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
 const USER_DATA_STORAGE_KEYS = {
@@ -784,12 +785,30 @@ export default function Home() {
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
+  const lastHiddenAtRef = useRef(null);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
   const unreadAnnouncementCount = useMemo(() => {
     const readIds = new Set(announcementReads.map(read => Number(read.announcement_id)));
     return announcements.filter(announcement => announcement.is_active !== false && !readIds.has(Number(announcement.id))).length;
   }, [announcementReads, announcements]);
+
+  const lockOfflineSessionForPin = useCallback(() => {
+    if (!authUser?.id || navigator.onLine) return;
+    if (!readOfflinePinRecord(authUser.id)) return;
+
+    const cachedUser = readOfflineUsers().find(user => user.id === authUser.id) || normalizeOfflineUser(authUser);
+    if (!cachedUser) return;
+
+    setOfflineLoginUsers([cachedUser]);
+    setHasOfflinePin(true);
+    setAuthError(t("offlinePinPrompt"));
+    clearAdminUnlock(authUser);
+    setAuthUser(null);
+    setUserDataLoaded(false);
+    setUserDataOwnerId(null);
+    setIsAdminUnlocked(false);
+  }, [authUser, t]);
 
   useEffect(() => {
     const updateOnlineStatus = () => {
@@ -809,6 +828,38 @@ export default function Home() {
       window.removeEventListener("offline", updateOnlineStatus);
     };
   }, []);
+
+  useEffect(() => {
+    const markAppHidden = () => {
+      lastHiddenAtRef.current = Date.now();
+    };
+
+    const lockIfOfflineAfterBackground = () => {
+      if (document.visibilityState === "hidden") {
+        markAppHidden();
+        return;
+      }
+
+      const hiddenAt = lastHiddenAtRef.current;
+      if (!hiddenAt) return;
+
+      if (Date.now() - hiddenAt >= OFFLINE_PIN_REAUTH_AFTER_MS) {
+        lockOfflineSessionForPin();
+      }
+
+      lastHiddenAtRef.current = null;
+    };
+
+    document.addEventListener("visibilitychange", lockIfOfflineAfterBackground);
+    window.addEventListener("focus", lockIfOfflineAfterBackground);
+    window.addEventListener("pagehide", markAppHidden);
+
+    return () => {
+      document.removeEventListener("visibilitychange", lockIfOfflineAfterBackground);
+      window.removeEventListener("focus", lockIfOfflineAfterBackground);
+      window.removeEventListener("pagehide", markAppHidden);
+    };
+  }, [lockOfflineSessionForPin]);
 
   // 로컬스토리지 로드
   useEffect(() => {
