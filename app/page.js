@@ -1360,27 +1360,9 @@ export default function Home() {
 
   const isLimitedOfflineMode = Boolean(authUser?.isOfflineMode || !isOnline);
   const canUseView = (nextView) => !isLimitedOfflineMode || OFFLINE_ALLOWED_VIEWS.includes(nextView);
-
-  useEffect(() => {
-    if (!supabase) return undefined;
-
-    const clearAuthSession = () => {
-      clearStoredAuthSession();
-      supabase.auth.signOut({ scope: "local" });
-      setAuthUser(null);
-      setHasOfflinePin(false);
-      setUserDataLoaded(false);
-      setUserDataOwnerId(null);
-    };
-
-    window.addEventListener("pagehide", clearAuthSession);
-    window.addEventListener("beforeunload", clearAuthSession);
-
-    return () => {
-      window.removeEventListener("pagehide", clearAuthSession);
-      window.removeEventListener("beforeunload", clearAuthSession);
-    };
-  }, []);
+  const effectiveHasOfflinePin = authUser?.id
+    ? Boolean(readOfflinePinRecord(authUser.id)) || hasOfflinePin
+    : hasOfflinePin;
 
   const saveLeaveCheckPreference = () => {
     if (!hideLeaveCheck) return;
@@ -1640,7 +1622,7 @@ export default function Home() {
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} onAnnouncementsChange={setAnnouncements} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} hasOfflinePin={hasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onVerifyOfflinePin={handleVerifyOfflinePin} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} hasOfflinePin={effectiveHasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onVerifyOfflinePin={handleVerifyOfflinePin} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal

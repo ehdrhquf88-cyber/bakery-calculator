@@ -11,15 +11,9 @@ export default function ServiceWorkerUpdater({ t }) {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
-    const refreshForUpdate = () => {
-      if (isRefreshing.current) return;
-      isRefreshing.current = true;
-      window.location.reload();
-    };
-
     const handleMessage = (event) => {
       if (event.data?.type === "SW_ACTIVATED") {
-        refreshForUpdate();
+        setIsBannerVisible(false);
       }
     };
 
@@ -33,7 +27,6 @@ export default function ServiceWorkerUpdater({ t }) {
       if (document.visibilityState === "visible") checkForUpdate();
     };
 
-    navigator.serviceWorker.addEventListener("controllerchange", refreshForUpdate);
     navigator.serviceWorker.addEventListener("message", handleMessage);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
@@ -71,7 +64,6 @@ export default function ServiceWorkerUpdater({ t }) {
     registerServiceWorker();
 
     return () => {
-      navigator.serviceWorker.removeEventListener("controllerchange", refreshForUpdate);
       navigator.serviceWorker.removeEventListener("message", handleMessage);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
