@@ -98,9 +98,14 @@ export default function MyBreadYourBread({
     }
   };
 
-  const renderRecipeImage = (recipe) => (
+  const renderRecipeImage = (recipe, fit = "cover") => {
+    const imageClassName = fit === "contain"
+      ? "block h-full w-full bg-contain bg-center bg-no-repeat"
+      : "block h-full w-full bg-cover bg-center";
+
+    return (
     recipe.communityImage || recipe.communityImageKey ? (
-      <AuthImage imageKey={recipe.communityImageKey} fallbackImage={recipe.communityImage} className="block h-full w-full bg-cover bg-center">
+      <AuthImage imageKey={recipe.communityImageKey} fallbackImage={recipe.communityImage} className={imageClassName}>
         <div className="h-full w-full flex items-center justify-center px-6 text-center text-xs font-black text-gray-400 uppercase tracking-widest">
           {t("noBreadPhoto")}
         </div>
@@ -110,7 +115,8 @@ export default function MyBreadYourBread({
         {t("noBreadPhoto")}
       </div>
     )
-  );
+    );
+  };
 
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
@@ -171,7 +177,7 @@ export default function MyBreadYourBread({
             return (
             <article key={recipeKey} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
               {savedRecipeId === recipeKey && <span className="sr-only" aria-live="polite">{t("communityRecipeSaved")}</span>}
-              <div className="aspect-[4/3] bg-[#efece5]">
+              <div className="h-44 bg-[#efece5] md:h-52">
                 {renderRecipeImage(recipe)}
               </div>
 
@@ -210,9 +216,17 @@ export default function MyBreadYourBread({
 
       {previewRecipe && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-          <section className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white text-black shadow-2xl">
-            <div className="aspect-[16/9] bg-[#efece5]">
-              {renderRecipeImage(previewRecipe)}
+          <section className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white text-black shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setPreviewRecipe(null)}
+              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-lg font-black text-black shadow-sm"
+              aria-label={t("close")}
+            >
+              x
+            </button>
+            <div className="h-72 bg-[#efece5] md:h-[420px]">
+              {renderRecipeImage(previewRecipe, "contain")}
             </div>
             <div className="p-5 md:p-6">
               {(() => {
