@@ -1044,18 +1044,21 @@ export default function Home() {
     if (!supabase || !authUser || !recipe?.ownerUserId || recipe.ownerUserId === authUser.id) return;
 
     const { error } = await supabase
-      .from("community_saves")
-      .upsert({
+      .rpc("record_community_save", {
         source_user_id: recipe.ownerUserId,
         source_recipe_id: normalizeRecipeId(recipe),
-        saved_by_user_id: authUser.id,
-      }, { onConflict: "source_user_id,source_recipe_id,saved_by_user_id" });
+      });
 
     if (error) {
       console.warn("내빵니빵 저장 횟수를 기록하지 못했습니다.", error.message);
       return;
     }
 
+    const recipeKey = getCommunityRecipeKey(recipe);
+    setCommunitySaveCounts(prev => ({
+      ...prev,
+      [recipeKey]: (prev[recipeKey] || 0) + 1,
+    }));
     await refreshCommunitySaveCounts();
   };
 

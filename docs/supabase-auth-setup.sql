@@ -184,6 +184,56 @@ grant execute
   on function public.update_public_display_name(text)
   to authenticated;
 
+create or replace function public.record_community_save(
+  source_user_id uuid,
+  source_recipe_id bigint
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not (select private.has_app_access()) then
+    raise exception 'App access is required.';
+  end if;
+
+  if source_user_id = (select auth.uid()) then
+    return;
+  end if;
+
+  if not exists (
+    select 1
+    from public.recipes
+    where user_id = source_user_id
+      and id = source_recipe_id
+      and is_public = true
+  ) then
+    raise exception 'Public source recipe not found.';
+  end if;
+
+  insert into public.community_saves (
+    source_user_id,
+    source_recipe_id,
+    saved_by_user_id
+  )
+  values (
+    source_user_id,
+    source_recipe_id,
+    (select auth.uid())
+  )
+  on conflict (source_user_id, source_recipe_id, saved_by_user_id) do nothing;
+end;
+$$;
+
+revoke execute
+  on function public.record_community_save(uuid, bigint)
+  from authenticated, anon, public;
+
+grant execute
+  on function public.record_community_save(uuid, bigint)
+  to authenticated;
+
 create or replace function public.get_community_save_counts()
 returns table(source_user_id uuid, source_recipe_id bigint, save_count bigint)
 language sql
