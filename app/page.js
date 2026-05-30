@@ -21,6 +21,8 @@ const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
 const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_PIN_STORAGE_PREFIX = "bakery_offline_pin";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
+const OFFLINE_PIN_HASH_ITERATIONS = 25_000;
+const LEGACY_OFFLINE_PIN_HASH_ITERATIONS = 100_000;
 const OFFLINE_PIN_REAUTH_AFTER_MS = 60_000;
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
@@ -217,7 +219,7 @@ function base64ToBytes(value) {
   return Uint8Array.from(binary, char => char.charCodeAt(0));
 }
 
-async function deriveOfflinePinHash(pin, saltBytes) {
+async function deriveOfflinePinHash(pin, saltBytes, iterations) {
   const encodedPin = new TextEncoder().encode(pin);
   const key = await crypto.subtle.importKey("raw", encodedPin, "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
@@ -225,7 +227,7 @@ async function deriveOfflinePinHash(pin, saltBytes) {
       name: "PBKDF2",
       hash: "SHA-256",
       salt: saltBytes,
-      iterations: 100000,
+      iterations,
     },
     key,
     256,
@@ -236,18 +238,20 @@ async function deriveOfflinePinHash(pin, saltBytes) {
 
 async function createOfflinePinRecord(pin) {
   const saltBytes = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await deriveOfflinePinHash(pin, saltBytes);
+  const hash = await deriveOfflinePinHash(pin, saltBytes, OFFLINE_PIN_HASH_ITERATIONS);
 
   return {
     salt: bytesToBase64(saltBytes),
     hash,
+    iterations: OFFLINE_PIN_HASH_ITERATIONS,
     updatedAt: new Date().toISOString(),
   };
 }
 
 async function verifyOfflinePin(pin, record) {
   if (!record?.salt || !record?.hash) return false;
-  const hash = await deriveOfflinePinHash(pin, base64ToBytes(record.salt));
+  const iterations = Number(record.iterations) || LEGACY_OFFLINE_PIN_HASH_ITERATIONS;
+  const hash = await deriveOfflinePinHash(pin, base64ToBytes(record.salt), iterations);
   return hash === record.hash;
 }
 
