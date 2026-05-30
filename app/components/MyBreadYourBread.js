@@ -178,7 +178,7 @@ export default function MyBreadYourBread({
             <article key={recipeKey} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
               {savedRecipeId === recipeKey && <span className="sr-only" aria-live="polite">{t("communityRecipeSaved")}</span>}
               <div className="h-44 bg-[#efece5] md:h-52">
-                {renderRecipeImage(recipe)}
+                {renderRecipeImage(recipe, "contain")}
               </div>
 
               <div className="p-5 md:p-6">
