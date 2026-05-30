@@ -323,7 +323,10 @@ begin
     ) or (
       tg_op = 'UPDATE'
       and old.role = 'admin'::public.app_role
-      and coalesce(new.role::text, '') <> 'admin'
+      and (
+        coalesce(new.role::text, '') <> 'admin'
+        or lower(old.email) <> lower(new.email)
+      )
     ) then
       select count(*)
       into admin_count
@@ -823,6 +826,12 @@ begin
     where lower(email) = lower(old.email);
 
     return old;
+  end if;
+
+  if tg_op = 'UPDATE' and lower(old.email) <> lower(new.email) then
+    update public.profiles
+    set role = null
+    where lower(email) = lower(old.email);
   end if;
 
   insert into public.profiles (id, email, full_name, avatar_url, role)

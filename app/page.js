@@ -697,6 +697,16 @@ function getAdminUnlockStorageKey(authUser) {
   return `${ADMIN_UNLOCK_STORAGE_PREFIX}:${authUser.id}:${dateKey}`;
 }
 
+function clearAdminUnlock(authUser) {
+  if (!authUser?.id) return;
+
+  try {
+    sessionStorage.removeItem(getAdminUnlockStorageKey(authUser));
+  } catch {
+    // Session storage is only a convenience; role/RLS still protects admin data.
+  }
+}
+
 async function getSupabaseAuthUser(session) {
   const user = session?.user;
   if (!user) return null;
@@ -1568,6 +1578,7 @@ export default function Home() {
     if (authUser?.id) {
       removeOfflineUser(authUser.id);
     }
+    clearAdminUnlock(authUser);
     clearUserData(authUser);
     setAuthUser(null);
     setOfflineLoginUsers([]);
