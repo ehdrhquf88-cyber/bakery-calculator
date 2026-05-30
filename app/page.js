@@ -302,6 +302,10 @@ function recipeToSupabaseRow(authUser, recipe) {
   const id = normalizeRecipeId(recipe);
   const recipeData = { ...stripSyncMetadata(recipe), id };
 
+  if (recipeData.isPublic) {
+    recipeData.authorDisplayName = recipeData.authorDisplayName || authUser.displayName || "";
+  }
+
   return {
     user_id: authUser.id,
     id,
@@ -320,6 +324,10 @@ function recipeFromSupabaseRow(row) {
     publishedAt: row.published_at || row.recipe_data?.publishedAt || "",
     [REMOTE_UPDATED_AT_FIELD]: row.updated_at,
   };
+}
+
+function getCommunityRecipeKey(recipe) {
+  return `${recipe?.ownerUserId || recipe?.sourceUserId || ""}:${normalizeRecipeId(recipe)}`;
 }
 
 function normalizeCostItemId(item) {
@@ -394,6 +402,38 @@ async function loadSupabaseCommunityRecipes() {
 
   if (error) throw error;
   return (data || []).map(recipeFromSupabaseRow);
+}
+
+async function loadSupabaseCommunityBookmarks(authUser) {
+  if (!supabase || !authUser) return [];
+
+  const { data, error } = await supabase
+    .from("community_bookmarks")
+    .select("source_user_id, source_recipe_id")
+    .eq("user_id", authUser.id);
+
+  if (error) {
+    console.warn("내빵니빵 북마크를 읽지 못했습니다.", error.message);
+    return [];
+  }
+
+  return (data || []).map(row => `${row.source_user_id}:${Number(row.source_recipe_id)}`);
+}
+
+async function loadSupabaseCommunitySaveCounts() {
+  if (!supabase) return {};
+
+  const { data, error } = await supabase.rpc("get_community_save_counts");
+
+  if (error) {
+    console.warn("내빵니빵 저장 횟수를 읽지 못했습니다.", error.message);
+    return {};
+  }
+
+  return (data || []).reduce((counts, row) => {
+    counts[`${row.source_user_id}:${Number(row.source_recipe_id)}`] = Number(row.save_count) || 0;
+    return counts;
+  }, {});
 }
 
 async function loadSupabaseCostItems() {
@@ -569,12 +609,23 @@ async function getSupabaseAuthUser(session) {
   if (!user) return null;
 
   let role = null;
+  let displayName = "";
   if (supabase) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("profiles")
-      .select("id, role")
+      .select("id, role, display_name")
       .eq("id", user.id)
       .maybeSingle();
+
+    if (error?.message?.includes("display_name")) {
+      const fallback = await supabase
+        .from("profiles")
+        .select("id, role")
+        .eq("id", user.id)
+        .maybeSingle();
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) console.warn("프로필 정보를 읽지 못해 권한을 미지정으로 표시합니다.", error.message);
     else if (!data) {
@@ -585,6 +636,7 @@ async function getSupabaseAuthUser(session) {
       throw new Error(INVITE_ONLY_MESSAGE);
     } else {
       role = data.role || null;
+      displayName = data.display_name || "";
     }
   }
 
@@ -594,6 +646,7 @@ async function getSupabaseAuthUser(session) {
     email: user.email,
     picture: user.user_metadata?.avatar_url || user.user_metadata?.picture || "",
     role,
+    displayName,
     signedInAt: new Date().toISOString(),
   };
 }
@@ -602,6 +655,8 @@ export default function Home() {
   const [view, setView] = useState("calc");
   const [recipes, setRecipes] = useState([]);
   const [communityRecipes, setCommunityRecipes] = useState([]);
+  const [communityBookmarks, setCommunityBookmarks] = useState([]);
+  const [communitySaveCounts, setCommunitySaveCounts] = useState({});
   const [costItems, setCostItems] = useState([]);
   const [tempLogs, setTempLogs] = useState([]);
   const [authUser, setAuthUser] = useState(null);
@@ -718,6 +773,8 @@ export default function Home() {
       if (!authUser) {
         setRecipes([]);
         setCommunityRecipes([]);
+        setCommunityBookmarks([]);
+        setCommunitySaveCounts({});
         setCostItems([]);
         setTempLogs([]);
         setUserDataLoaded(false);
@@ -738,14 +795,25 @@ export default function Home() {
 
         if (supabase && !authUser.isOfflineMode && navigator.onLine) {
           try {
-            const [remoteRecipes, remoteCommunityRecipes, remoteCostItems, remoteTempLogs] = await Promise.all([
+            const [
+              remoteRecipes,
+              remoteCommunityRecipes,
+              remoteCostItems,
+              remoteTempLogs,
+              remoteCommunityBookmarks,
+              remoteCommunitySaveCounts,
+            ] = await Promise.all([
               loadSupabaseRecipes(authUser),
               loadSupabaseCommunityRecipes(),
               loadSupabaseCostItems(),
               loadSupabaseTempLogs(),
+              loadSupabaseCommunityBookmarks(authUser),
+              loadSupabaseCommunitySaveCounts(),
             ]);
 
             setCommunityRecipes(remoteCommunityRecipes);
+            setCommunityBookmarks(remoteCommunityBookmarks);
+            setCommunitySaveCounts(remoteCommunitySaveCounts);
 
             if (remoteRecipes.length > 0) {
               nextRecipes = mergeLocalAndRemoteItems(userData.recipes, remoteRecipes, normalizeRecipeId, deletedRecipeIds);
@@ -796,6 +864,8 @@ export default function Home() {
         console.warn("사용자별 앱 데이터를 읽는 중 오류가 발생했습니다.", e?.message || e);
         setRecipes([]);
         setCommunityRecipes([]);
+        setCommunityBookmarks([]);
+        setCommunitySaveCounts({});
         setCostItems([]);
         setTempLogs([]);
         setUserDataOwnerId(authUser.id);
@@ -935,6 +1005,7 @@ export default function Home() {
       ...currentRecipe,
       isPublic: nextIsPublic,
       publishedAt: nextIsPublic ? currentRecipe.publishedAt || new Date().toISOString() : currentRecipe.publishedAt,
+      authorDisplayName: nextIsPublic ? currentRecipe.authorDisplayName || authUser.displayName || "" : currentRecipe.authorDisplayName || "",
     };
     const { error } = await supabase
       .from("recipes")
@@ -953,12 +1024,85 @@ export default function Home() {
   const visibleCommunityRecipes = useMemo(() => {
     const ownPublicRecipes = recipes
       .filter(recipe => recipe.isPublic)
-      .map(recipe => ({ ...recipe, ownerUserId: recipe.ownerUserId || authUser?.id }));
+      .map(recipe => ({
+        ...recipe,
+        ownerUserId: recipe.ownerUserId || authUser?.id,
+        authorDisplayName: recipe.authorDisplayName || authUser?.displayName || "",
+      }));
     const ownRecipeKeys = new Set(recipes.map(recipe => `${recipe.ownerUserId || authUser?.id || ""}:${recipe.id}`));
     const remotePublicRecipes = communityRecipes.filter(recipe => !ownRecipeKeys.has(`${recipe.ownerUserId || ""}:${recipe.id}`));
 
     return [...ownPublicRecipes, ...remotePublicRecipes];
-  }, [authUser?.id, communityRecipes, recipes]);
+  }, [authUser?.displayName, authUser?.id, communityRecipes, recipes]);
+
+  const refreshCommunitySaveCounts = async () => {
+    const nextCounts = await loadSupabaseCommunitySaveCounts();
+    setCommunitySaveCounts(nextCounts);
+  };
+
+  const recordCommunitySave = async (recipe) => {
+    if (!supabase || !authUser || !recipe?.ownerUserId || recipe.ownerUserId === authUser.id) return;
+
+    const { error } = await supabase
+      .from("community_saves")
+      .upsert({
+        source_user_id: recipe.ownerUserId,
+        source_recipe_id: normalizeRecipeId(recipe),
+        saved_by_user_id: authUser.id,
+      }, { onConflict: "source_user_id,source_recipe_id,saved_by_user_id" });
+
+    if (error) {
+      console.warn("내빵니빵 저장 횟수를 기록하지 못했습니다.", error.message);
+      return;
+    }
+
+    await refreshCommunitySaveCounts();
+  };
+
+  const toggleCommunityBookmark = async (recipe) => {
+    try {
+      await requireOnlineFeature();
+    } catch {
+      alert(t("communityOnlineRequired"));
+      return false;
+    }
+
+    if (!supabase || !authUser) return false;
+
+    const recipeKey = getCommunityRecipeKey(recipe);
+    const isBookmarked = communityBookmarks.includes(recipeKey);
+    const nextBookmarks = isBookmarked
+      ? communityBookmarks.filter(key => key !== recipeKey)
+      : [...communityBookmarks, recipeKey];
+
+    setCommunityBookmarks(nextBookmarks);
+
+    const request = isBookmarked
+      ? supabase
+        .from("community_bookmarks")
+        .delete()
+        .eq("source_user_id", recipe.ownerUserId)
+        .eq("source_recipe_id", normalizeRecipeId(recipe))
+        .eq("user_id", authUser.id)
+      : supabase
+        .from("community_bookmarks")
+        .insert({
+          source_user_id: recipe.ownerUserId,
+          source_recipe_id: normalizeRecipeId(recipe),
+          user_id: authUser.id,
+        });
+
+    const { error } = await request;
+
+    if (error) {
+      setCommunityBookmarks(communityBookmarks);
+      console.warn("내빵니빵 북마크를 저장하지 못했습니다.", error.message);
+      alert(t("communityBookmarkSaveFailed"));
+      return false;
+    }
+
+    return true;
+  };
 
   const copyCommunityImage = async (recipe) => {
     if (!recipe.communityImageKey || !supabase) {
@@ -1022,12 +1166,39 @@ export default function Home() {
           publishedAt: "",
           sourceRecipeId: recipe.sourceRecipeId || recipe.id,
           sourceUserId: recipe.ownerUserId || "",
+          sourceAuthorDisplayName: recipe.authorDisplayName || "",
           savedFromCommunityAt: recipe.publishedAt || "",
         },
       ];
     });
 
+    await recordCommunitySave(recipe);
+
     return true;
+  };
+
+  const updatePublicDisplayName = async (displayName) => {
+    await requireOnlineFeature();
+    if (!supabase || !authUser) throw new Error(t("supabaseClientMissing"));
+
+    const normalizedDisplayName = displayName.trim();
+    const { error } = await supabase
+      .rpc("update_public_display_name", { public_display_name: normalizedDisplayName });
+
+    if (error) throw error;
+
+    setAuthUser(prev => {
+      if (!prev) return prev;
+      const nextUser = { ...prev, displayName: normalizedDisplayName };
+      writeOfflineUser(nextUser);
+      return nextUser;
+    });
+
+    updateRecipes(prev => prev.map(recipe => (
+      recipe.isPublic
+        ? { ...recipe, authorDisplayName: normalizedDisplayName }
+        : recipe
+    )));
   };
 
   const updateCostItems = useCallback((nextCostItemsOrUpdater) => {
@@ -1362,12 +1533,21 @@ export default function Home() {
       <div className="py-4 md:py-8 print:py-0">
         {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
         {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} isOnline={isOnline} isMediaDisabled={isLimitedOfflineMode} onRequireOnline={requireOnlineFeature} onToggleCommunityVisibility={toggleRecipeCommunityVisibility} />}
-        {view === "community" && <MyBreadYourBread t={t} recipes={visibleCommunityRecipes} onSaveCommunityRecipe={saveCommunityRecipeToDb} />}
+        {view === "community" && (
+          <MyBreadYourBread
+            t={t}
+            recipes={visibleCommunityRecipes}
+            bookmarkedRecipeKeys={communityBookmarks}
+            saveCounts={communitySaveCounts}
+            onSaveCommunityRecipe={saveCommunityRecipeToDb}
+            onToggleBookmark={toggleCommunityBookmark}
+          />
+        )}
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} hasOfflinePin={hasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onVerifyOfflinePin={handleVerifyOfflinePin} onSignOut={handleSignOut} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} hasOfflinePin={hasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onVerifyOfflinePin={handleVerifyOfflinePin} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -1707,13 +1887,37 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, hasOfflinePin, onSetOfflinePin, onVerifyOfflinePin, onSignOut }) {
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, hasOfflinePin, onSetOfflinePin, onVerifyOfflinePin, onUpdateDisplayName, onSignOut }) {
   const [isResettingOfflinePin, setIsResettingOfflinePin] = useState(false);
   const [currentOfflinePin, setCurrentOfflinePin] = useState("");
   const [offlinePin, setOfflinePin] = useState("");
   const [offlinePinConfirm, setOfflinePinConfirm] = useState("");
   const [offlinePinStatus, setOfflinePinStatus] = useState("");
   const [isSavingOfflinePin, setIsSavingOfflinePin] = useState(false);
+  const [displayName, setDisplayName] = useState(authUser.displayName || "");
+  const [displayNameStatus, setDisplayNameStatus] = useState("");
+  const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
+
+  const saveDisplayName = async (event) => {
+    event.preventDefault();
+    setDisplayNameStatus("");
+
+    const normalizedDisplayName = displayName.trim();
+    if (normalizedDisplayName.length > 24) {
+      setDisplayNameStatus(t("publicDisplayNameTooLong"));
+      return;
+    }
+
+    setIsSavingDisplayName(true);
+    try {
+      await onUpdateDisplayName(normalizedDisplayName);
+      setDisplayNameStatus(t("publicDisplayNameSaved"));
+    } catch {
+      setDisplayNameStatus(t("publicDisplayNameSaveFailed"));
+    } finally {
+      setIsSavingDisplayName(false);
+    }
+  };
 
   const saveOfflinePin = async (event) => {
     event.preventDefault();
@@ -1777,6 +1981,35 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
             ))}
           </select>
         </div>
+      </section>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
+        <form onSubmit={saveDisplayName} className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto] md:items-end">
+          <div>
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("publicDisplayName")}</div>
+            <p className="mt-2 text-xs font-bold leading-5 text-gray-400">{t("publicDisplayNameDescription")}</p>
+            <input
+              type="text"
+              value={displayName}
+              onChange={event => setDisplayName(event.target.value)}
+              maxLength={24}
+              className="mt-3 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
+              placeholder={t("anonymousBaker")}
+            />
+            {displayNameStatus && (
+              <p className={`mt-2 text-xs font-bold ${displayNameStatus === t("publicDisplayNameSaved") ? "text-green-600" : "text-red-500"}`}>
+                {displayNameStatus}
+              </p>
+            )}
+          </div>
+          <button
+            type="submit"
+            disabled={isSavingDisplayName}
+            className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:cursor-wait disabled:opacity-60"
+          >
+            {isSavingDisplayName ? t("saving") : t("save")}
+          </button>
+        </form>
       </section>
 
       <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">

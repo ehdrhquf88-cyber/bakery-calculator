@@ -24,6 +24,7 @@ create table if not exists public.profiles (
   email text not null unique,
   full_name text null,
   avatar_url text null,
+  display_name text null,
   role public.app_role null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -58,11 +59,40 @@ create table if not exists public.temp_logs (
   primary key (user_id, id)
 );
 
+create table if not exists public.community_bookmarks (
+  source_user_id uuid not null,
+  source_recipe_id bigint not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (source_user_id, source_recipe_id, user_id),
+  constraint community_bookmarks_source_recipe_fkey
+    foreign key (source_user_id, source_recipe_id)
+    references public.recipes(user_id, id)
+    on delete cascade
+);
+
+create table if not exists public.community_saves (
+  source_user_id uuid not null,
+  source_recipe_id bigint not null,
+  saved_by_user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (source_user_id, source_recipe_id, saved_by_user_id),
+  constraint community_saves_source_recipe_fkey
+    foreign key (source_user_id, source_recipe_id)
+    references public.recipes(user_id, id)
+    on delete cascade
+);
+
+alter table public.profiles
+  add column if not exists display_name text null;
+
 alter table public.auth_allowlist enable row level security;
 alter table public.profiles enable row level security;
 alter table public.recipes enable row level security;
 alter table public.cost_items enable row level security;
 alter table public.temp_logs enable row level security;
+alter table public.community_bookmarks enable row level security;
+alter table public.community_saves enable row level security;
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
@@ -84,6 +114,12 @@ grant select, insert, update, delete on public.cost_items to authenticated;
 
 revoke all on public.temp_logs from anon;
 grant select, insert, update, delete on public.temp_logs to authenticated;
+
+revoke all on public.community_bookmarks from anon;
+grant select, insert, delete on public.community_bookmarks to authenticated;
+
+revoke all on public.community_saves from anon;
+grant insert, update, delete on public.community_saves to authenticated;
 
 create or replace function private.is_admin()
 returns boolean
@@ -118,6 +154,62 @@ $$;
 
 revoke all on function private.has_app_access() from public, anon, authenticated;
 grant execute on function private.has_app_access() to authenticated;
+
+create or replace function public.update_public_display_name(public_display_name text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  next_display_name text;
+begin
+  if not (select private.has_app_access()) then
+    raise exception 'App access is required.';
+  end if;
+
+  next_display_name := nullif(left(trim(coalesce(public_display_name, '')), 24), '');
+
+  update public.profiles
+  set display_name = next_display_name
+  where id = (select auth.uid());
+end;
+$$;
+
+revoke execute
+  on function public.update_public_display_name(text)
+  from authenticated, anon, public;
+
+grant execute
+  on function public.update_public_display_name(text)
+  to authenticated;
+
+create or replace function public.get_community_save_counts()
+returns table(source_user_id uuid, source_recipe_id bigint, save_count bigint)
+language sql
+security definer
+set search_path = ''
+as $$
+  select
+    saves.source_user_id,
+    saves.source_recipe_id,
+    count(*)::bigint as save_count
+  from public.community_saves as saves
+  join public.recipes as recipes
+    on recipes.user_id = saves.source_user_id
+   and recipes.id = saves.source_recipe_id
+  where recipes.is_public = true
+    and (select private.has_app_access())
+  group by saves.source_user_id, saves.source_recipe_id;
+$$;
+
+revoke execute
+  on function public.get_community_save_counts()
+  from authenticated, anon, public;
+
+grant execute
+  on function public.get_community_save_counts()
+  to authenticated;
 
 create or replace function private.prevent_last_admin_role_removal()
 returns trigger
@@ -311,6 +403,85 @@ for delete
 to authenticated
 using (
   user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can view their own community bookmarks" on public.community_bookmarks;
+create policy "Users can view their own community bookmarks"
+on public.community_bookmarks
+for select
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can insert their own community bookmarks" on public.community_bookmarks;
+create policy "Users can insert their own community bookmarks"
+on public.community_bookmarks
+for insert
+to authenticated
+with check (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+  and exists (
+    select 1
+    from public.recipes
+    where recipes.user_id = source_user_id
+      and recipes.id = source_recipe_id
+      and recipes.is_public = true
+  )
+);
+
+drop policy if exists "Users can delete their own community bookmarks" on public.community_bookmarks;
+create policy "Users can delete their own community bookmarks"
+on public.community_bookmarks
+for delete
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can insert their own community saves" on public.community_saves;
+create policy "Users can insert their own community saves"
+on public.community_saves
+for insert
+to authenticated
+with check (
+  saved_by_user_id = (select auth.uid())
+  and source_user_id <> (select auth.uid())
+  and (select private.has_app_access())
+  and exists (
+    select 1
+    from public.recipes
+    where recipes.user_id = source_user_id
+      and recipes.id = source_recipe_id
+      and recipes.is_public = true
+  )
+);
+
+drop policy if exists "Users can update their own community saves" on public.community_saves;
+create policy "Users can update their own community saves"
+on public.community_saves
+for update
+to authenticated
+using (
+  saved_by_user_id = (select auth.uid())
+  and (select private.has_app_access())
+)
+with check (
+  saved_by_user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can delete their own community saves" on public.community_saves;
+create policy "Users can delete their own community saves"
+on public.community_saves
+for delete
+to authenticated
+using (
+  saved_by_user_id = (select auth.uid())
   and (select private.has_app_access())
 );
 

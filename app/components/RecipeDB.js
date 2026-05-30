@@ -139,6 +139,11 @@ export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostIte
             <div>
               <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{labelFromMap(t, RECIPE_CATEGORY_LABEL_KEYS, recipe.category)}</div>
               <div className="text-xl font-black tracking-tighter uppercase">{recipe.productName}</div>
+              {recipe.sourceUserId && (
+                <p className="mt-1 text-[11px] font-black text-gray-400">
+                  {t("source")}: {recipe.sourceAuthorDisplayName || t("anonymousBaker")}
+                </p>
+              )}
               {recipe.communityText && <p className="mt-1 text-xs font-bold text-gray-400 line-clamp-1">{recipe.communityText}</p>}
             </div>
             <div className="flex items-center gap-2 self-end md:self-auto">
