@@ -5,7 +5,8 @@ import { InputField } from "./common";
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 import { supabase } from "../lib/supabaseClient";
 
-const IMAGE_UPLOAD_MAX_EDGE = 1800;
+const IMAGE_UPLOAD_WIDTH = 1600;
+const IMAGE_UPLOAD_HEIGHT = 1200;
 const IMAGE_UPLOAD_QUALITY = 0.82;
 
 function loadImageElement(file) {
@@ -44,17 +45,41 @@ async function optimizeImageForUpload(file) {
   }
 
   const image = await loadImageElement(file);
-  const scale = Math.min(1, IMAGE_UPLOAD_MAX_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
-  const width = Math.max(1, Math.round(image.naturalWidth * scale));
-  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const sourceWidth = image.naturalWidth;
+  const sourceHeight = image.naturalHeight;
+  const targetRatio = IMAGE_UPLOAD_WIDTH / IMAGE_UPLOAD_HEIGHT;
+  const sourceRatio = sourceWidth / sourceHeight;
+  let cropWidth = sourceWidth;
+  let cropHeight = sourceHeight;
+  let cropX = 0;
+  let cropY = 0;
+
+  if (sourceRatio > targetRatio) {
+    cropWidth = Math.round(sourceHeight * targetRatio);
+    cropX = Math.round((sourceWidth - cropWidth) / 2);
+  } else if (sourceRatio < targetRatio) {
+    cropHeight = Math.round(sourceWidth / targetRatio);
+    cropY = Math.round((sourceHeight - cropHeight) / 2);
+  }
+
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = IMAGE_UPLOAD_WIDTH;
+  canvas.height = IMAGE_UPLOAD_HEIGHT;
 
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Image compression failed.");
 
-  context.drawImage(image, 0, 0, width, height);
+  context.drawImage(
+    image,
+    cropX,
+    cropY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    IMAGE_UPLOAD_WIDTH,
+    IMAGE_UPLOAD_HEIGHT,
+  );
 
   const blob = await canvasToBlob(canvas, "image/webp", IMAGE_UPLOAD_QUALITY);
 

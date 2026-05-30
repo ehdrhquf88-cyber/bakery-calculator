@@ -177,8 +177,8 @@ export default function MyBreadYourBread({
             return (
             <article key={recipeKey} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
               {savedRecipeId === recipeKey && <span className="sr-only" aria-live="polite">{t("communityRecipeSaved")}</span>}
-              <div className="h-44 bg-[#efece5] md:h-52">
-                {renderRecipeImage(recipe, "contain")}
+              <div className="aspect-[4/3] bg-[#efece5]">
+                {renderRecipeImage(recipe)}
               </div>
 
               <div className="p-5 md:p-6">
@@ -225,8 +225,8 @@ export default function MyBreadYourBread({
             >
               x
             </button>
-            <div className="h-72 bg-[#efece5] md:h-[420px]">
-              {renderRecipeImage(previewRecipe, "contain")}
+            <div className="aspect-[4/3] bg-[#efece5]">
+              {renderRecipeImage(previewRecipe)}
             </div>
             <div className="p-5 md:p-6">
               {(() => {
