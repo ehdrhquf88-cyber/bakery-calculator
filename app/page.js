@@ -436,6 +436,39 @@ async function loadSupabaseCommunitySaveCounts() {
   }, {});
 }
 
+async function loadSupabaseAnnouncements() {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("announcements")
+    .select("id, title, body, is_active, created_at, updated_at")
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn("공지사항을 읽지 못했습니다.", error.message);
+    return [];
+  }
+
+  return data || [];
+}
+
+async function loadSupabaseAnnouncementReads(authUser) {
+  if (!supabase || !authUser) return [];
+
+  const { data, error } = await supabase
+    .from("announcement_reads")
+    .select("announcement_id, read_at")
+    .eq("user_id", authUser.id);
+
+  if (error) {
+    console.warn("공지사항 읽음 상태를 읽지 못했습니다.", error.message);
+    return [];
+  }
+
+  return data || [];
+}
+
 async function loadSupabaseCostItems() {
   if (!supabase) return [];
 
@@ -657,6 +690,8 @@ export default function Home() {
   const [communityRecipes, setCommunityRecipes] = useState([]);
   const [communityBookmarks, setCommunityBookmarks] = useState([]);
   const [communitySaveCounts, setCommunitySaveCounts] = useState({});
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementReads, setAnnouncementReads] = useState([]);
   const [costItems, setCostItems] = useState([]);
   const [tempLogs, setTempLogs] = useState([]);
   const [authUser, setAuthUser] = useState(null);
@@ -681,6 +716,10 @@ export default function Home() {
   const tempLogsSnapshotRef = useRef([]);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
+  const unreadAnnouncementCount = useMemo(() => {
+    const readIds = new Set(announcementReads.map(read => Number(read.announcement_id)));
+    return announcements.filter(announcement => announcement.is_active !== false && !readIds.has(Number(announcement.id))).length;
+  }, [announcementReads, announcements]);
 
   useEffect(() => {
     const updateOnlineStatus = () => {
@@ -775,6 +814,8 @@ export default function Home() {
         setCommunityRecipes([]);
         setCommunityBookmarks([]);
         setCommunitySaveCounts({});
+        setAnnouncements([]);
+        setAnnouncementReads([]);
         setCostItems([]);
         setTempLogs([]);
         setUserDataLoaded(false);
@@ -802,6 +843,8 @@ export default function Home() {
               remoteTempLogs,
               remoteCommunityBookmarks,
               remoteCommunitySaveCounts,
+              remoteAnnouncements,
+              remoteAnnouncementReads,
             ] = await Promise.all([
               loadSupabaseRecipes(authUser),
               loadSupabaseCommunityRecipes(),
@@ -809,11 +852,15 @@ export default function Home() {
               loadSupabaseTempLogs(),
               loadSupabaseCommunityBookmarks(authUser),
               loadSupabaseCommunitySaveCounts(),
+              loadSupabaseAnnouncements(),
+              loadSupabaseAnnouncementReads(authUser),
             ]);
 
             setCommunityRecipes(remoteCommunityRecipes);
             setCommunityBookmarks(remoteCommunityBookmarks);
             setCommunitySaveCounts(remoteCommunitySaveCounts);
+            setAnnouncements(remoteAnnouncements);
+            setAnnouncementReads(remoteAnnouncementReads);
 
             if (remoteRecipes.length > 0) {
               nextRecipes = mergeLocalAndRemoteItems(userData.recipes, remoteRecipes, normalizeRecipeId, deletedRecipeIds);
@@ -866,6 +913,8 @@ export default function Home() {
         setCommunityRecipes([]);
         setCommunityBookmarks([]);
         setCommunitySaveCounts({});
+        setAnnouncements([]);
+        setAnnouncementReads([]);
         setCostItems([]);
         setTempLogs([]);
         setUserDataOwnerId(authUser.id);
@@ -992,6 +1041,42 @@ export default function Home() {
       setIsOnline(false);
       throw new Error(t("communityOnlineRequired"));
     }
+  };
+
+  const markAnnouncementsAsRead = useCallback(async (announcementIds) => {
+    if (!supabase || !authUser || authUser.isOfflineMode || !navigator.onLine || announcementIds.length === 0) return;
+
+    const rows = announcementIds.map(id => ({
+      announcement_id: Number(id),
+      user_id: authUser.id,
+      read_at: new Date().toISOString(),
+    }));
+
+    const { data, error } = await supabase
+      .from("announcement_reads")
+      .upsert(rows, { onConflict: "announcement_id,user_id" })
+      .select("announcement_id, read_at");
+
+    if (error) {
+      console.warn("공지사항 읽음 처리에 실패했습니다.", error.message);
+      return;
+    }
+
+    setAnnouncementReads(prev => {
+      const byId = new Map(prev.map(read => [Number(read.announcement_id), read]));
+      (data || rows).forEach(read => byId.set(Number(read.announcement_id), read));
+      return [...byId.values()];
+    });
+  }, [authUser]);
+
+  const markUnreadAnnouncementsWhenOpeningSettings = () => {
+    if (unreadAnnouncementCount === 0) return;
+    const readIds = new Set(announcementReads.map(read => Number(read.announcement_id)));
+    const unreadIds = announcements
+      .filter(announcement => announcement.is_active !== false && !readIds.has(Number(announcement.id)))
+      .map(announcement => announcement.id);
+
+    markAnnouncementsAsRead(unreadIds);
   };
 
   const toggleRecipeCommunityVisibility = async (recipeId, nextIsPublic) => {
@@ -1329,6 +1414,11 @@ export default function Home() {
       return;
     }
 
+    const enterView = () => {
+      if (nextView === "settings") markUnreadAnnouncementsWhenOpeningSettings();
+      setView(nextView);
+    };
+
     if (nextView === "admin" && isAdmin && !isAdminUnlocked) {
       try {
         if (sessionStorage.getItem(getAdminUnlockStorageKey(authUser)) === "true") {
@@ -1346,12 +1436,12 @@ export default function Home() {
     }
 
     if (view === "calc" && nextView !== "calc" && !skipCalcLeaveCheck) {
-      requestCalcSafetyCheck(() => setView(nextView));
+      requestCalcSafetyCheck(enterView);
       setPendingView(nextView);
       return;
     }
 
-    setView(nextView);
+    enterView();
   };
 
   const restoreCalcLeaveCheck = () => {
@@ -1510,7 +1600,7 @@ export default function Home() {
           {!isLimitedOfflineMode && <NavButton active={view === "community"} onClick={() => moveToView("community")}>{t("navCommunity")}</NavButton>}
           {!isLimitedOfflineMode && <NavButton active={view === "videos"} onClick={() => moveToView("videos")}>{t("navVideos")}</NavButton>}
           {!isLimitedOfflineMode && isAdmin && <NavButton active={view === "admin"} onClick={() => moveToView("admin")}>{t("navAdmin")}</NavButton>}
-          {!isLimitedOfflineMode && <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>{t("navSettings")}</NavButton>}
+          {!isLimitedOfflineMode && <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>{unreadAnnouncementCount > 0 ? t("navSettingsUnread") : t("navSettings")}</NavButton>}
         </div>
         <button
           type="button"
@@ -1549,8 +1639,8 @@ export default function Home() {
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
-        {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} hasOfflinePin={hasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onVerifyOfflinePin={handleVerifyOfflinePin} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
+        {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} onAnnouncementsChange={setAnnouncements} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} hasOfflinePin={hasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onVerifyOfflinePin={handleVerifyOfflinePin} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -1578,15 +1668,20 @@ export default function Home() {
   );
 }
 
-function AdminPanel({ t }) {
+function AdminPanel({ t, onAnnouncementsChange }) {
   const [profiles, setProfiles] = useState([]);
   const [allowlist, setAllowlist] = useState([]);
+  const [adminAnnouncements, setAdminAnnouncements] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [adminError, setAdminError] = useState("");
   const [savingProfileId, setSavingProfileId] = useState(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("user");
   const [isSavingInvite, setIsSavingInvite] = useState(false);
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [announcementBody, setAnnouncementBody] = useState("");
+  const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
+  const [deactivatingAnnouncementId, setDeactivatingAnnouncementId] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -1600,7 +1695,7 @@ function AdminPanel({ t }) {
       setIsLoading(true);
       setAdminError("");
 
-      const [profilesResult, allowlistResult] = await Promise.all([
+      const [profilesResult, allowlistResult, announcementsResult] = await Promise.all([
         supabase
           .from("profiles")
           .select("id, email, full_name, avatar_url, role, created_at, updated_at")
@@ -1609,15 +1704,21 @@ function AdminPanel({ t }) {
           .from("auth_allowlist")
           .select("email, role, created_at")
           .order("created_at", { ascending: false }),
+        supabase
+          .from("announcements")
+          .select("id, title, body, is_active, created_at, updated_at")
+          .order("created_at", { ascending: false }),
       ]);
 
       if (!isMounted) return;
 
-      if (profilesResult.error || allowlistResult.error) {
-        setAdminError(profilesResult.error?.message || allowlistResult.error?.message);
+      if (profilesResult.error || allowlistResult.error || announcementsResult.error) {
+        setAdminError(profilesResult.error?.message || allowlistResult.error?.message || announcementsResult.error?.message);
       } else {
         setProfiles(profilesResult.data || []);
         setAllowlist(allowlistResult.data || []);
+        setAdminAnnouncements(announcementsResult.data || []);
+        onAnnouncementsChange?.((announcementsResult.data || []).filter(announcement => announcement.is_active));
       }
 
       setIsLoading(false);
@@ -1628,7 +1729,7 @@ function AdminPanel({ t }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [onAnnouncementsChange]);
 
   const updateProfileRole = async (profileId, nextRole) => {
     if (!supabase) return;
@@ -1715,6 +1816,60 @@ function AdminPanel({ t }) {
     }
   };
 
+  const publishAnnouncement = async (event) => {
+    event.preventDefault();
+    if (!supabase) return;
+
+    const title = announcementTitle.trim();
+    const body = announcementBody.trim();
+    if (!title || !body) return;
+
+    setIsSavingAnnouncement(true);
+    setAdminError("");
+
+    const { data, error } = await supabase
+      .from("announcements")
+      .insert({ title, body, is_active: true })
+      .select("id, title, body, is_active, created_at, updated_at")
+      .single();
+
+    if (error) {
+      setAdminError(error.message);
+    } else {
+      setAdminAnnouncements(prev => [data, ...prev]);
+      onAnnouncementsChange?.(prev => [data, ...(Array.isArray(prev) ? prev : [])]);
+      setAnnouncementTitle("");
+      setAnnouncementBody("");
+    }
+
+    setIsSavingAnnouncement(false);
+  };
+
+  const deactivateAnnouncement = async (announcementId) => {
+    if (!supabase || !confirm(t("deleteConfirm"))) return;
+
+    setDeactivatingAnnouncementId(announcementId);
+    setAdminError("");
+
+    const { data, error } = await supabase
+      .from("announcements")
+      .update({ is_active: false })
+      .eq("id", announcementId)
+      .select("id, title, body, is_active, created_at, updated_at")
+      .single();
+
+    if (error) {
+      setAdminError(error.message);
+    } else {
+      setAdminAnnouncements(prev => prev.map(announcement => (
+        Number(announcement.id) === Number(announcementId) ? data : announcement
+      )));
+      onAnnouncementsChange?.(prev => (Array.isArray(prev) ? prev.filter(announcement => Number(announcement.id) !== Number(announcementId)) : []));
+    }
+
+    setDeactivatingAnnouncementId(null);
+  };
+
   return (
     <main className="max-w-6xl mx-auto px-4 md:px-8 text-black">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-black pb-4 mb-6 gap-4">
@@ -1732,6 +1887,69 @@ function AdminPanel({ t }) {
           {adminError}
         </div>
       )}
+
+      <section className="mb-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm md:p-6">
+        <div className="mb-4 flex flex-col gap-1">
+          <h2 className="text-2xl font-black tracking-tighter">{t("announcementsAdminTitle")}</h2>
+          <p className="text-xs font-bold text-gray-400">{t("announcementsAdminDescription")}</p>
+        </div>
+
+        <form onSubmit={publishAnnouncement} className="space-y-3">
+          <input
+            type="text"
+            value={announcementTitle}
+            onChange={event => setAnnouncementTitle(event.target.value)}
+            placeholder={t("announcementTitlePlaceholder")}
+            className="h-11 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-3 text-sm font-bold outline-none"
+            required
+          />
+          <textarea
+            value={announcementBody}
+            onChange={event => setAnnouncementBody(event.target.value)}
+            placeholder={t("announcementBodyPlaceholder")}
+            className="min-h-28 w-full resize-y rounded-xl border border-gray-200 bg-[#f7f6f3] px-3 py-3 text-sm font-bold outline-none"
+            required
+          />
+          <button
+            type="submit"
+            disabled={isSavingAnnouncement}
+            className="h-11 rounded-xl bg-black px-5 text-sm font-black uppercase tracking-tight text-white disabled:bg-gray-300"
+          >
+            {isSavingAnnouncement ? t("saving") : t("publishAnnouncement")}
+          </button>
+        </form>
+
+        <div className="mt-5 overflow-hidden rounded-xl border border-gray-100">
+          {isLoading ? (
+            <div className="p-4 text-sm font-bold text-gray-400">{t("loading")}</div>
+          ) : adminAnnouncements.length === 0 ? (
+            <div className="p-4 text-sm font-bold text-gray-400">{t("noAnnouncements")}</div>
+          ) : (
+            adminAnnouncements.map(announcement => (
+              <div key={announcement.id} className="grid grid-cols-[1fr_auto] gap-3 border-b border-gray-100 px-4 py-3 last:border-b-0">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="truncate text-sm font-black tracking-tight">{announcement.title}</h3>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${announcement.is_active ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-400"}`}>
+                      {announcement.is_active ? t("activeAnnouncement") : t("inactiveAnnouncement")}
+                    </span>
+                  </div>
+                  <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs font-bold text-gray-400">{announcement.body}</p>
+                  <p className="mt-2 text-[10px] font-bold text-gray-300">{formatDateTime(announcement.created_at)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => deactivateAnnouncement(announcement.id)}
+                  disabled={!announcement.is_active || deactivatingAnnouncementId === announcement.id}
+                  className="self-start rounded-full border border-gray-200 px-3 py-2 text-xs font-black text-gray-400 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {deactivatingAnnouncementId === announcement.id ? t("saving") : t("deactivateAnnouncement")}
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
 
       <section className="mb-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm md:p-6">
         <div className="mb-4 flex flex-col gap-1">
@@ -1890,7 +2108,7 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, hasOfflinePin, onSetOfflinePin, onVerifyOfflinePin, onUpdateDisplayName, onSignOut }) {
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], hasOfflinePin, onSetOfflinePin, onVerifyOfflinePin, onUpdateDisplayName, onSignOut }) {
   const [isResettingOfflinePin, setIsResettingOfflinePin] = useState(false);
   const [currentOfflinePin, setCurrentOfflinePin] = useState("");
   const [offlinePin, setOfflinePin] = useState("");
@@ -1900,6 +2118,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
   const [displayName, setDisplayName] = useState(authUser.displayName || "");
   const [displayNameStatus, setDisplayNameStatus] = useState("");
   const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
+  const readAnnouncementIds = useMemo(() => new Set(announcementReads.map(read => Number(read.announcement_id))), [announcementReads]);
 
   const saveDisplayName = async (event) => {
     event.preventDefault();
@@ -1967,6 +2186,37 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
       <div className="border-b-2 border-black pb-4 mb-6">
         <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">{t("settingsTitle")}</h1>
       </div>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
+        <div>
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("announcementsTitle")}</div>
+          <h2 className="mt-1 text-xl font-black tracking-tighter">{t("announcementsDescription")}</h2>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {announcements.length === 0 ? (
+            <p className="text-sm font-bold text-gray-400">{t("noAnnouncements")}</p>
+          ) : (
+            announcements.map((announcement) => {
+              const isRead = readAnnouncementIds.has(Number(announcement.id));
+              return (
+                <article key={announcement.id} className="rounded-xl border border-gray-100 bg-[#f7f6f3] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-base font-black tracking-tight">{announcement.title}</h3>
+                    {!isRead && (
+                      <span className="rounded-full bg-black px-2 py-1 text-[10px] font-black uppercase text-white">
+                        {t("newAnnouncement")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-3 whitespace-pre-wrap text-sm font-bold leading-6 text-gray-600">{announcement.body}</p>
+                  <p className="mt-3 text-[10px] font-bold text-gray-400">{formatDateTime(announcement.created_at)}</p>
+                </article>
+              );
+            })
+          )}
+        </div>
+      </section>
 
       <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
