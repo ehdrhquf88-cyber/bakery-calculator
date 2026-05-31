@@ -98,10 +98,8 @@ export default function MyBreadYourBread({
     }
   };
 
-  const renderRecipeImage = (recipe, fit = "cover") => {
-    const imageClassName = fit === "contain"
-      ? "block h-full w-full bg-contain bg-center bg-no-repeat"
-      : "block h-full w-full bg-cover bg-center";
+  const renderRecipeImage = (recipe) => {
+    const imageClassName = "block h-full w-full bg-contain bg-center bg-no-repeat";
 
     return (
     recipe.communityImage || recipe.communityImageKey ? (
