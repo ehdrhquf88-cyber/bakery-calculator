@@ -1,6 +1,6 @@
 # Supabase Auth Setup
 
-This app uses Supabase Google OAuth for login. Recipes, cost items, and temp/pH logs are stored in Supabase.
+This app uses Supabase Google OAuth for login. Recipes, cost items, temp/pH logs, community data, and announcements are stored in Supabase. Recipe images are stored in Cloudflare R2 through server-side API routes.
 
 Official Supabase references:
 
@@ -17,24 +17,36 @@ Official Supabase references:
 3. In Supabase, go to `Authentication > Providers > Google` and enable Google.
 4. Add Supabase's callback URL to Google OAuth redirect URIs:
    `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
-5. Run [supabase-auth-setup.sql](/Users/hayoungkim/levain-lab/bakery-app/docs/supabase-auth-setup.sql) in Supabase SQL Editor.
-6. In `Authentication > Hooks`, configure a SQL hook:
+5. In Supabase `Authentication > URL Configuration`, set the production site URL and add any local/deployment redirect URLs you use.
+6. Run [supabase-auth-setup.sql](/Users/hayoungkim/levain-lab/bakery-app/docs/supabase-auth-setup.sql) in Supabase SQL Editor.
+7. In `Authentication > Hooks`, configure a SQL hook:
    - Hook: `Before User Created`
    - Type: `Postgres`
    - Schema: `public`
    - Function: `hook_restrict_login_to_allowlist`
-7. Add local env values:
+8. Add env values:
 
 ```env
+# Supabase browser client
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
+
+# Cloudflare R2 server-only values
+R2_ACCOUNT_ID=YOUR_CLOUDFLARE_ACCOUNT_ID
+R2_ACCESS_KEY_ID=YOUR_R2_ACCESS_KEY_ID
+R2_SECRET_ACCESS_KEY=YOUR_R2_SECRET_ACCESS_KEY
+R2_BUCKET_NAME=YOUR_R2_BUCKET_NAME
 ```
-8. In `Project Settings > API > Data API`, expose only the tables the app needs:
+9. In `Project Settings > API > Data API`, expose only the tables the app needs:
    - `public.profiles`
    - `public.auth_allowlist`
    - `public.recipes`
    - `public.cost_items`
    - `public.temp_logs`
+   - `public.community_bookmarks`
+   - `public.community_saves`
+   - `public.announcements`
+   - `public.announcement_reads`
 
 Keep `Automatically expose new tables` disabled. All exposed tables must keep RLS enabled.
 
@@ -107,10 +119,32 @@ RLS allows authenticated `admin` or `user` profiles to select, insert, update, a
 
 RLS allows authenticated `admin` or `user` profiles to select, insert, update, and delete only rows where `user_id = auth.uid()`. Existing browser-local temp/pH logs are uploaded to Supabase the first time a user opens the app and no remote temp/pH logs exist yet.
 
+## Community And Announcements
+
+`public.community_bookmarks` stores each user's bookmarks for public recipes. `public.community_saves` stores save counts through RPC helpers, so users do not need direct table select access.
+
+`public.announcements` stores active admin announcements. `public.announcement_reads` stores each user's read state.
+
+RLS keeps community and announcement writes tied to the authenticated user, while admin-only policies control allowlist/profile administration and announcement management.
+
+## Cloudflare R2
+
+Recipe images are uploaded, copied, read, and deleted through authenticated server routes. Keep the bucket private and store R2 credentials only as server-side environment variables.
+
+The app expects:
+
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_NAME`
+
+Use an R2 access key scoped to the target bucket with only the object permissions the app needs. Do not put R2 secrets in `NEXT_PUBLIC_*` variables.
+
 ## Security Hardening
 
 - Keep `private` out of Data API exposed schemas.
 - Keep `Automatically expose new tables` disabled.
 - Do not put a Supabase service role key in `NEXT_PUBLIC_*` variables or browser code.
+- Do not put Cloudflare R2 secrets in `NEXT_PUBLIC_*` variables or browser code.
 - Security definer functions use an empty `search_path` and fully-qualified table names.
 - If you remove an existing user from the allowlist, also remove or disable the user in `Authentication > Users` when you want to block the Supabase Auth account itself, not only app/API access.
