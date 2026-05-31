@@ -169,11 +169,6 @@ function writeOfflinePinRecord(userId, record) {
   if (!userId || !record) return;
 
   localStorage.setItem(getOfflinePinStorageKey(userId), JSON.stringify(record));
-  const users = readOfflineUsers();
-  const nextUsers = users.map(user => (
-    user.id === userId ? { ...user, pinRecord: record } : user
-  ));
-  localStorage.setItem(OFFLINE_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
 }
 
 function removeOfflineUser(userId) {
@@ -1650,10 +1645,6 @@ export default function Home() {
     writeOfflinePinRecord(authUser.id, record);
   };
 
-  const handleOfflinePinSaved = () => {
-    setHasOfflinePin(true);
-  };
-
   const handleVerifyOfflinePin = async (pin) => {
     if (!authUser?.id) return false;
     const record = readOfflinePinRecord(authUser.id);
@@ -1762,7 +1753,7 @@ export default function Home() {
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} onAnnouncementsChange={setAnnouncements} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} hasOfflinePin={effectiveHasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onOfflinePinSaved={handleOfflinePinSaved} onVerifyOfflinePin={handleVerifyOfflinePin} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} hasOfflinePin={effectiveHasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onVerifyOfflinePin={handleVerifyOfflinePin} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -2262,7 +2253,8 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], hasOfflinePin, onSetOfflinePin, onOfflinePinSaved, onVerifyOfflinePin, onUpdateDisplayName, onSignOut }) {
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], hasOfflinePin, onSetOfflinePin, onVerifyOfflinePin, onUpdateDisplayName, onSignOut }) {
+  const [localHasOfflinePin, setLocalHasOfflinePin] = useState(() => hasOfflinePin);
   const [isResettingOfflinePin, setIsResettingOfflinePin] = useState(false);
   const [currentOfflinePin, setCurrentOfflinePin] = useState("");
   const [offlinePin, setOfflinePin] = useState("");
@@ -2302,7 +2294,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
     const normalizedPin = offlinePin.trim();
     const normalizedCurrentPin = currentOfflinePin.trim();
 
-    if (hasOfflinePin) {
+    if (localHasOfflinePin) {
       const isCurrentPinValid = await onVerifyOfflinePin(normalizedCurrentPin);
       if (!isCurrentPinValid) {
         setOfflinePinStatus(t("offlinePinCurrentWrong"));
@@ -2325,7 +2317,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
       await onSetOfflinePin(normalizedPin);
       setOfflinePinStatus(t("offlinePinFinalizing"));
       await new Promise(resolve => setTimeout(resolve, OFFLINE_PIN_SAVE_SETTLE_MS));
-      onOfflinePinSaved();
+      setLocalHasOfflinePin(true);
       setCurrentOfflinePin("");
       setOfflinePin("");
       setOfflinePinConfirm("");
@@ -2427,12 +2419,12 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
         <form onSubmit={saveOfflinePin} className="space-y-4">
           <div>
             <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinTitle")}</div>
-            <h2 className="mt-1 text-xl font-black tracking-tighter">{hasOfflinePin ? t("offlinePinEnabled") : t("offlinePinDisabled")}</h2>
+            <h2 className="mt-1 text-xl font-black tracking-tighter">{localHasOfflinePin ? t("offlinePinEnabled") : t("offlinePinDisabled")}</h2>
             <p className="mt-2 text-xs font-bold leading-5 text-gray-400">{t("offlinePinDescription")}</p>
             <p className="mt-2 text-xs font-black leading-5 text-red-500">{t("offlinePinCannotRecover")}</p>
           </div>
 
-          {hasOfflinePin && !isResettingOfflinePin ? (
+          {localHasOfflinePin && !isResettingOfflinePin ? (
             <button
               type="button"
               onClick={() => {
@@ -2445,7 +2437,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
             </button>
           ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-              {hasOfflinePin && (
+              {localHasOfflinePin && (
                 <label className="block md:col-span-2">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinCurrent")}</span>
                   <input
@@ -2459,7 +2451,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
                 </label>
               )}
               <label className="block">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{hasOfflinePin ? t("offlinePinNew") : t("offlinePinInput")}</span>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{localHasOfflinePin ? t("offlinePinNew") : t("offlinePinInput")}</span>
                 <input
                   type="password"
                   inputMode="numeric"
@@ -2485,7 +2477,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
                 disabled={isSavingOfflinePin}
                 className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:cursor-wait disabled:opacity-60"
               >
-                {isSavingOfflinePin ? t("saving") : hasOfflinePin ? t("resetOfflinePin") : t("save")}
+                {isSavingOfflinePin ? t("saving") : localHasOfflinePin ? t("resetOfflinePin") : t("save")}
               </button>
             </div>
           )}
