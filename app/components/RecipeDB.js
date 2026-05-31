@@ -5,8 +5,8 @@ import { InputField } from "./common";
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 import { supabase } from "../lib/supabaseClient";
 
-const IMAGE_UPLOAD_WIDTH = 1600;
-const IMAGE_UPLOAD_HEIGHT = 1200;
+const IMAGE_UPLOAD_MAX_WIDTH = 1600;
+const IMAGE_UPLOAD_MAX_HEIGHT = 1200;
 const IMAGE_UPLOAD_QUALITY = 0.82;
 
 function loadImageElement(file) {
@@ -47,38 +47,31 @@ async function optimizeImageForUpload(file) {
   const image = await loadImageElement(file);
   const sourceWidth = image.naturalWidth;
   const sourceHeight = image.naturalHeight;
-  const targetRatio = IMAGE_UPLOAD_WIDTH / IMAGE_UPLOAD_HEIGHT;
-  const sourceRatio = sourceWidth / sourceHeight;
-  let cropWidth = sourceWidth;
-  let cropHeight = sourceHeight;
-  let cropX = 0;
-  let cropY = 0;
-
-  if (sourceRatio > targetRatio) {
-    cropWidth = Math.round(sourceHeight * targetRatio);
-    cropX = Math.round((sourceWidth - cropWidth) / 2);
-  } else if (sourceRatio < targetRatio) {
-    cropHeight = Math.round(sourceWidth / targetRatio);
-    cropY = Math.round((sourceHeight - cropHeight) / 2);
-  }
+  const scale = Math.min(
+    1,
+    IMAGE_UPLOAD_MAX_WIDTH / sourceWidth,
+    IMAGE_UPLOAD_MAX_HEIGHT / sourceHeight,
+  );
+  const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+  const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
 
   const canvas = document.createElement("canvas");
-  canvas.width = IMAGE_UPLOAD_WIDTH;
-  canvas.height = IMAGE_UPLOAD_HEIGHT;
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
 
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Image compression failed.");
 
   context.drawImage(
     image,
-    cropX,
-    cropY,
-    cropWidth,
-    cropHeight,
     0,
     0,
-    IMAGE_UPLOAD_WIDTH,
-    IMAGE_UPLOAD_HEIGHT,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    targetWidth,
+    targetHeight,
   );
 
   const blob = await canvasToBlob(canvas, "image/webp", IMAGE_UPLOAD_QUALITY);
@@ -486,7 +479,7 @@ function RecipeModal({ t, initialData, costItems, isMediaDisabled, onRequireOnli
               {isMediaDisabled ? (
                 <span className="px-4 text-center text-xs font-black text-gray-400 uppercase tracking-tight">{t("offlineMediaDisabled")}</span>
               ) : imagePreview ? (
-                <AuthImage imageKey={communityImageKey} fallbackImage={communityImage} className="block h-full min-h-36 w-full bg-cover bg-center">
+                <AuthImage imageKey={communityImageKey} fallbackImage={communityImage} className="block h-full min-h-36 w-full bg-contain bg-center bg-no-repeat">
                   <span className="px-4 text-center text-xs font-black text-gray-400 uppercase tracking-tight">{t("noBreadPhoto")}</span>
                 </AuthImage>
               ) : isImageBusy ? (
