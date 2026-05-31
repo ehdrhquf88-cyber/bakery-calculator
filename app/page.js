@@ -2462,9 +2462,8 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
                 />
               </label>
               <button
-                type="button"
-                onClick={releaseInputFocus}
-                className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:opacity-60"
+                type="submit"
+                className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white active:scale-95"
               >
                 {localHasOfflinePin ? t("resetOfflinePin") : t("save")}
               </button>
