@@ -17,13 +17,13 @@ const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
 const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
 const BROWSER_SESSION_STORAGE_KEY = "bakery_browser_session_active";
-const FORCE_AUTH_ON_NEXT_LOAD_STORAGE_KEY = "bakery_force_auth_on_next_load";
 const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
 const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_PIN_STORAGE_PREFIX = "bakery_offline_pin";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
 const OFFLINE_PIN_HASH_ITERATIONS = 25_000;
 const LEGACY_OFFLINE_PIN_HASH_ITERATIONS = 100_000;
+const OFFLINE_PIN_SAVE_SETTLE_MS = 1500;
 const OFFLINE_PIN_REAUTH_AFTER_MS = 60_000;
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
@@ -893,13 +893,7 @@ export default function Home() {
           return;
         }
 
-        const shouldForceAuthOnNextLoad = localStorage.getItem(FORCE_AUTH_ON_NEXT_LOAD_STORAGE_KEY) === "true";
-        if (shouldForceAuthOnNextLoad && !isAuthRedirectRequest()) {
-          localStorage.removeItem(FORCE_AUTH_ON_NEXT_LOAD_STORAGE_KEY);
-          clearBrowserSessionMarker();
-          clearStoredAuthSession();
-          await supabase?.auth.signOut({ scope: "local" }).catch(() => {});
-        } else if (!hasActiveBrowserSession() && !isAuthRedirectRequest() && hasStoredAuthSession()) {
+        if (!hasActiveBrowserSession() && !isAuthRedirectRequest() && hasStoredAuthSession()) {
           clearStoredAuthSession();
           await supabase?.auth.signOut({ scope: "local" }).catch(() => {});
         }
@@ -1648,15 +1642,15 @@ export default function Home() {
     setUserDataOwnerId(null);
     setIsAdminUnlocked(false);
     localStorage.removeItem("bakery_auth_user");
-    localStorage.removeItem(FORCE_AUTH_ON_NEXT_LOAD_STORAGE_KEY);
   };
 
   const handleSetOfflinePin = async (pin) => {
     if (!authUser?.id) return;
     const record = await createOfflinePinRecord(pin);
     writeOfflinePinRecord(authUser.id, record);
-    localStorage.setItem(FORCE_AUTH_ON_NEXT_LOAD_STORAGE_KEY, "true");
-    clearBrowserSessionMarker();
+  };
+
+  const handleOfflinePinSaved = () => {
     setHasOfflinePin(true);
   };
 
@@ -1768,7 +1762,7 @@ export default function Home() {
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} onAnnouncementsChange={setAnnouncements} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} hasOfflinePin={effectiveHasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onVerifyOfflinePin={handleVerifyOfflinePin} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} hasOfflinePin={effectiveHasOfflinePin} onSetOfflinePin={handleSetOfflinePin} onOfflinePinSaved={handleOfflinePinSaved} onVerifyOfflinePin={handleVerifyOfflinePin} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -2268,7 +2262,7 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], hasOfflinePin, onSetOfflinePin, onVerifyOfflinePin, onUpdateDisplayName, onSignOut }) {
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], hasOfflinePin, onSetOfflinePin, onOfflinePinSaved, onVerifyOfflinePin, onUpdateDisplayName, onSignOut }) {
   const [isResettingOfflinePin, setIsResettingOfflinePin] = useState(false);
   const [currentOfflinePin, setCurrentOfflinePin] = useState("");
   const [offlinePin, setOfflinePin] = useState("");
@@ -2329,6 +2323,9 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
     setIsSavingOfflinePin(true);
     try {
       await onSetOfflinePin(normalizedPin);
+      setOfflinePinStatus(t("offlinePinFinalizing"));
+      await new Promise(resolve => setTimeout(resolve, OFFLINE_PIN_SAVE_SETTLE_MS));
+      onOfflinePinSaved();
       setCurrentOfflinePin("");
       setOfflinePin("");
       setOfflinePinConfirm("");
@@ -2340,6 +2337,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
       setIsSavingOfflinePin(false);
     }
   };
+  const offlinePinStatusIsPositive = offlinePinStatus === t("offlinePinSaved") || offlinePinStatus === t("offlinePinFinalizing");
 
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-8 text-black">
@@ -2491,7 +2489,14 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
               </button>
             </div>
           )}
-          {offlinePinStatus && <p className={`text-xs font-bold ${offlinePinStatus === t("offlinePinSaved") ? "text-green-600" : "text-red-500"}`}>{offlinePinStatus}</p>}
+          {offlinePinStatus && (
+            <p className={`flex items-center gap-2 text-xs font-bold ${offlinePinStatusIsPositive ? "text-green-600" : "text-red-500"}`}>
+              {isSavingOfflinePin && (
+                <span className="h-3 w-3 rounded-full border-2 border-green-600 border-t-transparent animate-spin" aria-hidden="true" />
+              )}
+              {offlinePinStatus}
+            </p>
+          )}
         </form>
       </section>
 
