@@ -25,7 +25,6 @@ const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
 const OFFLINE_PIN_HASH_ALGORITHM = "levain-pin-local-v2";
 const OFFLINE_PIN_HASH_ROUNDS = 512;
 const LEGACY_OFFLINE_PIN_HASH_ITERATIONS = 100_000;
-const OFFLINE_PIN_SAVE_SETTLE_MS = 1500;
 const ENABLE_SERVICE_WORKER = false;
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
@@ -265,20 +264,6 @@ function deriveOfflinePinHash(pin, salt, rounds) {
   }
 
   return segments.join("");
-}
-
-async function createOfflinePinRecord(pin) {
-  const saltBytes = crypto.getRandomValues(new Uint8Array(16));
-  const salt = bytesToBase64(saltBytes);
-  const hash = deriveOfflinePinHash(pin, salt, OFFLINE_PIN_HASH_ROUNDS);
-
-  return {
-    algorithm: OFFLINE_PIN_HASH_ALGORITHM,
-    salt,
-    hash,
-    rounds: OFFLINE_PIN_HASH_ROUNDS,
-    updatedAt: new Date().toISOString(),
-  };
 }
 
 async function verifyOfflinePin(pin, record) {
@@ -833,7 +818,6 @@ export default function Home() {
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
-  const diagnosticOfflinePinRecordRef = useRef(null);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
   const unreadAnnouncementCount = useMemo(() => {
@@ -1679,20 +1663,11 @@ export default function Home() {
     clearAuthenticatedAppState();
   };
 
-  const handleSetOfflinePin = async (pin) => {
-    if (!authUser?.id) return;
-    const record = await createOfflinePinRecord(pin);
-    diagnosticOfflinePinRecordRef.current = {
-      userId: authUser.id,
-      record,
-    };
-  };
+  const handleSetOfflinePin = async () => {};
 
   const handleVerifyOfflinePin = async (pin) => {
     if (!authUser?.id) return false;
-    const record = diagnosticOfflinePinRecordRef.current?.userId === authUser.id
-      ? diagnosticOfflinePinRecordRef.current.record
-      : readOfflinePinRecord(authUser.id);
+    const record = readOfflinePinRecord(authUser.id);
     return verifyOfflinePin(pin.trim(), record);
   };
 
@@ -2299,13 +2274,13 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
 }
 
 function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], hasOfflinePin, onSetOfflinePin, onVerifyOfflinePin, onUpdateDisplayName, onSignOut }) {
-  const [localHasOfflinePin, setLocalHasOfflinePin] = useState(() => hasOfflinePin);
+  const localHasOfflinePin = hasOfflinePin;
   const [isResettingOfflinePin, setIsResettingOfflinePin] = useState(false);
   const [currentOfflinePin, setCurrentOfflinePin] = useState("");
   const [offlinePin, setOfflinePin] = useState("");
   const [offlinePinConfirm, setOfflinePinConfirm] = useState("");
   const [offlinePinStatus, setOfflinePinStatus] = useState("");
-  const [isSavingOfflinePin, setIsSavingOfflinePin] = useState(false);
+  const isSavingOfflinePin = false;
   const [displayName, setDisplayName] = useState(authUser.displayName || "");
   const [displayNameStatus, setDisplayNameStatus] = useState("");
   const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
@@ -2358,22 +2333,13 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
       return;
     }
 
-    setIsSavingOfflinePin(true);
     try {
-      await onSetOfflinePin(normalizedPin);
-      setOfflinePinStatus(t("offlinePinFinalizing"));
-      await new Promise(resolve => setTimeout(resolve, OFFLINE_PIN_SAVE_SETTLE_MS));
-      setLocalHasOfflinePin(true);
-      setCurrentOfflinePin("");
-      setOfflinePin("");
-      setOfflinePinConfirm("");
+      await onSetOfflinePin();
       setOfflinePinStatus(t("offlinePinSaved"));
-      setIsResettingOfflinePin(false);
     } catch {
       setOfflinePinStatus(t("offlinePinSaveFailed"));
     } finally {
       releaseInputFocus();
-      setIsSavingOfflinePin(false);
     }
   };
   const offlinePinStatusIsPositive = offlinePinStatus === t("offlinePinSaved") || offlinePinStatus === t("offlinePinFinalizing");
