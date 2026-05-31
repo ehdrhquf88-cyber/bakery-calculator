@@ -2476,10 +2476,16 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
                 <label className="block md:col-span-2">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinCurrent")}</span>
                   <input
-                    type="password"
+                    type="text"
                     inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     value={currentOfflinePin}
                     onChange={event => setCurrentOfflinePin(event.target.value)}
+                    style={{ WebkitTextSecurity: "disc" }}
                     className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
                     placeholder="0000"
                   />
@@ -2488,10 +2494,16 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
               <label className="block">
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{localHasOfflinePin ? t("offlinePinNew") : t("offlinePinInput")}</span>
                 <input
-                  type="password"
+                  type="text"
                   inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   value={offlinePin}
                   onChange={event => setOfflinePin(event.target.value)}
+                  style={{ WebkitTextSecurity: "disc" }}
                   className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
                   placeholder="0000"
                 />
@@ -2499,10 +2511,16 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
               <label className="block">
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinConfirm")}</span>
                 <input
-                  type="password"
+                  type="text"
                   inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   value={offlinePinConfirm}
                   onChange={event => setOfflinePinConfirm(event.target.value)}
+                  style={{ WebkitTextSecurity: "disc" }}
                   className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
                   placeholder="0000"
                 />
@@ -2677,10 +2695,16 @@ function LoginScreen({ t, isOnline, offlineLoginUsers, onGoogleSignIn, onOffline
                   </label>
                   <div className="mt-2 flex gap-2">
                     <input
-                      type="password"
+                      type="text"
                       inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
                       value={offlinePin}
                       onChange={event => setOfflinePin(event.target.value)}
+                      style={{ WebkitTextSecurity: "disc" }}
                       className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
                       placeholder={t("offlinePinInput")}
                     />
