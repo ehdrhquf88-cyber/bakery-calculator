@@ -17,6 +17,7 @@ const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
 const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
 const BROWSER_SESSION_STORAGE_KEY = "bakery_browser_session_active";
+const STANDALONE_LOCK_STORAGE_KEY = "bakery_standalone_lock";
 const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
 const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_PIN_STORAGE_PREFIX = "bakery_offline_pin";
@@ -864,21 +865,50 @@ export default function Home() {
     };
   }, []);
 
+  const clearAuthenticatedAppState = useCallback(() => {
+    clearAdminUnlock(authUser);
+    setAuthUser(null);
+    setOfflineLoginUsers([]);
+    setHasOfflinePin(false);
+    setUserDataLoaded(false);
+    setUserDataOwnerId(null);
+    setIsAdminUnlocked(false);
+    localStorage.removeItem("bakery_auth_user");
+  }, [authUser]);
+
   useEffect(() => {
     if (!authUser?.id || !isStandaloneWebApp() || !readOfflinePinRecord(authUser.id)) return undefined;
 
-    const clearStandaloneSessionBeforeClose = () => {
+    const lockStandaloneSession = () => {
+      localStorage.setItem(STANDALONE_LOCK_STORAGE_KEY, "true");
       clearBrowserSessionMarker();
       clearStoredAuthSession();
       supabase?.auth.stopAutoRefresh?.();
+      clearAuthenticatedAppState();
     };
 
-    window.addEventListener("pagehide", clearStandaloneSessionBeforeClose);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") lockStandaloneSession();
+    };
+
+    const handlePageShow = () => {
+      if (localStorage.getItem(STANDALONE_LOCK_STORAGE_KEY) !== "true") return;
+      localStorage.removeItem(STANDALONE_LOCK_STORAGE_KEY);
+      clearBrowserSessionMarker();
+      clearStoredAuthSession();
+      clearAuthenticatedAppState();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", lockStandaloneSession);
+    window.addEventListener("pageshow", handlePageShow);
 
     return () => {
-      window.removeEventListener("pagehide", clearStandaloneSessionBeforeClose);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", lockStandaloneSession);
+      window.removeEventListener("pageshow", handlePageShow);
     };
-  }, [authUser?.id]);
+  }, [authUser?.id, clearAuthenticatedAppState]);
 
   // 로컬스토리지 로드
   useEffect(() => {
@@ -1649,15 +1679,9 @@ export default function Home() {
     if (authUser?.id) {
       removeOfflineUser(authUser.id);
     }
-    clearAdminUnlock(authUser);
     clearUserData(authUser);
-    setAuthUser(null);
-    setOfflineLoginUsers([]);
-    setHasOfflinePin(false);
-    setUserDataLoaded(false);
-    setUserDataOwnerId(null);
-    setIsAdminUnlocked(false);
-    localStorage.removeItem("bakery_auth_user");
+    localStorage.removeItem(STANDALONE_LOCK_STORAGE_KEY);
+    clearAuthenticatedAppState();
   };
 
   const handleSetOfflinePin = async (pin) => {
