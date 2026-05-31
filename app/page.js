@@ -26,6 +26,7 @@ const OFFLINE_PIN_HASH_ROUNDS = 512;
 const LEGACY_OFFLINE_PIN_HASH_ITERATIONS = 100_000;
 const OFFLINE_PIN_SAVE_SETTLE_MS = 1500;
 const OFFLINE_PIN_REAUTH_AFTER_MS = 60_000;
+const ENABLE_SERVICE_WORKER = false;
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
 const USER_DATA_STORAGE_KEYS = {
@@ -1822,7 +1823,7 @@ export default function Home() {
           onConfirm={confirmLeaveCheck}
         />
       )}
-      <ServiceWorkerUpdater t={t} />
+      <ServiceWorkerUpdater t={t} enabled={ENABLE_SERVICE_WORKER} />
     </div>
   );
 }

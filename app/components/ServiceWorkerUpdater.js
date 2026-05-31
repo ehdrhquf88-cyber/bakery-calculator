@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export default function ServiceWorkerUpdater({ t }) {
+const SERVICE_WORKER_CACHE_PREFIXES = ["bread-people-", "bakery-app-"];
+
+export default function ServiceWorkerUpdater({ t, enabled = true }) {
   const [waitingWorker, setWaitingWorker] = useState(null);
   const [isBannerVisible, setIsBannerVisible] = useState(false);
   const isRefreshing = useRef(false);
@@ -10,6 +12,28 @@ export default function ServiceWorkerUpdater({ t }) {
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
+
+    if (!enabled) {
+      navigator.serviceWorker.getRegistrations()
+        .then((registrations) => Promise.all(registrations.map(registration => registration.unregister())))
+        .catch((error) => {
+          console.error("Service Worker unregister failed.", error);
+        });
+
+      if ("caches" in window) {
+        caches.keys()
+          .then((keys) => Promise.all(
+            keys
+              .filter(key => SERVICE_WORKER_CACHE_PREFIXES.some(prefix => key.startsWith(prefix)))
+              .map(key => caches.delete(key)),
+          ))
+          .catch((error) => {
+            console.error("Service Worker cache cleanup failed.", error);
+          });
+      }
+
+      return;
+    }
 
     const handleMessage = (event) => {
       if (event.data?.type === "SW_ACTIVATED") {
@@ -67,7 +91,7 @@ export default function ServiceWorkerUpdater({ t }) {
       navigator.serviceWorker.removeEventListener("message", handleMessage);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [enabled]);
 
   const handleUpdate = () => {
     setIsBannerVisible(false);
