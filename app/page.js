@@ -25,7 +25,6 @@ const OFFLINE_PIN_HASH_ALGORITHM = "levain-pin-local-v2";
 const OFFLINE_PIN_HASH_ROUNDS = 512;
 const LEGACY_OFFLINE_PIN_HASH_ITERATIONS = 100_000;
 const OFFLINE_PIN_SAVE_SETTLE_MS = 1500;
-const OFFLINE_PIN_REAUTH_AFTER_MS = 60_000;
 const ENABLE_SERVICE_WORKER = false;
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
@@ -832,30 +831,12 @@ export default function Home() {
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
-  const lastHiddenAtRef = useRef(null);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
   const unreadAnnouncementCount = useMemo(() => {
     const readIds = new Set(announcementReads.map(read => Number(read.announcement_id)));
     return announcements.filter(announcement => announcement.is_active !== false && !readIds.has(Number(announcement.id))).length;
   }, [announcementReads, announcements]);
-
-  const lockOfflineSessionForPin = useCallback(() => {
-    if (!authUser?.id || navigator.onLine) return;
-    if (!readOfflinePinRecord(authUser.id)) return;
-
-    const cachedUser = readOfflineUsers().find(user => user.id === authUser.id) || normalizeOfflineUser(authUser);
-    if (!cachedUser) return;
-
-    setOfflineLoginUsers([cachedUser]);
-    setHasOfflinePin(true);
-    setAuthError(t("offlinePinPrompt"));
-    clearAdminUnlock(authUser);
-    setAuthUser(null);
-    setUserDataLoaded(false);
-    setUserDataOwnerId(null);
-    setIsAdminUnlocked(false);
-  }, [authUser, t]);
 
   useEffect(() => {
     const updateOnlineStatus = () => {
@@ -875,36 +856,6 @@ export default function Home() {
       window.removeEventListener("offline", updateOnlineStatus);
     };
   }, []);
-
-  useEffect(() => {
-    const markAppHidden = () => {
-      lastHiddenAtRef.current = Date.now();
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        markAppHidden();
-        return;
-      }
-
-      if (document.visibilityState !== "visible") return;
-
-      const hiddenAt = lastHiddenAtRef.current;
-      if (!hiddenAt) return;
-
-      if (Date.now() - hiddenAt >= OFFLINE_PIN_REAUTH_AFTER_MS) {
-        lockOfflineSessionForPin();
-      }
-
-      lastHiddenAtRef.current = null;
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [lockOfflineSessionForPin]);
 
   // 로컬스토리지 로드
   useEffect(() => {
