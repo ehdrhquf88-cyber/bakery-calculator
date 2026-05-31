@@ -17,6 +17,7 @@ const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
 const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
 const BROWSER_SESSION_STORAGE_KEY = "bakery_browser_session_active";
+const FORCE_AUTH_ON_NEXT_LOAD_STORAGE_KEY = "bakery_force_auth_on_next_load";
 const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
 const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_PIN_STORAGE_PREFIX = "bakery_offline_pin";
@@ -892,7 +893,13 @@ export default function Home() {
           return;
         }
 
-        if (!hasActiveBrowserSession() && !isAuthRedirectRequest() && hasStoredAuthSession()) {
+        const shouldForceAuthOnNextLoad = localStorage.getItem(FORCE_AUTH_ON_NEXT_LOAD_STORAGE_KEY) === "true";
+        if (shouldForceAuthOnNextLoad && !isAuthRedirectRequest()) {
+          localStorage.removeItem(FORCE_AUTH_ON_NEXT_LOAD_STORAGE_KEY);
+          clearBrowserSessionMarker();
+          clearStoredAuthSession();
+          await supabase?.auth.signOut({ scope: "local" }).catch(() => {});
+        } else if (!hasActiveBrowserSession() && !isAuthRedirectRequest() && hasStoredAuthSession()) {
           clearStoredAuthSession();
           await supabase?.auth.signOut({ scope: "local" }).catch(() => {});
         }
@@ -1641,12 +1648,15 @@ export default function Home() {
     setUserDataOwnerId(null);
     setIsAdminUnlocked(false);
     localStorage.removeItem("bakery_auth_user");
+    localStorage.removeItem(FORCE_AUTH_ON_NEXT_LOAD_STORAGE_KEY);
   };
 
   const handleSetOfflinePin = async (pin) => {
     if (!authUser?.id) return;
     const record = await createOfflinePinRecord(pin);
     writeOfflinePinRecord(authUser.id, record);
+    localStorage.setItem(FORCE_AUTH_ON_NEXT_LOAD_STORAGE_KEY, "true");
+    clearBrowserSessionMarker();
     setHasOfflinePin(true);
   };
 
