@@ -216,6 +216,17 @@ function base64ToBytes(value) {
   return Uint8Array.from(binary, char => char.charCodeAt(0));
 }
 
+function releaseInputFocus() {
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+
+  document.body.style.cursor = "default";
+  window.requestAnimationFrame(() => {
+    document.body.style.cursor = "";
+  });
+}
+
 async function deriveLegacyOfflinePinHash(pin, saltBytes, iterations) {
   const encodedPin = new TextEncoder().encode(pin);
   const key = await crypto.subtle.importKey("raw", encodedPin, "PBKDF2", false, ["deriveBits"]);
@@ -2324,6 +2335,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
 
   const saveOfflinePin = async (event) => {
     event.preventDefault();
+    releaseInputFocus();
     setOfflinePinStatus("");
 
     const normalizedPin = offlinePin.trim();
@@ -2361,6 +2373,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
     } catch {
       setOfflinePinStatus(t("offlinePinSaveFailed"));
     } finally {
+      releaseInputFocus();
       setIsSavingOfflinePin(false);
     }
   };
@@ -2443,7 +2456,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
           <button
             type="submit"
             disabled={isSavingDisplayName}
-            className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:cursor-wait disabled:opacity-60"
+            className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:opacity-60"
           >
             {isSavingDisplayName ? t("saving") : t("save")}
           </button>
@@ -2528,7 +2541,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
               <button
                 type="submit"
                 disabled={isSavingOfflinePin}
-                className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:cursor-wait disabled:opacity-60"
+                className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:opacity-60"
               >
                 {isSavingOfflinePin ? t("saving") : localHasOfflinePin ? t("resetOfflinePin") : t("save")}
               </button>
