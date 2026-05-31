@@ -167,12 +167,6 @@ function writeOfflineUser(user) {
   localStorage.setItem(OFFLINE_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
 }
 
-function writeOfflinePinRecord(userId, record) {
-  if (!userId || !record) return;
-
-  localStorage.setItem(getOfflinePinStorageKey(userId), JSON.stringify(record));
-}
-
 function removeOfflineUser(userId) {
   if (!userId) return;
 
@@ -839,6 +833,7 @@ export default function Home() {
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
+  const diagnosticOfflinePinRecordRef = useRef(null);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
   const unreadAnnouncementCount = useMemo(() => {
@@ -1687,12 +1682,17 @@ export default function Home() {
   const handleSetOfflinePin = async (pin) => {
     if (!authUser?.id) return;
     const record = await createOfflinePinRecord(pin);
-    writeOfflinePinRecord(authUser.id, record);
+    diagnosticOfflinePinRecordRef.current = {
+      userId: authUser.id,
+      record,
+    };
   };
 
   const handleVerifyOfflinePin = async (pin) => {
     if (!authUser?.id) return false;
-    const record = readOfflinePinRecord(authUser.id);
+    const record = diagnosticOfflinePinRecordRef.current?.userId === authUser.id
+      ? diagnosticOfflinePinRecordRef.current.record
+      : readOfflinePinRecord(authUser.id);
     return verifyOfflinePin(pin.trim(), record);
   };
 
