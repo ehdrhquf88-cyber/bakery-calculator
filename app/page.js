@@ -21,7 +21,8 @@ const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
 const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_PIN_STORAGE_PREFIX = "bakery_offline_pin";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
-const OFFLINE_PIN_HASH_ITERATIONS = 25_000;
+const OFFLINE_PIN_HASH_ALGORITHM = "levain-pin-local-v2";
+const OFFLINE_PIN_HASH_ROUNDS = 512;
 const LEGACY_OFFLINE_PIN_HASH_ITERATIONS = 100_000;
 const OFFLINE_PIN_SAVE_SETTLE_MS = 1500;
 const OFFLINE_PIN_REAUTH_AFTER_MS = 60_000;
@@ -215,7 +216,7 @@ function base64ToBytes(value) {
   return Uint8Array.from(binary, char => char.charCodeAt(0));
 }
 
-async function deriveOfflinePinHash(pin, saltBytes, iterations) {
+async function deriveLegacyOfflinePinHash(pin, saltBytes, iterations) {
   const encodedPin = new TextEncoder().encode(pin);
   const key = await crypto.subtle.importKey("raw", encodedPin, "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
@@ -232,22 +233,56 @@ async function deriveOfflinePinHash(pin, saltBytes, iterations) {
   return bytesToBase64(new Uint8Array(bits));
 }
 
+function hashString32(value, seed) {
+  let hash = seed >>> 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+
+  return hash >>> 0;
+}
+
+function deriveOfflinePinHash(pin, salt, rounds) {
+  const normalizedRounds = Number(rounds) || OFFLINE_PIN_HASH_ROUNDS;
+  const segments = [];
+
+  for (let segment = 0; segment < 8; segment += 1) {
+    let hash = (2166136261 ^ segment) >>> 0;
+
+    for (let round = 0; round < normalizedRounds; round += 1) {
+      hash = hashString32(`${salt}:${pin}:${segment}:${round}:${hash}`, hash);
+    }
+
+    segments.push(hash.toString(16).padStart(8, "0"));
+  }
+
+  return segments.join("");
+}
+
 async function createOfflinePinRecord(pin) {
   const saltBytes = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await deriveOfflinePinHash(pin, saltBytes, OFFLINE_PIN_HASH_ITERATIONS);
+  const salt = bytesToBase64(saltBytes);
+  const hash = deriveOfflinePinHash(pin, salt, OFFLINE_PIN_HASH_ROUNDS);
 
   return {
-    salt: bytesToBase64(saltBytes),
+    algorithm: OFFLINE_PIN_HASH_ALGORITHM,
+    salt,
     hash,
-    iterations: OFFLINE_PIN_HASH_ITERATIONS,
+    rounds: OFFLINE_PIN_HASH_ROUNDS,
     updatedAt: new Date().toISOString(),
   };
 }
 
 async function verifyOfflinePin(pin, record) {
   if (!record?.salt || !record?.hash) return false;
+  if (record.algorithm === OFFLINE_PIN_HASH_ALGORITHM) {
+    return deriveOfflinePinHash(pin, record.salt, record.rounds) === record.hash;
+  }
+
   const iterations = Number(record.iterations) || LEGACY_OFFLINE_PIN_HASH_ITERATIONS;
-  const hash = await deriveOfflinePinHash(pin, base64ToBytes(record.salt), iterations);
+  const hash = await deriveLegacyOfflinePinHash(pin, base64ToBytes(record.salt), iterations);
   return hash === record.hash;
 }
 
