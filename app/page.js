@@ -681,6 +681,13 @@ function clearBrowserSessionMarker() {
   }
 }
 
+function isStandaloneWebApp() {
+  return (
+    window.matchMedia?.("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true
+  );
+}
+
 function isAuthRedirectRequest() {
   const searchParams = new URLSearchParams(window.location.search);
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -856,6 +863,22 @@ export default function Home() {
       window.removeEventListener("offline", updateOnlineStatus);
     };
   }, []);
+
+  useEffect(() => {
+    if (!authUser?.id || !isStandaloneWebApp() || !readOfflinePinRecord(authUser.id)) return undefined;
+
+    const clearStandaloneSessionBeforeClose = () => {
+      clearBrowserSessionMarker();
+      clearStoredAuthSession();
+      supabase?.auth.stopAutoRefresh?.();
+    };
+
+    window.addEventListener("pagehide", clearStandaloneSessionBeforeClose);
+
+    return () => {
+      window.removeEventListener("pagehide", clearStandaloneSessionBeforeClose);
+    };
+  }, [authUser?.id]);
 
   // 로컬스토리지 로드
   useEffect(() => {
