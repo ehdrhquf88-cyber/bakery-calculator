@@ -17,15 +17,9 @@ const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
 const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
 const BROWSER_SESSION_STORAGE_KEY = "bakery_browser_session_active";
-const STANDALONE_LOCK_STORAGE_KEY = "bakery_standalone_lock";
 const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
 const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
-const OFFLINE_PIN_STORAGE_PREFIX = "bakery_offline_pin";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
-const OFFLINE_PIN_HASH_ALGORITHM = "levain-pin-local-v2";
-const OFFLINE_PIN_HASH_ROUNDS = 512;
-const LEGACY_OFFLINE_PIN_HASH_ITERATIONS = 100_000;
-const ENABLE_SERVICE_WORKER = false;
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
 const USER_DATA_STORAGE_KEYS = {
@@ -121,7 +115,6 @@ function normalizeOfflineUser(user) {
     picture: user.picture,
     role: user.role,
     signedInAt: user.signedInAt,
-    pinRecord: user.pinRecord || null,
   };
 }
 
@@ -154,12 +147,8 @@ function writeOfflineUser(user) {
   if (!normalizedUser) return;
 
   const users = readOfflineUsers();
-  const existingUser = users.find(item => item.id === normalizedUser.id);
   const nextUsers = [
-    {
-      ...normalizedUser,
-      pinRecord: normalizedUser.pinRecord || existingUser?.pinRecord || readOfflinePinRecord(normalizedUser.id),
-    },
+    normalizedUser,
     ...users.filter(item => item.id !== normalizedUser.id),
   ];
 
@@ -171,110 +160,6 @@ function removeOfflineUser(userId) {
 
   const users = readOfflineUsers().filter(user => user.id !== userId);
   localStorage.setItem(OFFLINE_USERS_STORAGE_KEY, JSON.stringify(users));
-  localStorage.removeItem(getOfflinePinStorageKey(userId));
-}
-
-function getOfflinePinStorageKey(userId) {
-  return `${OFFLINE_PIN_STORAGE_PREFIX}:${userId}`;
-}
-
-function readOfflinePinRecord(userId) {
-  if (!userId) return null;
-
-  try {
-    const storedPin = localStorage.getItem(getOfflinePinStorageKey(userId));
-    if (storedPin) return JSON.parse(storedPin);
-
-    const offlineUser = readOfflineUsers().find(user => user.id === userId);
-    if (offlineUser?.pinRecord) {
-      localStorage.setItem(getOfflinePinStorageKey(userId), JSON.stringify(offlineUser.pinRecord));
-      return offlineUser.pinRecord;
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function bytesToBase64(bytes) {
-  let binary = "";
-  bytes.forEach(byte => {
-    binary += String.fromCharCode(byte);
-  });
-  return btoa(binary);
-}
-
-function base64ToBytes(value) {
-  const binary = atob(value);
-  return Uint8Array.from(binary, char => char.charCodeAt(0));
-}
-
-function releaseInputFocus() {
-  if (document.activeElement instanceof HTMLElement) {
-    document.activeElement.blur();
-  }
-
-  document.body.style.cursor = "default";
-  window.requestAnimationFrame(() => {
-    document.body.style.cursor = "";
-  });
-}
-
-async function deriveLegacyOfflinePinHash(pin, saltBytes, iterations) {
-  const encodedPin = new TextEncoder().encode(pin);
-  const key = await crypto.subtle.importKey("raw", encodedPin, "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      hash: "SHA-256",
-      salt: saltBytes,
-      iterations,
-    },
-    key,
-    256,
-  );
-
-  return bytesToBase64(new Uint8Array(bits));
-}
-
-function hashString32(value, seed) {
-  let hash = seed >>> 0;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619) >>> 0;
-  }
-
-  return hash >>> 0;
-}
-
-function deriveOfflinePinHash(pin, salt, rounds) {
-  const normalizedRounds = Number(rounds) || OFFLINE_PIN_HASH_ROUNDS;
-  const segments = [];
-
-  for (let segment = 0; segment < 8; segment += 1) {
-    let hash = (2166136261 ^ segment) >>> 0;
-
-    for (let round = 0; round < normalizedRounds; round += 1) {
-      hash = hashString32(`${salt}:${pin}:${segment}:${round}:${hash}`, hash);
-    }
-
-    segments.push(hash.toString(16).padStart(8, "0"));
-  }
-
-  return segments.join("");
-}
-
-async function verifyOfflinePin(pin, record) {
-  if (!record?.salt || !record?.hash) return false;
-  if (record.algorithm === OFFLINE_PIN_HASH_ALGORITHM) {
-    return deriveOfflinePinHash(pin, record.salt, record.rounds) === record.hash;
-  }
-
-  const iterations = Number(record.iterations) || LEGACY_OFFLINE_PIN_HASH_ITERATIONS;
-  const hash = await deriveLegacyOfflinePinHash(pin, base64ToBytes(record.salt), iterations);
-  return hash === record.hash;
 }
 
 function normalizeRecipeId(recipe) {
@@ -661,13 +546,6 @@ function clearBrowserSessionMarker() {
   }
 }
 
-function isStandaloneWebApp() {
-  return (
-    window.matchMedia?.("(display-mode: standalone)").matches ||
-    window.navigator.standalone === true
-  );
-}
-
 function isAuthRedirectRequest() {
   const searchParams = new URLSearchParams(window.location.search);
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -813,7 +691,6 @@ export default function Home() {
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [authError, setAuthError] = useState("");
   const [isOnline, setIsOnline] = useState(true);
-  const [hasOfflinePin, setHasOfflinePin] = useState(false);
   const [offlineLoginUsers, setOfflineLoginUsers] = useState([]);
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
@@ -848,46 +725,11 @@ export default function Home() {
     clearAdminUnlock(authUser);
     setAuthUser(null);
     setOfflineLoginUsers([]);
-    setHasOfflinePin(false);
     setUserDataLoaded(false);
     setUserDataOwnerId(null);
     setIsAdminUnlocked(false);
     localStorage.removeItem("bakery_auth_user");
   }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser?.id || !isStandaloneWebApp() || !readOfflinePinRecord(authUser.id)) return undefined;
-
-    const lockStandaloneSession = () => {
-      localStorage.setItem(STANDALONE_LOCK_STORAGE_KEY, "true");
-      clearBrowserSessionMarker();
-      clearStoredAuthSession();
-      supabase?.auth.stopAutoRefresh?.();
-      clearAuthenticatedAppState();
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") lockStandaloneSession();
-    };
-
-    const handlePageShow = () => {
-      if (localStorage.getItem(STANDALONE_LOCK_STORAGE_KEY) !== "true") return;
-      localStorage.removeItem(STANDALONE_LOCK_STORAGE_KEY);
-      clearBrowserSessionMarker();
-      clearStoredAuthSession();
-      clearAuthenticatedAppState();
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("pagehide", lockStandaloneSession);
-    window.addEventListener("pageshow", handlePageShow);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pagehide", lockStandaloneSession);
-      window.removeEventListener("pageshow", handlePageShow);
-    };
-  }, [authUser?.id, clearAuthenticatedAppState]);
 
   // 로컬스토리지 로드
   useEffect(() => {
@@ -905,14 +747,13 @@ export default function Home() {
 
         if (!navigator.onLine) {
           const promptTranslator = getTranslator(LANGUAGES.some(lang => lang.code === savedLanguage) ? savedLanguage : DEFAULT_LANGUAGE);
-          const offlineUsers = readOfflineUsers().filter(user => readOfflinePinRecord(user.id));
+          const offlineUsers = readOfflineUsers();
           setIsOnline(false);
 
           if (offlineUsers.length > 0) {
             setOfflineLoginUsers(offlineUsers);
-            setHasOfflinePin(true);
           } else {
-            setAuthError(readOfflineUsers().length > 0 ? promptTranslator("offlinePinMissing") : promptTranslator("offlineNoCachedUser"));
+            setAuthError(promptTranslator("offlineNoCachedUser"));
           }
 
           return;
@@ -932,7 +773,6 @@ export default function Home() {
           if (nextUser) writeOfflineUser(nextUser);
           if (isMounted) {
             setAuthUser(nextUser);
-            setHasOfflinePin(Boolean(nextUser?.id && readOfflinePinRecord(nextUser.id)));
           }
         }
       } catch (e) {
@@ -1495,7 +1335,6 @@ export default function Home() {
           if (user) writeOfflineUser(user);
           if (isMounted) {
             setAuthUser(user);
-            setHasOfflinePin(Boolean(user?.id && readOfflinePinRecord(user.id)));
           }
         })
         .catch(error => {
@@ -1518,9 +1357,6 @@ export default function Home() {
 
   const isLimitedOfflineMode = Boolean(authUser?.isOfflineMode || !isOnline);
   const canUseView = (nextView) => !isLimitedOfflineMode || OFFLINE_ALLOWED_VIEWS.includes(nextView);
-  const effectiveHasOfflinePin = authUser?.id
-    ? Boolean(readOfflinePinRecord(authUser.id)) || hasOfflinePin
-    : hasOfflinePin;
 
   const saveLeaveCheckPreference = () => {
     if (!hideLeaveCheck) return;
@@ -1620,22 +1456,10 @@ export default function Home() {
     if (error) setAuthError(error.message);
   };
 
-  const handleOfflinePinSignIn = async (userId, pin) => {
+  const handleOfflineSignIn = async (userId) => {
     const offlineUser = readOfflineUsers().find(user => user.id === userId);
     if (!offlineUser) {
       setAuthError(t("offlineNoCachedUser"));
-      return false;
-    }
-
-    const offlinePinRecord = readOfflinePinRecord(offlineUser.id);
-    if (!offlinePinRecord) {
-      setAuthError(t("offlinePinMissing"));
-      return false;
-    }
-
-    const isPinValid = await verifyOfflinePin(pin.trim(), offlinePinRecord);
-    if (!isPinValid) {
-      setAuthError(t("offlinePinWrong"));
       return false;
     }
 
@@ -1644,7 +1468,6 @@ export default function Home() {
       isOfflineMode: true,
     });
     setOfflineLoginUsers([]);
-    setHasOfflinePin(true);
     setAuthError("");
     return true;
   };
@@ -1659,7 +1482,6 @@ export default function Home() {
       removeOfflineUser(authUser.id);
     }
     clearUserData(authUser);
-    localStorage.removeItem(STANDALONE_LOCK_STORAGE_KEY);
     clearAuthenticatedAppState();
   };
 
@@ -1702,7 +1524,7 @@ export default function Home() {
         isOnline={isOnline}
         offlineLoginUsers={offlineLoginUsers}
         onGoogleSignIn={handleGoogleSignIn}
-        onOfflinePinSignIn={handleOfflinePinSignIn}
+        onOfflineSignIn={handleOfflineSignIn}
         authError={authError}
       />
     );
@@ -1765,7 +1587,7 @@ export default function Home() {
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} onAnnouncementsChange={setAnnouncements} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} hasOfflinePin={effectiveHasOfflinePin} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -1788,7 +1610,7 @@ export default function Home() {
           onConfirm={confirmLeaveCheck}
         />
       )}
-      <ServiceWorkerUpdater t={t} enabled={ENABLE_SERVICE_WORKER} />
+      <ServiceWorkerUpdater t={t} />
     </div>
   );
 }
@@ -2265,12 +2087,7 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], hasOfflinePin, onUpdateDisplayName, onSignOut }) {
-  const localHasOfflinePin = hasOfflinePin;
-  const [isResettingOfflinePin, setIsResettingOfflinePin] = useState(false);
-  const [currentOfflinePin, setCurrentOfflinePin] = useState("");
-  const [offlinePin, setOfflinePin] = useState("");
-  const [offlinePinConfirm, setOfflinePinConfirm] = useState("");
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], onUpdateDisplayName, onSignOut }) {
   const [displayName, setDisplayName] = useState(authUser.displayName || "");
   const [displayNameStatus, setDisplayNameStatus] = useState("");
   const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
@@ -2295,11 +2112,6 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
     } finally {
       setIsSavingDisplayName(false);
     }
-  };
-
-  const saveOfflinePin = (event) => {
-    event.preventDefault();
-    releaseInputFocus();
   };
 
   return (
@@ -2387,92 +2199,6 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
       </section>
 
       <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
-        <form onSubmit={saveOfflinePin} className="space-y-4">
-          <div>
-            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinTitle")}</div>
-            <h2 className="mt-1 text-xl font-black tracking-tighter">{localHasOfflinePin ? t("offlinePinEnabled") : t("offlinePinDisabled")}</h2>
-            <p className="mt-2 text-xs font-bold leading-5 text-gray-400">{t("offlinePinDescription")}</p>
-            <p className="mt-2 text-xs font-black leading-5 text-red-500">{t("offlinePinCannotRecover")}</p>
-          </div>
-
-          {localHasOfflinePin && !isResettingOfflinePin ? (
-            <button
-              type="button"
-              onClick={() => {
-                setIsResettingOfflinePin(true);
-                setOfflinePinStatus("");
-              }}
-              className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white"
-            >
-              {t("resetOfflinePin")}
-            </button>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-              {localHasOfflinePin && (
-                <label className="block md:col-span-2">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinCurrent")}</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    value={currentOfflinePin}
-                    onChange={event => setCurrentOfflinePin(event.target.value)}
-                    style={{ WebkitTextSecurity: "disc" }}
-                    className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
-                    placeholder="0000"
-                  />
-                </label>
-              )}
-              <label className="block">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{localHasOfflinePin ? t("offlinePinNew") : t("offlinePinInput")}</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  value={offlinePin}
-                  onChange={event => setOfflinePin(event.target.value)}
-                  style={{ WebkitTextSecurity: "disc" }}
-                  className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
-                  placeholder="0000"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("offlinePinConfirm")}</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  value={offlinePinConfirm}
-                  onChange={event => setOfflinePinConfirm(event.target.value)}
-                  style={{ WebkitTextSecurity: "disc" }}
-                  className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
-                  placeholder="0000"
-                />
-              </label>
-              <button
-                type="submit"
-                className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white active:scale-95"
-              >
-                {localHasOfflinePin ? t("resetOfflinePin") : t("save")}
-              </button>
-            </div>
-          )}
-        </form>
-      </section>
-
-      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-3">
             {authUser.picture ? (
@@ -2553,21 +2279,19 @@ function LeaveCheckModal({ message, t, hideLeaveCheck, setHideLeaveCheck, onCanc
   );
 }
 
-function LoginScreen({ t, isOnline, offlineLoginUsers, onGoogleSignIn, onOfflinePinSignIn, authError }) {
-  const [offlinePin, setOfflinePin] = useState("");
+function LoginScreen({ t, isOnline, offlineLoginUsers, onGoogleSignIn, onOfflineSignIn, authError }) {
   const [isUnlockingOffline, setIsUnlockingOffline] = useState(false);
   const [selectedOfflineUserId, setSelectedOfflineUserId] = useState(offlineLoginUsers[0]?.id || "");
-  const canUseOfflinePin = !isOnline && offlineLoginUsers.length > 0;
+  const canUseOfflineAccess = !isOnline && offlineLoginUsers.length > 0;
   const selectedOfflineUser = offlineLoginUsers.find(user => user.id === selectedOfflineUserId) || offlineLoginUsers[0];
 
-  const submitOfflinePin = async (event) => {
+  const submitOfflineAccess = async (event) => {
     event.preventDefault();
     if (!selectedOfflineUser) return;
 
     setIsUnlockingOffline(true);
-    const isUnlocked = await onOfflinePinSignIn(selectedOfflineUser.id, offlinePin);
+    const isUnlocked = await onOfflineSignIn(selectedOfflineUser.id);
     if (!isUnlocked) {
-      setOfflinePin("");
       setIsUnlockingOffline(false);
     }
   };
@@ -2600,17 +2324,14 @@ function LoginScreen({ t, isOnline, offlineLoginUsers, onGoogleSignIn, onOffline
               >
                 {t("googleStart")}
               </button>
-              {canUseOfflinePin && (
-                <form onSubmit={submitOfflinePin} className="mt-4 rounded-xl border border-black/10 bg-white/70 p-4">
+              {canUseOfflineAccess && (
+                <form onSubmit={submitOfflineAccess} className="mt-4 rounded-xl border border-black/10 bg-white/70 p-4">
                   <p className="whitespace-pre-line text-xs font-bold leading-5 text-gray-500">{t("offlineStartPrompt")}</p>
                   <label className="mt-3 block">
                     <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t("offlineAccount")}</span>
                     <select
                       value={selectedOfflineUser?.id || ""}
-                      onChange={event => {
-                        setSelectedOfflineUserId(event.target.value);
-                        setOfflinePin("");
-                      }}
+                      onChange={event => setSelectedOfflineUserId(event.target.value)}
                       className="mt-1 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
                     >
                       {offlineLoginUsers.map(user => (
@@ -2620,29 +2341,13 @@ function LoginScreen({ t, isOnline, offlineLoginUsers, onGoogleSignIn, onOffline
                       ))}
                     </select>
                   </label>
-                  <div className="mt-2 flex gap-2">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="none"
-                      spellCheck={false}
-                      value={offlinePin}
-                      onChange={event => setOfflinePin(event.target.value)}
-                      style={{ WebkitTextSecurity: "disc" }}
-                      className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
-                      placeholder={t("offlinePinInput")}
-                    />
-                    <button
-                      type="submit"
-                      disabled={isUnlockingOffline || offlinePin.trim().length === 0}
-                      className="rounded-xl bg-black px-4 py-3 text-xs font-black uppercase tracking-tight text-white disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isUnlockingOffline ? t("loading") : t("confirm")}
-                    </button>
-                  </div>
+                  <button
+                    type="submit"
+                    disabled={isUnlockingOffline}
+                    className="mt-3 w-full rounded-xl bg-black px-4 py-3 text-xs font-black uppercase tracking-tight text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isUnlockingOffline ? t("loading") : t("offlineEnter")}
+                  </button>
                 </form>
               )}
               {authError && <p className="mt-3 text-xs font-bold text-red-600">{authError}</p>}
