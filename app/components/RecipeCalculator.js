@@ -3,10 +3,16 @@ import { useState, useMemo, useCallback } from "react";
 import { InputField, SummaryCard, SummaryRow } from "./common";
 import { INGREDIENT_TYPE_LABEL_KEYS, LOG_TYPE_LABEL_KEYS, TEMP_FIELD_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
+const truncateToOneDecimal = (value) => {
+  const numericValue = Number(value) || 0;
+  return Math.trunc(numericValue * 10) / 10;
+};
+
 const formatCurrency = (value) => `${new Intl.NumberFormat("ko-KR", {
   style: "decimal",
-  maximumFractionDigits: 0,
-}).format(value || 0)}원`;
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+}).format(truncateToOneDecimal(value))}원`;
 
 const formatGrams = (value) => `${new Intl.NumberFormat("ko-KR", {
   minimumFractionDigits: 1,
