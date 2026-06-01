@@ -22,6 +22,7 @@ const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
+const REMOTE_REFRESH_INTERVAL_MS = 15000;
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
   costItems: "bakery_cost_items",
@@ -211,7 +212,27 @@ function markChangedLocalItems(previousItems, nextItems, normalizeId) {
   });
 }
 
-function mergeLocalAndRemoteItems(localItems, remoteItems, normalizeId, deletedIds = new Set()) {
+function hasRemoteVersion(item) {
+  return Boolean(item?.[REMOTE_UPDATED_AT_FIELD]);
+}
+
+function getMissingRemoteIds(previousRemoteItems, nextRemoteItems, normalizeId) {
+  const nextRemoteIds = new Set((nextRemoteItems || []).map(item => normalizeId(item)));
+
+  return new Set(
+    (previousRemoteItems || [])
+      .map(item => normalizeId(item))
+      .filter(id => !nextRemoteIds.has(id)),
+  );
+}
+
+function removeItemsByIds(items, ids, normalizeId) {
+  if (!ids?.size) return items || [];
+  return (items || []).filter(item => !ids.has(normalizeId(item)));
+}
+
+function mergeLocalAndRemoteItems(localItems, remoteItems, normalizeId, deletedIds = new Set(), options = {}) {
+  const remoteMissingDeletesSeen = Boolean(options.remoteMissingDeletesSeen);
   const localById = new Map((localItems || []).map(item => [normalizeId(item), item]));
   const remoteById = new Map((remoteItems || []).map(item => [normalizeId(item), item]));
   const ids = new Set([...localById.keys(), ...remoteById.keys()]);
@@ -221,7 +242,10 @@ function mergeLocalAndRemoteItems(localItems, remoteItems, normalizeId, deletedI
     const remoteItem = remoteById.get(id);
 
     if (!localItem && remoteItem && deletedIds.has(Number(id))) return null;
-    if (!remoteItem) return localItem;
+    if (!remoteItem) {
+      if (remoteMissingDeletesSeen && hasRemoteVersion(localItem)) return null;
+      return localItem;
+    }
     if (!localItem) return remoteItem;
 
     const localEditedAt = getSyncTimestamp(localItem, LOCAL_UPDATED_AT_FIELD);
@@ -894,30 +918,39 @@ export default function Home() {
             setAnnouncementReads(remoteAnnouncementReads);
 
             if (remoteRecipes.length > 0) {
-              nextRecipes = mergeLocalAndRemoteItems(userData.recipes, remoteRecipes, normalizeRecipeId, deletedRecipeIds);
+              nextRecipes = mergeLocalAndRemoteItems(userData.recipes, remoteRecipes, normalizeRecipeId, deletedRecipeIds, { remoteMissingDeletesSeen: true });
               if (hasMeaningfulDiff(nextRecipes, remoteRecipes)) {
                 await syncSupabaseRecipes(authUser, remoteRecipes, nextRecipes);
               }
             } else if (userData.recipes.length > 0) {
-              await syncSupabaseRecipes(authUser, [], userData.recipes);
+              nextRecipes = userData.recipes.filter(recipe => !hasRemoteVersion(recipe));
+              if (nextRecipes.length > 0) {
+                await syncSupabaseRecipes(authUser, [], nextRecipes);
+              }
             }
 
             if (remoteCostItems.length > 0) {
-              nextCostItems = mergeLocalAndRemoteItems(userData.costItems, remoteCostItems, normalizeCostItemId, deletedCostItemIds);
+              nextCostItems = mergeLocalAndRemoteItems(userData.costItems, remoteCostItems, normalizeCostItemId, deletedCostItemIds, { remoteMissingDeletesSeen: true });
               if (hasMeaningfulDiff(nextCostItems, remoteCostItems)) {
                 await syncSupabaseCostItems(authUser, remoteCostItems, nextCostItems);
               }
             } else if (userData.costItems.length > 0) {
-              await syncSupabaseCostItems(authUser, [], userData.costItems);
+              nextCostItems = userData.costItems.filter(item => !hasRemoteVersion(item));
+              if (nextCostItems.length > 0) {
+                await syncSupabaseCostItems(authUser, [], nextCostItems);
+              }
             }
 
             if (remoteTempLogs.length > 0) {
-              nextTempLogs = mergeLocalAndRemoteItems(userData.tempLogs, remoteTempLogs, normalizeTempLogId, deletedTempLogIds);
+              nextTempLogs = mergeLocalAndRemoteItems(userData.tempLogs, remoteTempLogs, normalizeTempLogId, deletedTempLogIds, { remoteMissingDeletesSeen: true });
               if (hasMeaningfulDiff(nextTempLogs, remoteTempLogs)) {
                 await syncSupabaseTempLogs(authUser, remoteTempLogs, nextTempLogs);
               }
             } else if (userData.tempLogs.length > 0) {
-              await syncSupabaseTempLogs(authUser, [], userData.tempLogs);
+              nextTempLogs = userData.tempLogs.filter(log => !hasRemoteVersion(log));
+              if (nextTempLogs.length > 0) {
+                await syncSupabaseTempLogs(authUser, [], nextTempLogs);
+              }
             }
 
             clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
@@ -1069,14 +1102,35 @@ export default function Home() {
       const deletedRecipeIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
       const deletedCostItemIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
       const deletedTempLogIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
+      const remoteDeletedRecipeIds = getMissingRemoteIds(recipesSnapshotRef.current, remoteRecipes, normalizeRecipeId);
+      const remoteDeletedCostItemIds = getMissingRemoteIds(costItemsSnapshotRef.current, remoteCostItems, normalizeCostItemId);
+      const remoteDeletedTempLogIds = getMissingRemoteIds(tempLogsSnapshotRef.current, remoteTempLogs, normalizeTempLogId);
 
       recipesSnapshotRef.current = remoteRecipes;
       costItemsSnapshotRef.current = remoteCostItems;
       tempLogsSnapshotRef.current = remoteTempLogs;
 
-      setRecipes(prev => mergeLocalAndRemoteItems(prev, remoteRecipes, normalizeRecipeId, deletedRecipeIds));
-      setCostItems(prev => mergeLocalAndRemoteItems(prev, remoteCostItems, normalizeCostItemId, deletedCostItemIds));
-      setTempLogs(prev => mergeLocalAndRemoteItems(prev, remoteTempLogs, normalizeTempLogId, deletedTempLogIds));
+      setRecipes(prev => mergeLocalAndRemoteItems(
+        removeItemsByIds(prev, remoteDeletedRecipeIds, normalizeRecipeId),
+        remoteRecipes,
+        normalizeRecipeId,
+        deletedRecipeIds,
+        { remoteMissingDeletesSeen: true },
+      ));
+      setCostItems(prev => mergeLocalAndRemoteItems(
+        removeItemsByIds(prev, remoteDeletedCostItemIds, normalizeCostItemId),
+        remoteCostItems,
+        normalizeCostItemId,
+        deletedCostItemIds,
+        { remoteMissingDeletesSeen: true },
+      ));
+      setTempLogs(prev => mergeLocalAndRemoteItems(
+        removeItemsByIds(prev, remoteDeletedTempLogIds, normalizeTempLogId),
+        remoteTempLogs,
+        normalizeTempLogId,
+        deletedTempLogIds,
+        { remoteMissingDeletesSeen: true },
+      ));
       setCommunityRecipes(remoteCommunityRecipes);
       setCommunityBookmarks(remoteCommunityBookmarks);
       setCommunitySaveCounts(remoteCommunitySaveCounts);
@@ -1100,11 +1154,15 @@ export default function Home() {
     window.addEventListener("focus", refreshWhenActive);
     window.addEventListener("online", refreshWhenActive);
     document.addEventListener("visibilitychange", refreshWhenActive);
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible") refreshWhenActive();
+    }, REMOTE_REFRESH_INTERVAL_MS);
 
     return () => {
       window.removeEventListener("focus", refreshWhenActive);
       window.removeEventListener("online", refreshWhenActive);
       document.removeEventListener("visibilitychange", refreshWhenActive);
+      window.clearInterval(refreshInterval);
     };
   }, [authUser, isLoaded, refreshUserDataFromSupabase, userDataLoaded, userDataOwnerId]);
 
