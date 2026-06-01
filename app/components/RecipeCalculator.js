@@ -19,11 +19,17 @@ const formatGrams = (value) => `${new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 1,
 }).format(value || 0)}g`;
 
+const formatAutoCalcGrams = (value) => `${new Intl.NumberFormat("ko-KR", {
+  maximumFractionDigits: 1,
+}).format(value || 0)}g`;
+
 const parseDecimal = (value) => parseFloat(String(value).replace(',', '.')) || 0;
 
 const getRecipeTotalPercent = (ingredients = []) => {
   return ingredients.reduce((sum, ing) => sum + parseDecimal(ing.percent), 0);
 };
+
+const createAutoCalcRow = () => ({ grams: "", count: "" });
 
 export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [], tempLogs, setTempLogs, requestSafetyCheck }) {
   const [category, setCategory] = useState("하드계열");
@@ -37,6 +43,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const [productWeight, setProductWeight] = useState("");
   const [productPrice, setProductPrice] = useState("");
   const [printSections, setPrintSections] = useState({ summary: true, prefermentYield: true, cost: true });
+  const [autoCalcByRecipeId, setAutoCalcByRecipeId] = useState({});
 
   // 프린트 배수 모달 상태 추가
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -60,6 +67,13 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const preFerments = useMemo(() => {
     return currentRecipe ? currentRecipe.ingredients.filter(ing => ing.type === "사전반죽") : [];
   }, [currentRecipe]);
+  const autoCalcRecipeKey = selectedRecipeId || "";
+  const autoCalcRows = useMemo(() => {
+    return autoCalcByRecipeId[autoCalcRecipeKey] || [createAutoCalcRow()];
+  }, [autoCalcByRecipeId, autoCalcRecipeKey]);
+  const autoCalcTotal = useMemo(() => {
+    return autoCalcRows.reduce((sum, row) => sum + (parseDecimal(row.grams) * parseDecimal(row.count)), 0);
+  }, [autoCalcRows]);
 
   const syncWeightsToTotalPercent = useCallback((nextTotalPercent) => {
     if (nextTotalPercent <= 0) {
@@ -253,6 +267,46 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     resetRecipeSelection(recipeId);
   };
 
+  const updateAutoCalcRow = (rowIndex, field, value) => {
+    if (!autoCalcRecipeKey) return;
+    const cleanValue = value.replace(',', '.');
+
+    setAutoCalcByRecipeId(prev => {
+      const rows = prev[autoCalcRecipeKey] || [createAutoCalcRow()];
+      return {
+        ...prev,
+        [autoCalcRecipeKey]: rows.map((row, index) => (
+          index === rowIndex ? { ...row, [field]: cleanValue } : row
+        )),
+      };
+    });
+  };
+
+  const addAutoCalcRow = () => {
+    if (!autoCalcRecipeKey) return;
+
+    setAutoCalcByRecipeId(prev => {
+      const rows = prev[autoCalcRecipeKey] || [createAutoCalcRow()];
+      return {
+        ...prev,
+        [autoCalcRecipeKey]: [...rows, createAutoCalcRow()],
+      };
+    });
+  };
+
+  const removeAutoCalcRow = (rowIndex) => {
+    if (!autoCalcRecipeKey) return;
+
+    setAutoCalcByRecipeId(prev => {
+      const rows = prev[autoCalcRecipeKey] || [createAutoCalcRow()];
+      const nextRows = rows.filter((_, index) => index !== rowIndex);
+      return {
+        ...prev,
+        [autoCalcRecipeKey]: nextRows.length > 0 ? nextRows : [createAutoCalcRow()],
+      };
+    });
+  };
+
   // 브라우저 프린트 실행 연동 함수 수정
   const handlePrintPDF = () => {
     if (!currentRecipe) return;
@@ -435,6 +489,61 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
                 <SummaryRow label={t("totalDough")} value={`${(Math.round(parseFloat(String(totalDough).replace(',', '.'))) || 0).toLocaleString()}g`} />
                 <SummaryRow label={t("totalCost")} value={`${Math.round(totals.totalCost).toLocaleString()}`} />
               </SummaryCard>
+
+              {currentRecipe && (
+                <SummaryCard title={t("autoCalculated")} className="print:hidden">
+                  <div className="space-y-3">
+                    {autoCalcRows.map((row, idx) => (
+                      <div key={idx} className="rounded-xl border border-black/5 bg-[#f7f6f3] p-3">
+                        <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                          <InputField label={t("autoCalcUnitWeight")}>
+                            <div className="flex items-end gap-1 border-b border-black/20 focus-within:border-black transition-colors">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={row.grams}
+                                onChange={(e) => updateAutoCalcRow(idx, "grams", e.target.value)}
+                                className="w-full bg-transparent pb-1 text-right font-mono text-sm font-bold outline-none"
+                                placeholder="0"
+                              />
+                              <span className="pb-1 text-[10px] font-black text-gray-400">g</span>
+                            </div>
+                          </InputField>
+                          <InputField label={t("autoCalcCount")}>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={row.count}
+                              onChange={(e) => updateAutoCalcRow(idx, "count", e.target.value)}
+                              className="w-full border-b border-black/20 bg-transparent pb-1 text-right font-mono text-sm font-bold outline-none focus:border-black"
+                              placeholder="0"
+                            />
+                          </InputField>
+                          <button
+                            type="button"
+                            onClick={() => removeAutoCalcRow(idx)}
+                            className="mb-1 flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-[#f7f6f3] text-xs font-black text-gray-400 hover:border-red-200 hover:text-red-500"
+                            title={t("autoCalcDelete")}
+                          >
+                            x
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addAutoCalcRow}
+                    className="mt-3 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-xs font-black uppercase tracking-tight text-gray-500 hover:border-black hover:text-black"
+                  >
+                    {t("autoCalcAddRow")}
+                  </button>
+                  <div className="mt-4 flex justify-between border-t-2 border-black pt-3 text-sm">
+                    <span className="font-black uppercase tracking-tight">{t("autoCalcTotal")}</span>
+                    <span className="font-mono font-black">{formatAutoCalcGrams(autoCalcTotal)}</span>
+                  </div>
+                </SummaryCard>
+              )}
 
               {preFerments.length > 0 && (
                 <SummaryCard title={t("prefermentYield")} className={printPrefermentClass}>
