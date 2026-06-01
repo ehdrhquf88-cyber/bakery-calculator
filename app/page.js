@@ -195,6 +195,22 @@ function markLocalUpdate(item) {
   };
 }
 
+function markChangedLocalItems(previousItems, nextItems, normalizeId) {
+  const previousById = new Map((previousItems || []).map(item => [normalizeId(item), item]));
+
+  return (nextItems || []).map((item) => {
+    const id = normalizeId(item);
+    const normalizedItem = { ...item, id };
+    const previousItem = previousById.get(id);
+
+    if (!previousItem || hasMeaningfulDiff(previousItem, normalizedItem)) {
+      return markLocalUpdate(normalizedItem);
+    }
+
+    return previousItem;
+  });
+}
+
 function mergeLocalAndRemoteItems(localItems, remoteItems, normalizeId, deletedIds = new Set()) {
   const localById = new Map((localItems || []).map(item => [normalizeId(item), item]));
   const remoteById = new Map((remoteItems || []).map(item => [normalizeId(item), item]));
@@ -418,10 +434,16 @@ async function loadSupabaseTempLogs() {
 async function syncSupabaseRecipes(authUser, previousRecipes, nextRecipes) {
   if (!supabase || !authUser) return;
 
+  const previousById = new Map((previousRecipes || []).map(recipe => [normalizeRecipeId(recipe), recipe]));
   const previousIds = new Set((previousRecipes || []).map(recipe => normalizeRecipeId(recipe)));
   const nextIds = new Set((nextRecipes || []).map(recipe => normalizeRecipeId(recipe)));
   const removedIds = [...previousIds].filter(id => !nextIds.has(id));
-  const rows = (nextRecipes || []).map(recipe => recipeToSupabaseRow(authUser, recipe));
+  const rows = (nextRecipes || [])
+    .filter((recipe) => {
+      const previousRecipe = previousById.get(normalizeRecipeId(recipe));
+      return !previousRecipe || hasMeaningfulDiff(previousRecipe, recipe);
+    })
+    .map(recipe => recipeToSupabaseRow(authUser, recipe));
 
   if (rows.length > 0) {
     const { error } = await supabase
@@ -445,10 +467,16 @@ async function syncSupabaseRecipes(authUser, previousRecipes, nextRecipes) {
 async function syncSupabaseCostItems(authUser, previousCostItems, nextCostItems) {
   if (!supabase || !authUser) return;
 
+  const previousById = new Map((previousCostItems || []).map(item => [normalizeCostItemId(item), item]));
   const previousIds = new Set((previousCostItems || []).map(item => normalizeCostItemId(item)));
   const nextIds = new Set((nextCostItems || []).map(item => normalizeCostItemId(item)));
   const removedIds = [...previousIds].filter(id => !nextIds.has(id));
-  const rows = (nextCostItems || []).map(item => costItemToSupabaseRow(authUser, item));
+  const rows = (nextCostItems || [])
+    .filter((item) => {
+      const previousItem = previousById.get(normalizeCostItemId(item));
+      return !previousItem || hasMeaningfulDiff(previousItem, item);
+    })
+    .map(item => costItemToSupabaseRow(authUser, item));
 
   if (rows.length > 0) {
     const { error } = await supabase
@@ -472,10 +500,16 @@ async function syncSupabaseCostItems(authUser, previousCostItems, nextCostItems)
 async function syncSupabaseTempLogs(authUser, previousTempLogs, nextTempLogs) {
   if (!supabase || !authUser) return;
 
+  const previousById = new Map((previousTempLogs || []).map(log => [normalizeTempLogId(log), log]));
   const previousIds = new Set((previousTempLogs || []).map(log => normalizeTempLogId(log)));
   const nextIds = new Set((nextTempLogs || []).map(log => normalizeTempLogId(log)));
   const removedIds = [...previousIds].filter(id => !nextIds.has(id));
-  const rows = (nextTempLogs || []).map(log => tempLogToSupabaseRow(authUser, log));
+  const rows = (nextTempLogs || [])
+    .filter((log) => {
+      const previousLog = previousById.get(normalizeTempLogId(log));
+      return !previousLog || hasMeaningfulDiff(previousLog, log);
+    })
+    .map(log => tempLogToSupabaseRow(authUser, log));
 
   if (rows.length > 0) {
     const { error } = await supabase
@@ -695,6 +729,7 @@ export default function Home() {
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
+  const refreshInFlightRef = useRef(false);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
   const unreadAnnouncementCount = useMemo(() => {
@@ -1005,6 +1040,74 @@ export default function Home() {
     };
   }, [tempLogs, authUser, userDataLoaded, userDataOwnerId, isLoaded, isOnline]);
 
+  const refreshUserDataFromSupabase = useCallback(async () => {
+    if (!isLoaded || !authUser || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase || refreshInFlightRef.current) return;
+
+    refreshInFlightRef.current = true;
+
+    try {
+      const [
+        remoteRecipes,
+        remoteCommunityRecipes,
+        remoteCostItems,
+        remoteTempLogs,
+        remoteCommunityBookmarks,
+        remoteCommunitySaveCounts,
+        remoteAnnouncements,
+        remoteAnnouncementReads,
+      ] = await Promise.all([
+        loadSupabaseRecipes(authUser),
+        loadSupabaseCommunityRecipes(),
+        loadSupabaseCostItems(),
+        loadSupabaseTempLogs(),
+        loadSupabaseCommunityBookmarks(authUser),
+        loadSupabaseCommunitySaveCounts(),
+        loadSupabaseAnnouncements(),
+        loadSupabaseAnnouncementReads(authUser),
+      ]);
+
+      const deletedRecipeIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
+      const deletedCostItemIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
+      const deletedTempLogIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
+
+      recipesSnapshotRef.current = remoteRecipes;
+      costItemsSnapshotRef.current = remoteCostItems;
+      tempLogsSnapshotRef.current = remoteTempLogs;
+
+      setRecipes(prev => mergeLocalAndRemoteItems(prev, remoteRecipes, normalizeRecipeId, deletedRecipeIds));
+      setCostItems(prev => mergeLocalAndRemoteItems(prev, remoteCostItems, normalizeCostItemId, deletedCostItemIds));
+      setTempLogs(prev => mergeLocalAndRemoteItems(prev, remoteTempLogs, normalizeTempLogId, deletedTempLogIds));
+      setCommunityRecipes(remoteCommunityRecipes);
+      setCommunityBookmarks(remoteCommunityBookmarks);
+      setCommunitySaveCounts(remoteCommunitySaveCounts);
+      setAnnouncements(remoteAnnouncements);
+      setAnnouncementReads(remoteAnnouncementReads);
+    } catch (error) {
+      console.warn("Supabase 최신 데이터를 다시 읽지 못했습니다.", error?.message || error);
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  }, [authUser, isLoaded, isOnline, userDataLoaded, userDataOwnerId]);
+
+  useEffect(() => {
+    if (!isLoaded || !authUser || authUser.isOfflineMode || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+
+    const refreshWhenActive = () => {
+      if (document.visibilityState === "hidden") return;
+      refreshUserDataFromSupabase();
+    };
+
+    window.addEventListener("focus", refreshWhenActive);
+    window.addEventListener("online", refreshWhenActive);
+    document.addEventListener("visibilitychange", refreshWhenActive);
+
+    return () => {
+      window.removeEventListener("focus", refreshWhenActive);
+      window.removeEventListener("online", refreshWhenActive);
+      document.removeEventListener("visibilitychange", refreshWhenActive);
+    };
+  }, [authUser, isLoaded, refreshUserDataFromSupabase, userDataLoaded, userDataOwnerId]);
+
   const updateRecipes = useCallback((nextRecipesOrUpdater) => {
     setRecipes(prev => {
       const nextRecipes = typeof nextRecipesOrUpdater === "function"
@@ -1016,10 +1119,7 @@ export default function Home() {
         .filter(id => !nextIds.has(id));
       recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes, removedIds);
 
-      return (nextRecipes || []).map(recipe => ({
-        ...markLocalUpdate(recipe),
-        id: normalizeRecipeId(recipe),
-      }));
+      return markChangedLocalItems(prev, nextRecipes, normalizeRecipeId);
     });
   }, [authUser]);
 
@@ -1295,10 +1395,7 @@ export default function Home() {
         .filter(id => !nextIds.has(id));
       recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems, removedIds);
 
-      return (nextCostItems || []).map(item => ({
-        ...markLocalUpdate(item),
-        id: normalizeCostItemId(item),
-      }));
+      return markChangedLocalItems(prev, nextCostItems, normalizeCostItemId);
     });
   }, [authUser]);
 
@@ -1313,10 +1410,7 @@ export default function Home() {
         .filter(id => !nextIds.has(id));
       recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs, removedIds);
 
-      return (nextTempLogs || []).map(log => ({
-        ...markLocalUpdate(log),
-        id: normalizeTempLogId(log),
-      }));
+      return markChangedLocalItems(prev, nextTempLogs, normalizeTempLogId);
     });
   }, [authUser]);
 
