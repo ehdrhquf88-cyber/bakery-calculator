@@ -493,56 +493,48 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
               {currentRecipe && (
                 <SummaryCard title={t("autoCalculated")} className="print:hidden">
                   <div className="space-y-3">
-                    {autoCalcRows.map((row, idx) => {
-                      const rowTotal = parseDecimal(row.grams) * parseDecimal(row.count);
-
-                      return (
-                        <div key={idx} className="rounded-xl border border-black/5 bg-white/70 p-3">
-                          <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
-                            <InputField label={t("autoCalcUnitWeight")}>
-                              <div className="flex items-end gap-1 border-b border-black/20 focus-within:border-black transition-colors">
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  value={row.grams}
-                                  onChange={(e) => updateAutoCalcRow(idx, "grams", e.target.value)}
-                                  className="w-full bg-transparent pb-1 text-right font-mono text-sm font-bold outline-none"
-                                  placeholder="0"
-                                />
-                                <span className="pb-1 text-[10px] font-black text-gray-400">g</span>
-                              </div>
-                            </InputField>
-                            <InputField label={t("autoCalcCount")}>
+                    {autoCalcRows.map((row, idx) => (
+                      <div key={idx} className="rounded-xl border border-black/5 bg-[#f7f6f3] p-3">
+                        <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                          <InputField label={t("autoCalcUnitWeight")}>
+                            <div className="flex items-end gap-1 border-b border-black/20 focus-within:border-black transition-colors">
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                value={row.count}
-                                onChange={(e) => updateAutoCalcRow(idx, "count", e.target.value)}
-                                className="w-full border-b border-black/20 bg-transparent pb-1 text-right font-mono text-sm font-bold outline-none focus:border-black"
+                                value={row.grams}
+                                onChange={(e) => updateAutoCalcRow(idx, "grams", e.target.value)}
+                                className="w-full bg-transparent pb-1 text-right font-mono text-sm font-bold outline-none"
                                 placeholder="0"
                               />
-                            </InputField>
-                            <button
-                              type="button"
-                              onClick={() => removeAutoCalcRow(idx)}
-                              className="mb-1 flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-black text-gray-400 hover:border-red-200 hover:text-red-500"
-                              title={t("autoCalcDelete")}
-                            >
-                              x
-                            </button>
-                          </div>
-                          <div className="mt-2 flex justify-between border-t border-dashed border-black/10 pt-2 text-xs">
-                            <span className="font-black uppercase tracking-tight text-gray-400">{t("autoCalcLineTotal")}</span>
-                            <span className="font-mono font-black">{formatAutoCalcGrams(rowTotal)}</span>
-                          </div>
+                              <span className="pb-1 text-[10px] font-black text-gray-400">g</span>
+                            </div>
+                          </InputField>
+                          <InputField label={t("autoCalcCount")}>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={row.count}
+                              onChange={(e) => updateAutoCalcRow(idx, "count", e.target.value)}
+                              className="w-full border-b border-black/20 bg-transparent pb-1 text-right font-mono text-sm font-bold outline-none focus:border-black"
+                              placeholder="0"
+                            />
+                          </InputField>
+                          <button
+                            type="button"
+                            onClick={() => removeAutoCalcRow(idx)}
+                            className="mb-1 flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-[#f7f6f3] text-xs font-black text-gray-400 hover:border-red-200 hover:text-red-500"
+                            title={t("autoCalcDelete")}
+                          >
+                            x
+                          </button>
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                   <button
                     type="button"
                     onClick={addAutoCalcRow}
-                    className="mt-3 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs font-black uppercase tracking-tight text-gray-500 hover:border-black hover:text-black"
+                    className="mt-3 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-xs font-black uppercase tracking-tight text-gray-500 hover:border-black hover:text-black"
                   >
                     {t("autoCalcAddRow")}
                   </button>
