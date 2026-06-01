@@ -1110,8 +1110,7 @@ export default function Home() {
         ownerUserId: recipe.ownerUserId || authUser?.id,
         authorDisplayName: recipe.authorDisplayName || authUser?.displayName || "",
       }));
-    const ownRecipeKeys = new Set(recipes.map(recipe => `${recipe.ownerUserId || authUser?.id || ""}:${recipe.id}`));
-    const remotePublicRecipes = communityRecipes.filter(recipe => !ownRecipeKeys.has(`${recipe.ownerUserId || ""}:${recipe.id}`));
+    const remotePublicRecipes = communityRecipes.filter(recipe => recipe.ownerUserId !== authUser?.id);
 
     return [...ownPublicRecipes, ...remotePublicRecipes];
   }, [authUser?.displayName, authUser?.id, communityRecipes, recipes]);
