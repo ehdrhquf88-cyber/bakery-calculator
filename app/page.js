@@ -22,11 +22,16 @@ const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
 const REMOTE_REFRESH_INTERVAL_MS = 15000;
+const CALCULATOR_STATE_STORAGE_PREFIX = "bakery_recipe_calculator_state";
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
   costItems: "bakery_cost_items",
   tempLogs: "bakery_temp_ph",
 };
+
+function getCalculatorStateStorageKey(authUser) {
+  return authUser?.id ? `${CALCULATOR_STATE_STORAGE_PREFIX}:${authUser.id}` : "";
+}
 
 function getUserDataStorageKey(baseKey, authUser) {
   return `${baseKey}:${authUser.id || authUser.email}`;
@@ -78,6 +83,17 @@ function clearUserData(authUser) {
     localStorage.removeItem(getUserDataStorageKey(baseKey, authUser));
     localStorage.removeItem(getDeletedUserDataStorageKey(baseKey, authUser));
   });
+}
+
+function clearCalculatorState(authUser) {
+  const storageKey = getCalculatorStateStorageKey(authUser);
+  if (!storageKey) return;
+
+  try {
+    sessionStorage.removeItem(storageKey);
+  } catch {
+    // Session storage can be unavailable in some private browsing contexts.
+  }
 }
 
 function readDeletedUserDataIds(authUser, baseKey) {
@@ -697,6 +713,7 @@ export default function Home() {
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
   const refreshInFlightRef = useRef(false);
+  const calculatorStateStorageKey = getCalculatorStateStorageKey(authUser);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
   const unreadAnnouncementCount = useMemo(() => {
@@ -1320,6 +1337,7 @@ export default function Home() {
     if (authUser?.id) {
       removeOfflineUser(authUser.id);
     }
+    clearCalculatorState(authUser);
     clearUserData(authUser);
     clearAuthenticatedAppState();
   };
@@ -1409,7 +1427,7 @@ export default function Home() {
       </nav>
 
       <div className="py-4 md:py-8 print:py-0">
-        {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
+        {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} stateStorageKey={calculatorStateStorageKey} />}
         {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}

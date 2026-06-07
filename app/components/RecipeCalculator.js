@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 
 import { InputField, SummaryCard, SummaryRow } from "./common";
 import { INGREDIENT_TYPE_LABEL_KEYS, LOG_TYPE_LABEL_KEYS, TEMP_FIELD_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
@@ -30,27 +30,52 @@ const getRecipeTotalPercent = (ingredients = []) => {
 };
 
 const createAutoCalcRow = () => ({ grams: "", count: "" });
+const DEFAULT_PRINT_SECTIONS = { summary: true, prefermentYield: true, cost: true };
+const DEFAULT_PRINT_MULTIPLIERS = ["1", "", "", ""];
 
-export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [], tempLogs, setTempLogs, requestSafetyCheck }) {
-  const [category, setCategory] = useState("하드계열");
-  const [selectedRecipeId, setSelectedRecipeId] = useState("");
-  const [totalDough, setTotalDough] = useState("");
-  const [flourWeight, setFlourWeight] = useState("");
-  const [pfYields, setPfYields] = useState({});
-  const [memo, setMemo] = useState("");
-  const [doughMultiplier, setDoughMultiplier] = useState("1");
-  const [flourMultiplier, setFlourMultiplier] = useState("1");
-  const [productWeight, setProductWeight] = useState("");
-  const [productPrice, setProductPrice] = useState("");
-  const [printSections, setPrintSections] = useState({ summary: true, prefermentYield: true, cost: true });
-  const [autoCalcByRecipeId, setAutoCalcByRecipeId] = useState({});
+function readCalculatorState(storageKey) {
+  if (!storageKey || typeof window === "undefined") return {};
+
+  try {
+    const storedState = window.sessionStorage.getItem(storageKey);
+    return storedState ? JSON.parse(storedState) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCalculatorState(storageKey, state) {
+  if (!storageKey || typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.setItem(storageKey, JSON.stringify(state));
+  } catch {
+    // Session storage is a convenience only; the calculator still works without it.
+  }
+}
+
+export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [], tempLogs, setTempLogs, requestSafetyCheck, stateStorageKey }) {
+  const [restoredState] = useState(() => readCalculatorState(stateStorageKey));
+  const [category, setCategory] = useState(restoredState.category || "하드계열");
+  const [selectedRecipeId, setSelectedRecipeId] = useState(restoredState.selectedRecipeId || "");
+  const [totalDough, setTotalDough] = useState(restoredState.totalDough || "");
+  const [flourWeight, setFlourWeight] = useState(restoredState.flourWeight || "");
+  const [pfYields, setPfYields] = useState(restoredState.pfYields || {});
+  const [memo, setMemo] = useState(restoredState.memo || "");
+  const [doughMultiplier, setDoughMultiplier] = useState(restoredState.doughMultiplier || "1");
+  const [flourMultiplier, setFlourMultiplier] = useState(restoredState.flourMultiplier || "1");
+  const [productWeight, setProductWeight] = useState(restoredState.productWeight || "");
+  const [productPrice, setProductPrice] = useState(restoredState.productPrice || "");
+  const [printSections, setPrintSections] = useState(restoredState.printSections || DEFAULT_PRINT_SECTIONS);
+  const [autoCalcByRecipeId, setAutoCalcByRecipeId] = useState(restoredState.autoCalcByRecipeId || {});
 
   // 프린트 배수 모달 상태 추가
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [printMultipliers, setPrintMultipliers] = useState(["1", "", "", ""]);
+  const [printMultipliers, setPrintMultipliers] = useState(restoredState.printMultipliers || DEFAULT_PRINT_MULTIPLIERS);
 
   const filteredRecipes = useMemo(() => recipes.filter(r => r.category === category), [recipes, category]);
   const currentRecipe = useMemo(() => recipes.find(r => r.id === Number(selectedRecipeId)), [recipes, selectedRecipeId]);
+  const activeSelectedRecipeId = currentRecipe ? selectedRecipeId : "";
   const costItemById = useMemo(() => {
     return new Map(costItems.map(item => [item.id, item]));
   }, [costItems]);
@@ -67,13 +92,46 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const preFerments = useMemo(() => {
     return currentRecipe ? currentRecipe.ingredients.filter(ing => ing.type === "사전반죽") : [];
   }, [currentRecipe]);
-  const autoCalcRecipeKey = selectedRecipeId || "";
+  const autoCalcRecipeKey = activeSelectedRecipeId || "";
   const autoCalcRows = useMemo(() => {
     return autoCalcByRecipeId[autoCalcRecipeKey] || [createAutoCalcRow()];
   }, [autoCalcByRecipeId, autoCalcRecipeKey]);
   const autoCalcTotal = useMemo(() => {
     return autoCalcRows.reduce((sum, row) => sum + (parseDecimal(row.grams) * parseDecimal(row.count)), 0);
   }, [autoCalcRows]);
+
+  useEffect(() => {
+    writeCalculatorState(stateStorageKey, {
+      category,
+      selectedRecipeId: activeSelectedRecipeId,
+      totalDough,
+      flourWeight,
+      pfYields,
+      memo,
+      doughMultiplier,
+      flourMultiplier,
+      productWeight,
+      productPrice,
+      printSections,
+      autoCalcByRecipeId,
+      printMultipliers,
+    });
+  }, [
+    autoCalcByRecipeId,
+    category,
+    doughMultiplier,
+    flourMultiplier,
+    flourWeight,
+    memo,
+    pfYields,
+    printMultipliers,
+    printSections,
+    productPrice,
+    productWeight,
+    activeSelectedRecipeId,
+    stateStorageKey,
+    totalDough,
+  ]);
 
   const syncWeightsToTotalPercent = useCallback((nextTotalPercent) => {
     if (nextTotalPercent <= 0) {
@@ -370,7 +428,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
             </InputField>
           
             <InputField label={t("productSelect")}>
-              <select value={selectedRecipeId} onChange={(e) => handleRecipeSelectionChange(e.target.value)} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
+              <select value={activeSelectedRecipeId} onChange={(e) => handleRecipeSelectionChange(e.target.value)} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
                 <option value="">{t("selectRecipe")}</option>
                 {filteredRecipes.map(r => <option key={r.id} value={r.id}>{r.productName}</option>)}
               </select>
