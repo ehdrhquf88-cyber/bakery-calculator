@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import BreadVideos from "./components/BreadVideos";
 import CostDB from "./components/CostDB";
-import MyBreadYourBread from "./components/MyBreadYourBread";
 import NavButton from "./components/NavButton";
 import RecipeCalculator from "./components/RecipeCalculator";
 import RecipeDB from "./components/RecipeDB";
@@ -22,6 +21,7 @@ const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
+const REMOTE_REFRESH_INTERVAL_MS = 15000;
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
   costItems: "bakery_cost_items",
@@ -195,7 +195,43 @@ function markLocalUpdate(item) {
   };
 }
 
-function mergeLocalAndRemoteItems(localItems, remoteItems, normalizeId, deletedIds = new Set()) {
+function markChangedLocalItems(previousItems, nextItems, normalizeId) {
+  const previousById = new Map((previousItems || []).map(item => [normalizeId(item), item]));
+
+  return (nextItems || []).map((item) => {
+    const id = normalizeId(item);
+    const normalizedItem = { ...item, id };
+    const previousItem = previousById.get(id);
+
+    if (!previousItem || hasMeaningfulDiff(previousItem, normalizedItem)) {
+      return markLocalUpdate(normalizedItem);
+    }
+
+    return previousItem;
+  });
+}
+
+function hasRemoteVersion(item) {
+  return Boolean(item?.[REMOTE_UPDATED_AT_FIELD]);
+}
+
+function getMissingRemoteIds(previousRemoteItems, nextRemoteItems, normalizeId) {
+  const nextRemoteIds = new Set((nextRemoteItems || []).map(item => normalizeId(item)));
+
+  return new Set(
+    (previousRemoteItems || [])
+      .map(item => normalizeId(item))
+      .filter(id => !nextRemoteIds.has(id)),
+  );
+}
+
+function removeItemsByIds(items, ids, normalizeId) {
+  if (!ids?.size) return items || [];
+  return (items || []).filter(item => !ids.has(normalizeId(item)));
+}
+
+function mergeLocalAndRemoteItems(localItems, remoteItems, normalizeId, deletedIds = new Set(), options = {}) {
+  const remoteMissingDeletesSeen = Boolean(options.remoteMissingDeletesSeen);
   const localById = new Map((localItems || []).map(item => [normalizeId(item), item]));
   const remoteById = new Map((remoteItems || []).map(item => [normalizeId(item), item]));
   const ids = new Set([...localById.keys(), ...remoteById.keys()]);
@@ -205,7 +241,10 @@ function mergeLocalAndRemoteItems(localItems, remoteItems, normalizeId, deletedI
     const remoteItem = remoteById.get(id);
 
     if (!localItem && remoteItem && deletedIds.has(Number(id))) return null;
-    if (!remoteItem) return localItem;
+    if (!remoteItem) {
+      if (remoteMissingDeletesSeen && hasRemoteVersion(localItem)) return null;
+      return localItem;
+    }
     if (!localItem) return remoteItem;
 
     const localEditedAt = getSyncTimestamp(localItem, LOCAL_UPDATED_AT_FIELD);
@@ -224,16 +263,12 @@ function recipeToSupabaseRow(authUser, recipe) {
   const id = normalizeRecipeId(recipe);
   const recipeData = { ...stripSyncMetadata(recipe), id };
 
-  if (recipeData.isPublic) {
-    recipeData.authorDisplayName = recipeData.authorDisplayName || authUser.displayName || "";
-  }
-
   return {
     user_id: authUser.id,
     id,
     recipe_data: recipeData,
-    is_public: Boolean(recipeData.isPublic),
-    published_at: recipeData.publishedAt || null,
+    is_public: false,
+    published_at: null,
   };
 }
 
@@ -246,10 +281,6 @@ function recipeFromSupabaseRow(row) {
     publishedAt: row.published_at || row.recipe_data?.publishedAt || "",
     [REMOTE_UPDATED_AT_FIELD]: row.updated_at,
   };
-}
-
-function getCommunityRecipeKey(recipe) {
-  return `${recipe?.ownerUserId || recipe?.sourceUserId || ""}:${normalizeRecipeId(recipe)}`;
 }
 
 function normalizeCostItemId(item) {
@@ -313,51 +344,6 @@ async function loadSupabaseRecipes(authUser) {
   return (data || []).map(recipeFromSupabaseRow);
 }
 
-async function loadSupabaseCommunityRecipes() {
-  if (!supabase) return [];
-
-  const { data, error } = await supabase
-    .from("recipes")
-    .select("user_id, id, recipe_data, is_public, published_at, created_at, updated_at")
-    .eq("is_public", true)
-    .order("published_at", { ascending: false });
-
-  if (error) throw error;
-  return (data || []).map(recipeFromSupabaseRow);
-}
-
-async function loadSupabaseCommunityBookmarks(authUser) {
-  if (!supabase || !authUser) return [];
-
-  const { data, error } = await supabase
-    .from("community_bookmarks")
-    .select("source_user_id, source_recipe_id")
-    .eq("user_id", authUser.id);
-
-  if (error) {
-    console.warn("내빵니빵 북마크를 읽지 못했습니다.", error.message);
-    return [];
-  }
-
-  return (data || []).map(row => `${row.source_user_id}:${Number(row.source_recipe_id)}`);
-}
-
-async function loadSupabaseCommunitySaveCounts() {
-  if (!supabase) return {};
-
-  const { data, error } = await supabase.rpc("get_community_save_counts");
-
-  if (error) {
-    console.warn("내빵니빵 저장 횟수를 읽지 못했습니다.", error.message);
-    return {};
-  }
-
-  return (data || []).reduce((counts, row) => {
-    counts[`${row.source_user_id}:${Number(row.source_recipe_id)}`] = Number(row.save_count) || 0;
-    return counts;
-  }, {});
-}
-
 async function loadSupabaseAnnouncements() {
   if (!supabase) return [];
 
@@ -418,10 +404,16 @@ async function loadSupabaseTempLogs() {
 async function syncSupabaseRecipes(authUser, previousRecipes, nextRecipes) {
   if (!supabase || !authUser) return;
 
+  const previousById = new Map((previousRecipes || []).map(recipe => [normalizeRecipeId(recipe), recipe]));
   const previousIds = new Set((previousRecipes || []).map(recipe => normalizeRecipeId(recipe)));
   const nextIds = new Set((nextRecipes || []).map(recipe => normalizeRecipeId(recipe)));
   const removedIds = [...previousIds].filter(id => !nextIds.has(id));
-  const rows = (nextRecipes || []).map(recipe => recipeToSupabaseRow(authUser, recipe));
+  const rows = (nextRecipes || [])
+    .filter((recipe) => {
+      const previousRecipe = previousById.get(normalizeRecipeId(recipe));
+      return !previousRecipe || hasMeaningfulDiff(previousRecipe, recipe);
+    })
+    .map(recipe => recipeToSupabaseRow(authUser, recipe));
 
   if (rows.length > 0) {
     const { error } = await supabase
@@ -445,10 +437,16 @@ async function syncSupabaseRecipes(authUser, previousRecipes, nextRecipes) {
 async function syncSupabaseCostItems(authUser, previousCostItems, nextCostItems) {
   if (!supabase || !authUser) return;
 
+  const previousById = new Map((previousCostItems || []).map(item => [normalizeCostItemId(item), item]));
   const previousIds = new Set((previousCostItems || []).map(item => normalizeCostItemId(item)));
   const nextIds = new Set((nextCostItems || []).map(item => normalizeCostItemId(item)));
   const removedIds = [...previousIds].filter(id => !nextIds.has(id));
-  const rows = (nextCostItems || []).map(item => costItemToSupabaseRow(authUser, item));
+  const rows = (nextCostItems || [])
+    .filter((item) => {
+      const previousItem = previousById.get(normalizeCostItemId(item));
+      return !previousItem || hasMeaningfulDiff(previousItem, item);
+    })
+    .map(item => costItemToSupabaseRow(authUser, item));
 
   if (rows.length > 0) {
     const { error } = await supabase
@@ -472,10 +470,16 @@ async function syncSupabaseCostItems(authUser, previousCostItems, nextCostItems)
 async function syncSupabaseTempLogs(authUser, previousTempLogs, nextTempLogs) {
   if (!supabase || !authUser) return;
 
+  const previousById = new Map((previousTempLogs || []).map(log => [normalizeTempLogId(log), log]));
   const previousIds = new Set((previousTempLogs || []).map(log => normalizeTempLogId(log)));
   const nextIds = new Set((nextTempLogs || []).map(log => normalizeTempLogId(log)));
   const removedIds = [...previousIds].filter(id => !nextIds.has(id));
-  const rows = (nextTempLogs || []).map(log => tempLogToSupabaseRow(authUser, log));
+  const rows = (nextTempLogs || [])
+    .filter((log) => {
+      const previousLog = previousById.get(normalizeTempLogId(log));
+      return !previousLog || hasMeaningfulDiff(previousLog, log);
+    })
+    .map(log => tempLogToSupabaseRow(authUser, log));
 
   if (rows.length > 0) {
     const { error } = await supabase
@@ -669,9 +673,6 @@ async function getSupabaseAuthUser(session) {
 export default function Home() {
   const [view, setView] = useState("calc");
   const [recipes, setRecipes] = useState([]);
-  const [communityRecipes, setCommunityRecipes] = useState([]);
-  const [communityBookmarks, setCommunityBookmarks] = useState([]);
-  const [communitySaveCounts, setCommunitySaveCounts] = useState({});
   const [announcements, setAnnouncements] = useState([]);
   const [announcementReads, setAnnouncementReads] = useState([]);
   const [costItems, setCostItems] = useState([]);
@@ -695,6 +696,7 @@ export default function Home() {
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
+  const refreshInFlightRef = useRef(false);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
   const unreadAnnouncementCount = useMemo(() => {
@@ -807,9 +809,6 @@ export default function Home() {
 
       if (!authUser) {
         setRecipes([]);
-        setCommunityRecipes([]);
-        setCommunityBookmarks([]);
-        setCommunitySaveCounts({});
         setAnnouncements([]);
         setAnnouncementReads([]);
         setCostItems([]);
@@ -834,55 +833,49 @@ export default function Home() {
           try {
             const [
               remoteRecipes,
-              remoteCommunityRecipes,
               remoteCostItems,
               remoteTempLogs,
-              remoteCommunityBookmarks,
-              remoteCommunitySaveCounts,
               remoteAnnouncements,
               remoteAnnouncementReads,
             ] = await Promise.all([
               loadSupabaseRecipes(authUser),
-              loadSupabaseCommunityRecipes(),
               loadSupabaseCostItems(),
               loadSupabaseTempLogs(),
-              loadSupabaseCommunityBookmarks(authUser),
-              loadSupabaseCommunitySaveCounts(),
               loadSupabaseAnnouncements(),
               loadSupabaseAnnouncementReads(authUser),
             ]);
 
-            setCommunityRecipes(remoteCommunityRecipes);
-            setCommunityBookmarks(remoteCommunityBookmarks);
-            setCommunitySaveCounts(remoteCommunitySaveCounts);
             setAnnouncements(remoteAnnouncements);
             setAnnouncementReads(remoteAnnouncementReads);
 
             if (remoteRecipes.length > 0) {
-              nextRecipes = mergeLocalAndRemoteItems(userData.recipes, remoteRecipes, normalizeRecipeId, deletedRecipeIds);
+              nextRecipes = mergeLocalAndRemoteItems(userData.recipes, remoteRecipes, normalizeRecipeId, deletedRecipeIds, { remoteMissingDeletesSeen: true });
               if (hasMeaningfulDiff(nextRecipes, remoteRecipes)) {
                 await syncSupabaseRecipes(authUser, remoteRecipes, nextRecipes);
               }
             } else if (userData.recipes.length > 0) {
-              await syncSupabaseRecipes(authUser, [], userData.recipes);
+              nextRecipes = userData.recipes.filter(recipe => !hasRemoteVersion(recipe));
+              if (nextRecipes.length > 0) await syncSupabaseRecipes(authUser, [], nextRecipes);
             }
 
             if (remoteCostItems.length > 0) {
-              nextCostItems = mergeLocalAndRemoteItems(userData.costItems, remoteCostItems, normalizeCostItemId, deletedCostItemIds);
+              nextCostItems = mergeLocalAndRemoteItems(userData.costItems, remoteCostItems, normalizeCostItemId, deletedCostItemIds, { remoteMissingDeletesSeen: true });
               if (hasMeaningfulDiff(nextCostItems, remoteCostItems)) {
                 await syncSupabaseCostItems(authUser, remoteCostItems, nextCostItems);
               }
             } else if (userData.costItems.length > 0) {
-              await syncSupabaseCostItems(authUser, [], userData.costItems);
+              nextCostItems = userData.costItems.filter(item => !hasRemoteVersion(item));
+              if (nextCostItems.length > 0) await syncSupabaseCostItems(authUser, [], nextCostItems);
             }
 
             if (remoteTempLogs.length > 0) {
-              nextTempLogs = mergeLocalAndRemoteItems(userData.tempLogs, remoteTempLogs, normalizeTempLogId, deletedTempLogIds);
+              nextTempLogs = mergeLocalAndRemoteItems(userData.tempLogs, remoteTempLogs, normalizeTempLogId, deletedTempLogIds, { remoteMissingDeletesSeen: true });
               if (hasMeaningfulDiff(nextTempLogs, remoteTempLogs)) {
                 await syncSupabaseTempLogs(authUser, remoteTempLogs, nextTempLogs);
               }
             } else if (userData.tempLogs.length > 0) {
-              await syncSupabaseTempLogs(authUser, [], userData.tempLogs);
+              nextTempLogs = userData.tempLogs.filter(log => !hasRemoteVersion(log));
+              if (nextTempLogs.length > 0) await syncSupabaseTempLogs(authUser, [], nextTempLogs);
             }
 
             clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
@@ -906,9 +899,6 @@ export default function Home() {
         if (!isMounted) return;
         console.warn("사용자별 앱 데이터를 읽는 중 오류가 발생했습니다.", e?.message || e);
         setRecipes([]);
-        setCommunityRecipes([]);
-        setCommunityBookmarks([]);
-        setCommunitySaveCounts({});
         setAnnouncements([]);
         setAnnouncementReads([]);
         setCostItems([]);
@@ -1005,6 +995,90 @@ export default function Home() {
     };
   }, [tempLogs, authUser, userDataLoaded, userDataOwnerId, isLoaded, isOnline]);
 
+  const refreshUserDataFromSupabase = useCallback(async () => {
+    if (!isLoaded || !authUser || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase || refreshInFlightRef.current) return;
+
+    refreshInFlightRef.current = true;
+
+    try {
+      const [
+        remoteRecipes,
+        remoteCostItems,
+        remoteTempLogs,
+        remoteAnnouncements,
+        remoteAnnouncementReads,
+      ] = await Promise.all([
+        loadSupabaseRecipes(authUser),
+        loadSupabaseCostItems(),
+        loadSupabaseTempLogs(),
+        loadSupabaseAnnouncements(),
+        loadSupabaseAnnouncementReads(authUser),
+      ]);
+
+      const deletedRecipeIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
+      const deletedCostItemIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
+      const deletedTempLogIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
+      const remoteDeletedRecipeIds = getMissingRemoteIds(recipesSnapshotRef.current, remoteRecipes, normalizeRecipeId);
+      const remoteDeletedCostItemIds = getMissingRemoteIds(costItemsSnapshotRef.current, remoteCostItems, normalizeCostItemId);
+      const remoteDeletedTempLogIds = getMissingRemoteIds(tempLogsSnapshotRef.current, remoteTempLogs, normalizeTempLogId);
+
+      recipesSnapshotRef.current = remoteRecipes;
+      costItemsSnapshotRef.current = remoteCostItems;
+      tempLogsSnapshotRef.current = remoteTempLogs;
+
+      setRecipes(prev => mergeLocalAndRemoteItems(
+        removeItemsByIds(prev, remoteDeletedRecipeIds, normalizeRecipeId),
+        remoteRecipes,
+        normalizeRecipeId,
+        deletedRecipeIds,
+        { remoteMissingDeletesSeen: true },
+      ));
+      setCostItems(prev => mergeLocalAndRemoteItems(
+        removeItemsByIds(prev, remoteDeletedCostItemIds, normalizeCostItemId),
+        remoteCostItems,
+        normalizeCostItemId,
+        deletedCostItemIds,
+        { remoteMissingDeletesSeen: true },
+      ));
+      setTempLogs(prev => mergeLocalAndRemoteItems(
+        removeItemsByIds(prev, remoteDeletedTempLogIds, normalizeTempLogId),
+        remoteTempLogs,
+        normalizeTempLogId,
+        deletedTempLogIds,
+        { remoteMissingDeletesSeen: true },
+      ));
+      setAnnouncements(remoteAnnouncements);
+      setAnnouncementReads(remoteAnnouncementReads);
+    } catch (error) {
+      console.warn("Supabase 최신 데이터를 다시 읽지 못했습니다.", error?.message || error);
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  }, [authUser, isLoaded, isOnline, userDataLoaded, userDataOwnerId]);
+
+  useEffect(() => {
+    if (!isLoaded || !authUser || authUser.isOfflineMode || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+
+    const refreshWhenActive = () => {
+      if (document.visibilityState === "hidden") return;
+      refreshUserDataFromSupabase();
+    };
+
+    window.addEventListener("focus", refreshWhenActive);
+    window.addEventListener("online", refreshWhenActive);
+    document.addEventListener("visibilitychange", refreshWhenActive);
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible") refreshWhenActive();
+    }, REMOTE_REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.removeEventListener("focus", refreshWhenActive);
+      window.removeEventListener("online", refreshWhenActive);
+      document.removeEventListener("visibilitychange", refreshWhenActive);
+      window.clearInterval(refreshInterval);
+    };
+  }, [authUser, isLoaded, refreshUserDataFromSupabase, userDataLoaded, userDataOwnerId]);
+
   const updateRecipes = useCallback((nextRecipesOrUpdater) => {
     setRecipes(prev => {
       const nextRecipes = typeof nextRecipesOrUpdater === "function"
@@ -1016,28 +1090,9 @@ export default function Home() {
         .filter(id => !nextIds.has(id));
       recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes, removedIds);
 
-      return (nextRecipes || []).map(recipe => ({
-        ...markLocalUpdate(recipe),
-        id: normalizeRecipeId(recipe),
-      }));
+      return markChangedLocalItems(prev, nextRecipes, normalizeRecipeId);
     });
   }, [authUser]);
-
-  const requireOnlineFeature = async () => {
-    if (!navigator.onLine) throw new Error(t("communityOnlineRequired"));
-
-    try {
-      const response = await fetch("/api/connectivity", {
-        method: "POST",
-        cache: "no-store",
-      });
-
-      if (!response.ok) throw new Error(t("communityOnlineRequired"));
-    } catch {
-      setIsOnline(false);
-      throw new Error(t("communityOnlineRequired"));
-    }
-  };
 
   const markAnnouncementsAsRead = useCallback(async (announcementIds) => {
     if (!supabase || !authUser || authUser.isOfflineMode || !navigator.onLine || announcementIds.length === 0) return;
@@ -1075,215 +1130,6 @@ export default function Home() {
     markAnnouncementsAsRead(unreadIds);
   };
 
-  const toggleRecipeCommunityVisibility = async (recipeId, nextIsPublic) => {
-    await requireOnlineFeature();
-    if (!supabase || !authUser) throw new Error(t("supabaseClientMissing"));
-
-    const currentRecipe = recipes.find(recipe => recipe.id === recipeId);
-    if (!currentRecipe) throw new Error(t("communityVisibilitySaveFailed"));
-
-    const nextRecipe = {
-      ...currentRecipe,
-      isPublic: nextIsPublic,
-      publishedAt: nextIsPublic ? currentRecipe.publishedAt || new Date().toISOString() : currentRecipe.publishedAt,
-      authorDisplayName: nextIsPublic ? currentRecipe.authorDisplayName || authUser.displayName || "" : currentRecipe.authorDisplayName || "",
-    };
-    const { error } = await supabase
-      .from("recipes")
-      .upsert(recipeToSupabaseRow(authUser, nextRecipe), { onConflict: "user_id,id" });
-
-    if (error) throw error;
-
-    recipesSnapshotRef.current = recipesSnapshotRef.current.map(recipe => (
-      recipe.id === recipeId ? nextRecipe : recipe
-    ));
-    setRecipes(prev => prev.map(recipe => (
-      recipe.id === recipeId ? nextRecipe : recipe
-    )));
-  };
-
-  const visibleCommunityRecipes = useMemo(() => {
-    const ownPublicRecipes = recipes
-      .filter(recipe => recipe.isPublic)
-      .map(recipe => ({
-        ...recipe,
-        ownerUserId: recipe.ownerUserId || authUser?.id,
-        authorDisplayName: recipe.authorDisplayName || authUser?.displayName || "",
-      }));
-    const remotePublicRecipes = communityRecipes.filter(recipe => recipe.ownerUserId !== authUser?.id);
-
-    return [...ownPublicRecipes, ...remotePublicRecipes];
-  }, [authUser?.displayName, authUser?.id, communityRecipes, recipes]);
-
-  const refreshCommunitySaveCounts = async () => {
-    const nextCounts = await loadSupabaseCommunitySaveCounts();
-    setCommunitySaveCounts(nextCounts);
-  };
-
-  const recordCommunitySave = async (recipe) => {
-    if (!supabase || !authUser || !recipe?.ownerUserId || recipe.ownerUserId === authUser.id) return;
-
-    const { error } = await supabase
-      .rpc("record_community_save", {
-        p_source_user_id: recipe.ownerUserId,
-        p_source_recipe_id: normalizeRecipeId(recipe),
-      });
-
-    if (error) {
-      console.warn("내빵니빵 저장 횟수를 기록하지 못했습니다.", error.message);
-      return;
-    }
-
-    const recipeKey = getCommunityRecipeKey(recipe);
-    setCommunitySaveCounts(prev => ({
-      ...prev,
-      [recipeKey]: (prev[recipeKey] || 0) + 1,
-    }));
-    await refreshCommunitySaveCounts();
-  };
-
-  const toggleCommunityBookmark = async (recipe) => {
-    try {
-      await requireOnlineFeature();
-    } catch {
-      alert(t("communityOnlineRequired"));
-      return false;
-    }
-
-    if (!supabase || !authUser) return false;
-
-    const recipeKey = getCommunityRecipeKey(recipe);
-    const isBookmarked = communityBookmarks.includes(recipeKey);
-    const nextBookmarks = isBookmarked
-      ? communityBookmarks.filter(key => key !== recipeKey)
-      : [...communityBookmarks, recipeKey];
-
-    setCommunityBookmarks(nextBookmarks);
-
-    const request = isBookmarked
-      ? supabase
-        .from("community_bookmarks")
-        .delete()
-        .eq("source_user_id", recipe.ownerUserId)
-        .eq("source_recipe_id", normalizeRecipeId(recipe))
-        .eq("user_id", authUser.id)
-      : supabase
-        .from("community_bookmarks")
-        .insert({
-          source_user_id: recipe.ownerUserId,
-          source_recipe_id: normalizeRecipeId(recipe),
-          user_id: authUser.id,
-        });
-
-    const { error } = await request;
-
-    if (error) {
-      setCommunityBookmarks(communityBookmarks);
-      console.warn("내빵니빵 북마크를 저장하지 못했습니다.", error.message);
-      alert(t("communityBookmarkSaveFailed"));
-      return false;
-    }
-
-    return true;
-  };
-
-  const copyCommunityImage = async (recipe) => {
-    if (!recipe.communityImageKey || !supabase) {
-      return {
-        communityImage: recipe.communityImage?.startsWith("data:image/") ? recipe.communityImage : "",
-        communityImageKey: recipe.communityImageKey || "",
-      };
-    }
-
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) throw sessionError;
-
-    const accessToken = sessionData.session?.access_token;
-    if (!accessToken) throw new Error("Login session is missing.");
-
-    const response = await fetch("/api/r2/copy", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        sourceKey: recipe.communityImageKey,
-      }),
-    });
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.error || "Image copy failed.");
-    }
-
-    return {
-      communityImage: "",
-      communityImageKey: result.key,
-    };
-  };
-
-  const saveCommunityRecipeToDb = async (recipe) => {
-    try {
-      await requireOnlineFeature();
-    } catch {
-      alert(t("communityOnlineRequired"));
-      return false;
-    }
-
-    const copiedImage = await copyCommunityImage(recipe);
-
-    updateRecipes(prev => {
-      const numericIds = prev.map(item => Number(item.id)).filter(Number.isFinite);
-      const nextId = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
-
-      return [
-        ...prev,
-        {
-          ...recipe,
-          ...copiedImage,
-          id: nextId,
-          ownerUserId: authUser?.id,
-          productName: `${recipe.productName} ${t("communityCopySuffix")}`,
-          isPublic: false,
-          publishedAt: "",
-          sourceRecipeId: recipe.sourceRecipeId || recipe.id,
-          sourceUserId: recipe.ownerUserId || "",
-          sourceAuthorDisplayName: recipe.authorDisplayName || "",
-          savedFromCommunityAt: recipe.publishedAt || "",
-        },
-      ];
-    });
-
-    await recordCommunitySave(recipe);
-
-    return true;
-  };
-
-  const updatePublicDisplayName = async (displayName) => {
-    await requireOnlineFeature();
-    if (!supabase || !authUser) throw new Error(t("supabaseClientMissing"));
-
-    const normalizedDisplayName = displayName.trim();
-    const { error } = await supabase
-      .rpc("update_public_display_name", { public_display_name: normalizedDisplayName });
-
-    if (error) throw error;
-
-    setAuthUser(prev => {
-      if (!prev) return prev;
-      const nextUser = { ...prev, displayName: normalizedDisplayName };
-      writeOfflineUser(nextUser);
-      return nextUser;
-    });
-
-    updateRecipes(prev => prev.map(recipe => (
-      recipe.isPublic
-        ? { ...recipe, authorDisplayName: normalizedDisplayName }
-        : recipe
-    )));
-  };
-
   const updateCostItems = useCallback((nextCostItemsOrUpdater) => {
     setCostItems(prev => {
       const nextCostItems = typeof nextCostItemsOrUpdater === "function"
@@ -1295,10 +1141,7 @@ export default function Home() {
         .filter(id => !nextIds.has(id));
       recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems, removedIds);
 
-      return (nextCostItems || []).map(item => ({
-        ...markLocalUpdate(item),
-        id: normalizeCostItemId(item),
-      }));
+      return markChangedLocalItems(prev, nextCostItems, normalizeCostItemId);
     });
   }, [authUser]);
 
@@ -1313,10 +1156,7 @@ export default function Home() {
         .filter(id => !nextIds.has(id));
       recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs, removedIds);
 
-      return (nextTempLogs || []).map(log => ({
-        ...markLocalUpdate(log),
-        id: normalizeTempLogId(log),
-      }));
+      return markChangedLocalItems(prev, nextTempLogs, normalizeTempLogId);
     });
   }, [authUser]);
 
@@ -1543,7 +1383,6 @@ export default function Home() {
           <NavButton active={view === "db"} onClick={() => moveToView("db")}>{t("navRecipeDb")}</NavButton>
           <NavButton active={view === "cost_db"} onClick={() => moveToView("cost_db")}>{t("navCostDb")}</NavButton>
           <NavButton active={view === "temp_db"} onClick={() => moveToView("temp_db")}>{t("navTempPh")}</NavButton>
-          {!isLimitedOfflineMode && <NavButton active={view === "community"} onClick={() => moveToView("community")}>{t("navCommunity")}</NavButton>}
           {!isLimitedOfflineMode && <NavButton active={view === "videos"} onClick={() => moveToView("videos")}>{t("navVideos")}</NavButton>}
           {!isLimitedOfflineMode && isAdmin && <NavButton active={view === "admin"} onClick={() => moveToView("admin")}>{t("navAdmin")}</NavButton>}
           {!isLimitedOfflineMode && <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>{unreadAnnouncementCount > 0 ? t("navSettingsUnread") : t("navSettings")}</NavButton>}
@@ -1571,22 +1410,12 @@ export default function Home() {
 
       <div className="py-4 md:py-8 print:py-0">
         {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
-        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} isOnline={isOnline} isMediaDisabled={isLimitedOfflineMode} onRequireOnline={requireOnlineFeature} onToggleCommunityVisibility={toggleRecipeCommunityVisibility} />}
-        {view === "community" && (
-          <MyBreadYourBread
-            t={t}
-            recipes={visibleCommunityRecipes}
-            bookmarkedRecipeKeys={communityBookmarks}
-            saveCounts={communitySaveCounts}
-            onSaveCommunityRecipe={saveCommunityRecipeToDb}
-            onToggleBookmark={toggleCommunityBookmark}
-          />
-        )}
+        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} onAnnouncementsChange={setAnnouncements} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -2086,32 +1915,8 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], onUpdateDisplayName, onSignOut }) {
-  const [displayName, setDisplayName] = useState(authUser.displayName || "");
-  const [displayNameStatus, setDisplayNameStatus] = useState("");
-  const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], onSignOut }) {
   const readAnnouncementIds = useMemo(() => new Set(announcementReads.map(read => Number(read.announcement_id))), [announcementReads]);
-
-  const saveDisplayName = async (event) => {
-    event.preventDefault();
-    setDisplayNameStatus("");
-
-    const normalizedDisplayName = displayName.trim();
-    if (normalizedDisplayName.length > 24) {
-      setDisplayNameStatus(t("publicDisplayNameTooLong"));
-      return;
-    }
-
-    setIsSavingDisplayName(true);
-    try {
-      await onUpdateDisplayName(normalizedDisplayName);
-      setDisplayNameStatus(t("publicDisplayNameSaved"));
-    } catch {
-      setDisplayNameStatus(t("publicDisplayNameSaveFailed"));
-    } finally {
-      setIsSavingDisplayName(false);
-    }
-  };
 
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-8 text-black">
@@ -2166,35 +1971,6 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
             ))}
           </select>
         </div>
-      </section>
-
-      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
-        <form onSubmit={saveDisplayName} className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto] md:items-end">
-          <div>
-            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("publicDisplayName")}</div>
-            <p className="mt-2 text-xs font-bold leading-5 text-gray-400">{t("publicDisplayNameDescription")}</p>
-            <input
-              type="text"
-              value={displayName}
-              onChange={event => setDisplayName(event.target.value)}
-              maxLength={24}
-              className="mt-3 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
-              placeholder={t("anonymousBaker")}
-            />
-            {displayNameStatus && (
-              <p className={`mt-2 text-xs font-bold ${displayNameStatus === t("publicDisplayNameSaved") ? "text-green-600" : "text-red-500"}`}>
-                {displayNameStatus}
-              </p>
-            )}
-          </div>
-          <button
-            type="submit"
-            disabled={isSavingDisplayName}
-            className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:opacity-60"
-          >
-            {isSavingDisplayName ? t("saving") : t("save")}
-          </button>
-        </form>
       </section>
 
       <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
