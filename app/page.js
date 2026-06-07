@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import BreadVideos from "./components/BreadVideos";
 import CostDB from "./components/CostDB";
-import MyBreadYourBread from "./components/MyBreadYourBread";
 import NavButton from "./components/NavButton";
 import RecipeCalculator from "./components/RecipeCalculator";
 import RecipeDB from "./components/RecipeDB";
@@ -23,11 +22,16 @@ const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
 const REMOTE_REFRESH_INTERVAL_MS = 15000;
+const CALCULATOR_STATE_STORAGE_PREFIX = "bakery_recipe_calculator_state";
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
   costItems: "bakery_cost_items",
   tempLogs: "bakery_temp_ph",
 };
+
+function getCalculatorStateStorageKey(authUser) {
+  return authUser?.id ? `${CALCULATOR_STATE_STORAGE_PREFIX}:${authUser.id}` : "";
+}
 
 function getUserDataStorageKey(baseKey, authUser) {
   return `${baseKey}:${authUser.id || authUser.email}`;
@@ -79,6 +83,17 @@ function clearUserData(authUser) {
     localStorage.removeItem(getUserDataStorageKey(baseKey, authUser));
     localStorage.removeItem(getDeletedUserDataStorageKey(baseKey, authUser));
   });
+}
+
+function clearCalculatorState(authUser) {
+  const storageKey = getCalculatorStateStorageKey(authUser);
+  if (!storageKey) return;
+
+  try {
+    sessionStorage.removeItem(storageKey);
+  } catch {
+    // Session storage can be unavailable in some private browsing contexts.
+  }
 }
 
 function readDeletedUserDataIds(authUser, baseKey) {
@@ -264,16 +279,12 @@ function recipeToSupabaseRow(authUser, recipe) {
   const id = normalizeRecipeId(recipe);
   const recipeData = { ...stripSyncMetadata(recipe), id };
 
-  if (recipeData.isPublic) {
-    recipeData.authorDisplayName = recipeData.authorDisplayName || authUser.displayName || "";
-  }
-
   return {
     user_id: authUser.id,
     id,
     recipe_data: recipeData,
-    is_public: Boolean(recipeData.isPublic),
-    published_at: recipeData.publishedAt || null,
+    is_public: false,
+    published_at: null,
   };
 }
 
@@ -286,10 +297,6 @@ function recipeFromSupabaseRow(row) {
     publishedAt: row.published_at || row.recipe_data?.publishedAt || "",
     [REMOTE_UPDATED_AT_FIELD]: row.updated_at,
   };
-}
-
-function getCommunityRecipeKey(recipe) {
-  return `${recipe?.ownerUserId || recipe?.sourceUserId || ""}:${normalizeRecipeId(recipe)}`;
 }
 
 function normalizeCostItemId(item) {
@@ -351,51 +358,6 @@ async function loadSupabaseRecipes(authUser) {
 
   if (error) throw error;
   return (data || []).map(recipeFromSupabaseRow);
-}
-
-async function loadSupabaseCommunityRecipes() {
-  if (!supabase) return [];
-
-  const { data, error } = await supabase
-    .from("recipes")
-    .select("user_id, id, recipe_data, is_public, published_at, created_at, updated_at")
-    .eq("is_public", true)
-    .order("published_at", { ascending: false });
-
-  if (error) throw error;
-  return (data || []).map(recipeFromSupabaseRow);
-}
-
-async function loadSupabaseCommunityBookmarks(authUser) {
-  if (!supabase || !authUser) return [];
-
-  const { data, error } = await supabase
-    .from("community_bookmarks")
-    .select("source_user_id, source_recipe_id")
-    .eq("user_id", authUser.id);
-
-  if (error) {
-    console.warn("내빵니빵 북마크를 읽지 못했습니다.", error.message);
-    return [];
-  }
-
-  return (data || []).map(row => `${row.source_user_id}:${Number(row.source_recipe_id)}`);
-}
-
-async function loadSupabaseCommunitySaveCounts() {
-  if (!supabase) return {};
-
-  const { data, error } = await supabase.rpc("get_community_save_counts");
-
-  if (error) {
-    console.warn("내빵니빵 저장 횟수를 읽지 못했습니다.", error.message);
-    return {};
-  }
-
-  return (data || []).reduce((counts, row) => {
-    counts[`${row.source_user_id}:${Number(row.source_recipe_id)}`] = Number(row.save_count) || 0;
-    return counts;
-  }, {});
 }
 
 async function loadSupabaseAnnouncements() {
@@ -727,9 +689,6 @@ async function getSupabaseAuthUser(session) {
 export default function Home() {
   const [view, setView] = useState("calc");
   const [recipes, setRecipes] = useState([]);
-  const [communityRecipes, setCommunityRecipes] = useState([]);
-  const [communityBookmarks, setCommunityBookmarks] = useState([]);
-  const [communitySaveCounts, setCommunitySaveCounts] = useState({});
   const [announcements, setAnnouncements] = useState([]);
   const [announcementReads, setAnnouncementReads] = useState([]);
   const [costItems, setCostItems] = useState([]);
@@ -754,6 +713,7 @@ export default function Home() {
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
   const refreshInFlightRef = useRef(false);
+  const calculatorStateStorageKey = getCalculatorStateStorageKey(authUser);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
   const unreadAnnouncementCount = useMemo(() => {
@@ -866,9 +826,6 @@ export default function Home() {
 
       if (!authUser) {
         setRecipes([]);
-        setCommunityRecipes([]);
-        setCommunityBookmarks([]);
-        setCommunitySaveCounts({});
         setAnnouncements([]);
         setAnnouncementReads([]);
         setCostItems([]);
@@ -893,27 +850,18 @@ export default function Home() {
           try {
             const [
               remoteRecipes,
-              remoteCommunityRecipes,
               remoteCostItems,
               remoteTempLogs,
-              remoteCommunityBookmarks,
-              remoteCommunitySaveCounts,
               remoteAnnouncements,
               remoteAnnouncementReads,
             ] = await Promise.all([
               loadSupabaseRecipes(authUser),
-              loadSupabaseCommunityRecipes(),
               loadSupabaseCostItems(),
               loadSupabaseTempLogs(),
-              loadSupabaseCommunityBookmarks(authUser),
-              loadSupabaseCommunitySaveCounts(),
               loadSupabaseAnnouncements(),
               loadSupabaseAnnouncementReads(authUser),
             ]);
 
-            setCommunityRecipes(remoteCommunityRecipes);
-            setCommunityBookmarks(remoteCommunityBookmarks);
-            setCommunitySaveCounts(remoteCommunitySaveCounts);
             setAnnouncements(remoteAnnouncements);
             setAnnouncementReads(remoteAnnouncementReads);
 
@@ -974,9 +922,6 @@ export default function Home() {
         if (!isMounted) return;
         console.warn("사용자별 앱 데이터를 읽는 중 오류가 발생했습니다.", e?.message || e);
         setRecipes([]);
-        setCommunityRecipes([]);
-        setCommunityBookmarks([]);
-        setCommunitySaveCounts({});
         setAnnouncements([]);
         setAnnouncementReads([]);
         setCostItems([]);
@@ -1081,20 +1026,14 @@ export default function Home() {
     try {
       const [
         remoteRecipes,
-        remoteCommunityRecipes,
         remoteCostItems,
         remoteTempLogs,
-        remoteCommunityBookmarks,
-        remoteCommunitySaveCounts,
         remoteAnnouncements,
         remoteAnnouncementReads,
       ] = await Promise.all([
         loadSupabaseRecipes(authUser),
-        loadSupabaseCommunityRecipes(),
         loadSupabaseCostItems(),
         loadSupabaseTempLogs(),
-        loadSupabaseCommunityBookmarks(authUser),
-        loadSupabaseCommunitySaveCounts(),
         loadSupabaseAnnouncements(),
         loadSupabaseAnnouncementReads(authUser),
       ]);
@@ -1131,9 +1070,6 @@ export default function Home() {
         deletedTempLogIds,
         { remoteMissingDeletesSeen: true },
       ));
-      setCommunityRecipes(remoteCommunityRecipes);
-      setCommunityBookmarks(remoteCommunityBookmarks);
-      setCommunitySaveCounts(remoteCommunitySaveCounts);
       setAnnouncements(remoteAnnouncements);
       setAnnouncementReads(remoteAnnouncementReads);
     } catch (error) {
@@ -1181,22 +1117,6 @@ export default function Home() {
     });
   }, [authUser]);
 
-  const requireOnlineFeature = async () => {
-    if (!navigator.onLine) throw new Error(t("communityOnlineRequired"));
-
-    try {
-      const response = await fetch("/api/connectivity", {
-        method: "POST",
-        cache: "no-store",
-      });
-
-      if (!response.ok) throw new Error(t("communityOnlineRequired"));
-    } catch {
-      setIsOnline(false);
-      throw new Error(t("communityOnlineRequired"));
-    }
-  };
-
   const markAnnouncementsAsRead = useCallback(async (announcementIds) => {
     if (!supabase || !authUser || authUser.isOfflineMode || !navigator.onLine || announcementIds.length === 0) return;
 
@@ -1231,215 +1151,6 @@ export default function Home() {
       .map(announcement => announcement.id);
 
     markAnnouncementsAsRead(unreadIds);
-  };
-
-  const toggleRecipeCommunityVisibility = async (recipeId, nextIsPublic) => {
-    await requireOnlineFeature();
-    if (!supabase || !authUser) throw new Error(t("supabaseClientMissing"));
-
-    const currentRecipe = recipes.find(recipe => recipe.id === recipeId);
-    if (!currentRecipe) throw new Error(t("communityVisibilitySaveFailed"));
-
-    const nextRecipe = {
-      ...currentRecipe,
-      isPublic: nextIsPublic,
-      publishedAt: nextIsPublic ? currentRecipe.publishedAt || new Date().toISOString() : currentRecipe.publishedAt,
-      authorDisplayName: nextIsPublic ? currentRecipe.authorDisplayName || authUser.displayName || "" : currentRecipe.authorDisplayName || "",
-    };
-    const { error } = await supabase
-      .from("recipes")
-      .upsert(recipeToSupabaseRow(authUser, nextRecipe), { onConflict: "user_id,id" });
-
-    if (error) throw error;
-
-    recipesSnapshotRef.current = recipesSnapshotRef.current.map(recipe => (
-      recipe.id === recipeId ? nextRecipe : recipe
-    ));
-    setRecipes(prev => prev.map(recipe => (
-      recipe.id === recipeId ? nextRecipe : recipe
-    )));
-  };
-
-  const visibleCommunityRecipes = useMemo(() => {
-    const ownPublicRecipes = recipes
-      .filter(recipe => recipe.isPublic)
-      .map(recipe => ({
-        ...recipe,
-        ownerUserId: recipe.ownerUserId || authUser?.id,
-        authorDisplayName: recipe.authorDisplayName || authUser?.displayName || "",
-      }));
-    const remotePublicRecipes = communityRecipes.filter(recipe => recipe.ownerUserId !== authUser?.id);
-
-    return [...ownPublicRecipes, ...remotePublicRecipes];
-  }, [authUser?.displayName, authUser?.id, communityRecipes, recipes]);
-
-  const refreshCommunitySaveCounts = async () => {
-    const nextCounts = await loadSupabaseCommunitySaveCounts();
-    setCommunitySaveCounts(nextCounts);
-  };
-
-  const recordCommunitySave = async (recipe) => {
-    if (!supabase || !authUser || !recipe?.ownerUserId || recipe.ownerUserId === authUser.id) return;
-
-    const { error } = await supabase
-      .rpc("record_community_save", {
-        p_source_user_id: recipe.ownerUserId,
-        p_source_recipe_id: normalizeRecipeId(recipe),
-      });
-
-    if (error) {
-      console.warn("내빵니빵 저장 횟수를 기록하지 못했습니다.", error.message);
-      return;
-    }
-
-    const recipeKey = getCommunityRecipeKey(recipe);
-    setCommunitySaveCounts(prev => ({
-      ...prev,
-      [recipeKey]: (prev[recipeKey] || 0) + 1,
-    }));
-    await refreshCommunitySaveCounts();
-  };
-
-  const toggleCommunityBookmark = async (recipe) => {
-    try {
-      await requireOnlineFeature();
-    } catch {
-      alert(t("communityOnlineRequired"));
-      return false;
-    }
-
-    if (!supabase || !authUser) return false;
-
-    const recipeKey = getCommunityRecipeKey(recipe);
-    const isBookmarked = communityBookmarks.includes(recipeKey);
-    const nextBookmarks = isBookmarked
-      ? communityBookmarks.filter(key => key !== recipeKey)
-      : [...communityBookmarks, recipeKey];
-
-    setCommunityBookmarks(nextBookmarks);
-
-    const request = isBookmarked
-      ? supabase
-        .from("community_bookmarks")
-        .delete()
-        .eq("source_user_id", recipe.ownerUserId)
-        .eq("source_recipe_id", normalizeRecipeId(recipe))
-        .eq("user_id", authUser.id)
-      : supabase
-        .from("community_bookmarks")
-        .insert({
-          source_user_id: recipe.ownerUserId,
-          source_recipe_id: normalizeRecipeId(recipe),
-          user_id: authUser.id,
-        });
-
-    const { error } = await request;
-
-    if (error) {
-      setCommunityBookmarks(communityBookmarks);
-      console.warn("내빵니빵 북마크를 저장하지 못했습니다.", error.message);
-      alert(t("communityBookmarkSaveFailed"));
-      return false;
-    }
-
-    return true;
-  };
-
-  const copyCommunityImage = async (recipe) => {
-    if (!recipe.communityImageKey || !supabase) {
-      return {
-        communityImage: recipe.communityImage?.startsWith("data:image/") ? recipe.communityImage : "",
-        communityImageKey: recipe.communityImageKey || "",
-      };
-    }
-
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) throw sessionError;
-
-    const accessToken = sessionData.session?.access_token;
-    if (!accessToken) throw new Error("Login session is missing.");
-
-    const response = await fetch("/api/r2/copy", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        sourceKey: recipe.communityImageKey,
-      }),
-    });
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.error || "Image copy failed.");
-    }
-
-    return {
-      communityImage: "",
-      communityImageKey: result.key,
-    };
-  };
-
-  const saveCommunityRecipeToDb = async (recipe) => {
-    try {
-      await requireOnlineFeature();
-    } catch {
-      alert(t("communityOnlineRequired"));
-      return false;
-    }
-
-    const copiedImage = await copyCommunityImage(recipe);
-
-    updateRecipes(prev => {
-      const numericIds = prev.map(item => Number(item.id)).filter(Number.isFinite);
-      const nextId = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
-
-      return [
-        ...prev,
-        {
-          ...recipe,
-          ...copiedImage,
-          id: nextId,
-          ownerUserId: authUser?.id,
-          productName: `${recipe.productName} ${t("communityCopySuffix")}`,
-          isPublic: false,
-          publishedAt: "",
-          sourceRecipeId: recipe.sourceRecipeId || recipe.id,
-          sourceUserId: recipe.ownerUserId || "",
-          sourceAuthorDisplayName: recipe.authorDisplayName || "",
-          savedFromCommunityAt: recipe.publishedAt || "",
-        },
-      ];
-    });
-
-    await recordCommunitySave(recipe);
-
-    return true;
-  };
-
-  const updatePublicDisplayName = async (displayName) => {
-    await requireOnlineFeature();
-    if (!supabase || !authUser) throw new Error(t("supabaseClientMissing"));
-
-    const normalizedDisplayName = displayName.trim();
-    const { error } = await supabase
-      .rpc("update_public_display_name", { public_display_name: normalizedDisplayName });
-
-    if (error) throw error;
-
-    setAuthUser(prev => {
-      if (!prev) return prev;
-      const nextUser = { ...prev, displayName: normalizedDisplayName };
-      writeOfflineUser(nextUser);
-      return nextUser;
-    });
-
-    updateRecipes(prev => prev.map(recipe => (
-      recipe.isPublic
-        ? { ...recipe, authorDisplayName: normalizedDisplayName }
-        : recipe
-    )));
   };
 
   const updateCostItems = useCallback((nextCostItemsOrUpdater) => {
@@ -1632,6 +1343,7 @@ export default function Home() {
     if (authUser?.id) {
       removeOfflineUser(authUser.id);
     }
+    clearCalculatorState(authUser);
     clearUserData(authUser);
     clearAuthenticatedAppState();
   };
@@ -1695,7 +1407,6 @@ export default function Home() {
           <NavButton active={view === "db"} onClick={() => moveToView("db")}>{t("navRecipeDb")}</NavButton>
           <NavButton active={view === "cost_db"} onClick={() => moveToView("cost_db")}>{t("navCostDb")}</NavButton>
           <NavButton active={view === "temp_db"} onClick={() => moveToView("temp_db")}>{t("navTempPh")}</NavButton>
-          {!isLimitedOfflineMode && <NavButton active={view === "community"} onClick={() => moveToView("community")}>{t("navCommunity")}</NavButton>}
           {!isLimitedOfflineMode && <NavButton active={view === "videos"} onClick={() => moveToView("videos")}>{t("navVideos")}</NavButton>}
           {!isLimitedOfflineMode && isAdmin && <NavButton active={view === "admin"} onClick={() => moveToView("admin")}>{t("navAdmin")}</NavButton>}
           {!isLimitedOfflineMode && <NavButton active={view === "settings"} onClick={() => moveToView("settings")}>{unreadAnnouncementCount > 0 ? t("navSettingsUnread") : t("navSettings")}</NavButton>}
@@ -1722,23 +1433,13 @@ export default function Home() {
       </nav>
 
       <div className="py-4 md:py-8 print:py-0">
-        {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} />}
-        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} isOnline={isOnline} isMediaDisabled={isLimitedOfflineMode} onRequireOnline={requireOnlineFeature} onToggleCommunityVisibility={toggleRecipeCommunityVisibility} />}
-        {view === "community" && (
-          <MyBreadYourBread
-            t={t}
-            recipes={visibleCommunityRecipes}
-            bookmarkedRecipeKeys={communityBookmarks}
-            saveCounts={communitySaveCounts}
-            onSaveCommunityRecipe={saveCommunityRecipeToDb}
-            onToggleBookmark={toggleCommunityBookmark}
-          />
-        )}
+        {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} stateStorageKey={calculatorStateStorageKey} />}
+        {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} onAnnouncementsChange={setAnnouncements} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} onUpdateDisplayName={updatePublicDisplayName} onSignOut={handleSignOut} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -2238,32 +1939,8 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], onUpdateDisplayName, onSignOut }) {
-  const [displayName, setDisplayName] = useState(authUser.displayName || "");
-  const [displayNameStatus, setDisplayNameStatus] = useState("");
-  const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], onSignOut }) {
   const readAnnouncementIds = useMemo(() => new Set(announcementReads.map(read => Number(read.announcement_id))), [announcementReads]);
-
-  const saveDisplayName = async (event) => {
-    event.preventDefault();
-    setDisplayNameStatus("");
-
-    const normalizedDisplayName = displayName.trim();
-    if (normalizedDisplayName.length > 24) {
-      setDisplayNameStatus(t("publicDisplayNameTooLong"));
-      return;
-    }
-
-    setIsSavingDisplayName(true);
-    try {
-      await onUpdateDisplayName(normalizedDisplayName);
-      setDisplayNameStatus(t("publicDisplayNameSaved"));
-    } catch {
-      setDisplayNameStatus(t("publicDisplayNameSaveFailed"));
-    } finally {
-      setIsSavingDisplayName(false);
-    }
-  };
 
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-8 text-black">
@@ -2318,35 +1995,6 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
             ))}
           </select>
         </div>
-      </section>
-
-      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
-        <form onSubmit={saveDisplayName} className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto] md:items-end">
-          <div>
-            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("publicDisplayName")}</div>
-            <p className="mt-2 text-xs font-bold leading-5 text-gray-400">{t("publicDisplayNameDescription")}</p>
-            <input
-              type="text"
-              value={displayName}
-              onChange={event => setDisplayName(event.target.value)}
-              maxLength={24}
-              className="mt-3 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-3 text-sm font-black outline-none focus:border-black"
-              placeholder={t("anonymousBaker")}
-            />
-            {displayNameStatus && (
-              <p className={`mt-2 text-xs font-bold ${displayNameStatus === t("publicDisplayNameSaved") ? "text-green-600" : "text-red-500"}`}>
-                {displayNameStatus}
-              </p>
-            )}
-          </div>
-          <button
-            type="submit"
-            disabled={isSavingDisplayName}
-            className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:opacity-60"
-          >
-            {isSavingDisplayName ? t("saving") : t("save")}
-          </button>
-        </form>
       </section>
 
       <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
