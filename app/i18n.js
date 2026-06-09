@@ -44,7 +44,7 @@ export const translations = {
     cancel: "취소",
     confirm: "확인",
     loginGreeting: "빵쟁이들 안녕?",
-    signIn: "시작하기",
+    signIn: "오늘 칠 거 많아?",
     googleStart: "Google로 시작하기",
     googleLoading: "Google 로그인 버튼을 불러오는 중입니다.",
     googleLoginError: "Google 로그인을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
