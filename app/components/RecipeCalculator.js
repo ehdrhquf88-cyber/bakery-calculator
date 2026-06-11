@@ -30,6 +30,7 @@ const getRecipeTotalPercent = (ingredients = []) => {
 };
 
 const createAutoCalcRow = () => ({ grams: "", count: "" });
+const createPercentCalcState = () => ({ basis: "flour", value: "" });
 const DEFAULT_PRINT_SECTIONS = { summary: true, prefermentYield: true, cost: true };
 const DEFAULT_PRINT_MULTIPLIERS = ["1", "", "", ""];
 
@@ -68,8 +69,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const [productPrice, setProductPrice] = useState(restoredState.productPrice || "");
   const [printSections, setPrintSections] = useState(restoredState.printSections || DEFAULT_PRINT_SECTIONS);
   const [autoCalcByRecipeId, setAutoCalcByRecipeId] = useState(restoredState.autoCalcByRecipeId || {});
-  const [percentCalcBasis, setPercentCalcBasis] = useState(restoredState.percentCalcBasis || "flour");
-  const [percentCalcValue, setPercentCalcValue] = useState(restoredState.percentCalcValue || "");
+  const [percentCalcByRecipeId, setPercentCalcByRecipeId] = useState(restoredState.percentCalcByRecipeId || {});
 
   // 프린트 배수 모달 상태 추가
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -98,6 +98,9 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const autoCalcRows = useMemo(() => {
     return autoCalcByRecipeId[autoCalcRecipeKey] || [createAutoCalcRow()];
   }, [autoCalcByRecipeId, autoCalcRecipeKey]);
+  const percentCalc = useMemo(() => {
+    return percentCalcByRecipeId[autoCalcRecipeKey] || createPercentCalcState();
+  }, [autoCalcRecipeKey, percentCalcByRecipeId]);
   const autoCalcTotal = useMemo(() => {
     return autoCalcRows.reduce((sum, row) => sum + (parseDecimal(row.grams) * parseDecimal(row.count)), 0);
   }, [autoCalcRows]);
@@ -116,8 +119,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
       productPrice,
       printSections,
       autoCalcByRecipeId,
-      percentCalcBasis,
-      percentCalcValue,
+      percentCalcByRecipeId,
       printMultipliers,
     });
   }, [
@@ -127,8 +129,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     flourMultiplier,
     flourWeight,
     memo,
-    percentCalcBasis,
-    percentCalcValue,
+    percentCalcByRecipeId,
     pfYields,
     printMultipliers,
     printSections,
@@ -230,13 +231,13 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   }, [currentRecipe, pfYields, flourWeight, getIngredientUnitCost]);
 
   const percentCalcBasisAmount = useMemo(() => {
-    if (percentCalcBasis === "water") return totals.waterWeight;
-    if (percentCalcBasis === "dough") return parseDecimal(totalDough);
+    if (percentCalc.basis === "water") return totals.waterWeight;
+    if (percentCalc.basis === "dough") return parseDecimal(totalDough);
     return parseDecimal(flourWeight);
-  }, [flourWeight, percentCalcBasis, totalDough, totals.waterWeight]);
+  }, [flourWeight, percentCalc.basis, totalDough, totals.waterWeight]);
   const percentCalcResult = useMemo(() => {
-    return percentCalcBasisAmount * (parseDecimal(percentCalcValue) / 100);
-  }, [percentCalcBasisAmount, percentCalcValue]);
+    return percentCalcBasisAmount * (parseDecimal(percentCalc.value) / 100);
+  }, [percentCalcBasisAmount, percentCalc.value]);
 
   const ingredientCosts = useMemo(() => {
     if (!currentRecipe) return [];
@@ -378,6 +379,22 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
       return {
         ...prev,
         [autoCalcRecipeKey]: nextRows.length > 0 ? nextRows : [createAutoCalcRow()],
+      };
+    });
+  };
+
+  const updatePercentCalc = (field, value) => {
+    if (!autoCalcRecipeKey) return;
+    const nextValue = field === "value" ? value.replace(',', '.') : value;
+
+    setPercentCalcByRecipeId(prev => {
+      const currentState = prev[autoCalcRecipeKey] || createPercentCalcState();
+      return {
+        ...prev,
+        [autoCalcRecipeKey]: {
+          ...currentState,
+          [field]: nextValue,
+        },
       };
     });
   };
@@ -617,16 +634,16 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
                     <span className="font-black uppercase tracking-tight">{t("autoCalcTotal")}</span>
                     <span className="font-mono font-black">{formatAutoCalcGrams(autoCalcTotal)}</span>
                   </div>
-                  <div className="mt-4 border-t border-black/10 pt-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="text-xs font-black uppercase tracking-tight">{t("percentCalculator")}</span>
+                  <div className="mt-5">
+                    <div className="mb-4 flex items-center justify-between border-b-2 border-black pb-2">
+                      <h3 className="text-xl md:text-2xl font-black tracking-tighter uppercase">{t("percentCalculator")}</h3>
                       <span className="font-mono text-[10px] font-black text-gray-400">{formatAutoCalcGrams(percentCalcBasisAmount)}</span>
                     </div>
                     <div className="grid grid-cols-[1fr_96px] gap-2">
                       <InputField label={t("percentCalcBasis")}>
                         <select
-                          value={percentCalcBasis}
-                          onChange={(e) => setPercentCalcBasis(e.target.value)}
+                          value={percentCalc.basis}
+                          onChange={(e) => updatePercentCalc("basis", e.target.value)}
                           className="w-full border-b border-black/20 bg-transparent pb-1 text-xs font-black outline-none focus:border-black"
                         >
                           <option value="flour">{t("percentCalcFlour")}</option>
@@ -639,8 +656,8 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
                           <input
                             type="text"
                             inputMode="decimal"
-                            value={percentCalcValue}
-                            onChange={(e) => setPercentCalcValue(e.target.value.replace(',', '.'))}
+                            value={percentCalc.value}
+                            onChange={(e) => updatePercentCalc("value", e.target.value)}
                             className="w-full bg-transparent pb-1 text-right font-mono text-sm font-bold outline-none"
                             placeholder="0"
                           />
