@@ -68,6 +68,8 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const [productPrice, setProductPrice] = useState(restoredState.productPrice || "");
   const [printSections, setPrintSections] = useState(restoredState.printSections || DEFAULT_PRINT_SECTIONS);
   const [autoCalcByRecipeId, setAutoCalcByRecipeId] = useState(restoredState.autoCalcByRecipeId || {});
+  const [percentCalcBasis, setPercentCalcBasis] = useState(restoredState.percentCalcBasis || "flour");
+  const [percentCalcValue, setPercentCalcValue] = useState(restoredState.percentCalcValue || "");
 
   // 프린트 배수 모달 상태 추가
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -114,6 +116,8 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
       productPrice,
       printSections,
       autoCalcByRecipeId,
+      percentCalcBasis,
+      percentCalcValue,
       printMultipliers,
     });
   }, [
@@ -123,6 +127,8 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     flourMultiplier,
     flourWeight,
     memo,
+    percentCalcBasis,
+    percentCalcValue,
     pfYields,
     printMultipliers,
     printSections,
@@ -179,7 +185,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   }, [currentRecipe, selectedRecipeId, setRecipes, syncWeightsToTotalPercent]);
 
   const totals = useMemo(() => {
-    if (!currentRecipe) return { totalPercent: 0, totalSaltPercent: "0.00", finalYield: 0, totalCost: 0, baseTotalDough: 0 };
+    if (!currentRecipe) return { totalPercent: 0, totalSaltPercent: "0.00", finalYield: 0, totalCost: 0, baseTotalDough: 0, waterWeight: 0 };
     let totalFlourPct = 0; 
     let totalWaterPct = 0; 
     let totalSaltPct = 0; 
@@ -204,6 +210,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     const finalYield = totalFlourPct > 0 ? (totalWaterPct / totalFlourPct) * 100 : 0;
     
     const parsedFlourWeight = parseDecimal(flourWeight);
+    const waterWeight = parsedFlourWeight * (totalWaterPct / 100);
     const cost = currentRecipe.ingredients.reduce((sum, ing) => {
         const pctVal = parseDecimal(ing.percent);
         const weight = parsedFlourWeight * (pctVal / 100);
@@ -217,9 +224,19 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
       totalSaltPercent: isNaN(realSaltPercent) ? "0.00" : realSaltPercent.toFixed(2), 
       finalYield: isNaN(finalYield) ? 0 : finalYield, 
       totalCost: isNaN(cost) ? 0 : cost, 
-      baseTotalDough 
+      baseTotalDough,
+      waterWeight: isNaN(waterWeight) ? 0 : waterWeight,
     };
   }, [currentRecipe, pfYields, flourWeight, getIngredientUnitCost]);
+
+  const percentCalcBasisAmount = useMemo(() => {
+    if (percentCalcBasis === "water") return totals.waterWeight;
+    if (percentCalcBasis === "dough") return parseDecimal(totalDough);
+    return parseDecimal(flourWeight);
+  }, [flourWeight, percentCalcBasis, totalDough, totals.waterWeight]);
+  const percentCalcResult = useMemo(() => {
+    return percentCalcBasisAmount * (parseDecimal(percentCalcValue) / 100);
+  }, [percentCalcBasisAmount, percentCalcValue]);
 
   const ingredientCosts = useMemo(() => {
     if (!currentRecipe) return [];
@@ -599,6 +616,42 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
                   <div className="mt-4 flex justify-between border-t-2 border-black pt-3 text-sm">
                     <span className="font-black uppercase tracking-tight">{t("autoCalcTotal")}</span>
                     <span className="font-mono font-black">{formatAutoCalcGrams(autoCalcTotal)}</span>
+                  </div>
+                  <div className="mt-4 border-t border-black/10 pt-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <span className="text-xs font-black uppercase tracking-tight">{t("percentCalculator")}</span>
+                      <span className="font-mono text-[10px] font-black text-gray-400">{formatAutoCalcGrams(percentCalcBasisAmount)}</span>
+                    </div>
+                    <div className="grid grid-cols-[1fr_96px] gap-2">
+                      <InputField label={t("percentCalcBasis")}>
+                        <select
+                          value={percentCalcBasis}
+                          onChange={(e) => setPercentCalcBasis(e.target.value)}
+                          className="w-full border-b border-black/20 bg-transparent pb-1 text-xs font-black outline-none focus:border-black"
+                        >
+                          <option value="flour">{t("percentCalcFlour")}</option>
+                          <option value="water">{t("percentCalcWater")}</option>
+                          <option value="dough">{t("percentCalcDough")}</option>
+                        </select>
+                      </InputField>
+                      <InputField label="%">
+                        <div className="flex items-end gap-1 border-b border-black/20 focus-within:border-black transition-colors">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={percentCalcValue}
+                            onChange={(e) => setPercentCalcValue(e.target.value.replace(',', '.'))}
+                            className="w-full bg-transparent pb-1 text-right font-mono text-sm font-bold outline-none"
+                            placeholder="0"
+                          />
+                          <span className="pb-1 text-[10px] font-black text-gray-400">%</span>
+                        </div>
+                      </InputField>
+                    </div>
+                    <div className="mt-3 flex justify-between rounded-xl bg-[#f7f6f3] px-4 py-3 text-sm">
+                      <span className="font-black uppercase tracking-tight">{t("percentCalcResult")}</span>
+                      <span className="font-mono font-black">{formatAutoCalcGrams(percentCalcResult)}</span>
+                    </div>
                   </div>
                 </SummaryCard>
               )}
