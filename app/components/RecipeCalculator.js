@@ -30,7 +30,7 @@ const getRecipeTotalPercent = (ingredients = []) => {
 };
 
 const createAutoCalcRow = () => ({ grams: "", count: "" });
-const createPercentCalcState = () => ({ basis: "flour", value: "" });
+const createPercentCalcState = () => ({ basis: "flour", value: "", customAmount: "" });
 const DEFAULT_PRINT_SECTIONS = { summary: true, prefermentYield: true, cost: true };
 const DEFAULT_PRINT_MULTIPLIERS = ["1", "", "", ""];
 
@@ -233,8 +233,9 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const percentCalcBasisAmount = useMemo(() => {
     if (percentCalc.basis === "water") return totals.waterWeight;
     if (percentCalc.basis === "dough") return parseDecimal(totalDough);
+    if (percentCalc.basis === "custom") return parseDecimal(percentCalc.customAmount);
     return parseDecimal(flourWeight);
-  }, [flourWeight, percentCalc.basis, totalDough, totals.waterWeight]);
+  }, [flourWeight, percentCalc.basis, percentCalc.customAmount, totalDough, totals.waterWeight]);
   const percentCalcResult = useMemo(() => {
     return percentCalcBasisAmount * (parseDecimal(percentCalc.value) / 100);
   }, [percentCalcBasisAmount, percentCalc.value]);
@@ -385,7 +386,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
 
   const updatePercentCalc = (field, value) => {
     if (!autoCalcRecipeKey) return;
-    const nextValue = field === "value" ? value.replace(',', '.') : value;
+    const nextValue = field === "value" || field === "customAmount" ? value.replace(',', '.') : value;
 
     setPercentCalcByRecipeId(prev => {
       const currentState = prev[autoCalcRecipeKey] || createPercentCalcState();
@@ -649,6 +650,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
                           <option value="flour">{t("percentCalcFlour")}</option>
                           <option value="water">{t("percentCalcWater")}</option>
                           <option value="dough">{t("percentCalcDough")}</option>
+                          <option value="custom">{t("percentCalcCustom")}</option>
                         </select>
                       </InputField>
                       <InputField label="%">
@@ -665,6 +667,23 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
                         </div>
                       </InputField>
                     </div>
+                    {percentCalc.basis === "custom" && (
+                      <div className="mt-3">
+                        <InputField label={t("percentCalcCustomAmount")}>
+                          <div className="flex items-end gap-1 border-b border-black/20 focus-within:border-black transition-colors">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={percentCalc.customAmount}
+                              onChange={(e) => updatePercentCalc("customAmount", e.target.value)}
+                              className="w-full bg-transparent pb-1 text-right font-mono text-sm font-bold outline-none"
+                              placeholder="0"
+                            />
+                            <span className="pb-1 text-[10px] font-black text-gray-400">g</span>
+                          </div>
+                        </InputField>
+                      </div>
+                    )}
                     <div className="mt-3 flex justify-between rounded-xl bg-[#f7f6f3] px-4 py-3 text-sm">
                       <span className="font-black uppercase tracking-tight">{t("percentCalcResult")}</span>
                       <span className="font-mono font-black">{formatAutoCalcGrams(percentCalcResult)}</span>
