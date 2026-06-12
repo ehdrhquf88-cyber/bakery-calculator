@@ -642,28 +642,32 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
                     </div>
                     <div className="space-y-3">
                       <InputField label={t("percentCalcBasis")}>
-                        <div className="grid grid-cols-2 gap-2">
-                          {[
-                            ["flour", t("percentCalcFlour")],
-                            ["water", t("percentCalcWater")],
-                            ["dough", t("percentCalcDough")],
-                            ["custom", t("percentCalcCustom")],
-                          ].map(([basis, label]) => (
-                            <button
-                              key={basis}
-                              type="button"
-                              onClick={() => updatePercentCalc("basis", basis)}
-                              className={`rounded-xl border px-3 py-2 text-xs font-black uppercase tracking-tight transition-colors ${
-                                percentCalc.basis === basis
-                                  ? "border-black bg-black text-white"
-                                  : "border-gray-200 bg-[#f7f6f3] text-gray-500 hover:border-black hover:text-black"
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
+                        <select
+                          value={percentCalc.basis}
+                          onChange={(e) => updatePercentCalc("basis", e.target.value)}
+                          className="w-full border-b border-black/20 bg-transparent pb-1 text-sm font-black outline-none focus:border-black"
+                        >
+                          <option value="flour">{t("percentCalcFlour")}</option>
+                          <option value="water">{t("percentCalcWater")}</option>
+                          <option value="dough">{t("percentCalcDough")}</option>
+                          <option value="custom">{t("percentCalcCustom")}</option>
+                        </select>
                       </InputField>
+                      {percentCalc.basis === "custom" && (
+                        <InputField label={t("percentCalcCustomAmount")}>
+                          <div className="flex items-end gap-1 border-b border-black/20 focus-within:border-black transition-colors">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={percentCalc.customAmount}
+                              onChange={(e) => updatePercentCalc("customAmount", e.target.value)}
+                              className="w-full bg-transparent pb-1 text-right font-mono text-sm font-bold outline-none"
+                              placeholder="0"
+                            />
+                            <span className="pb-1 text-[10px] font-black text-gray-400">g</span>
+                          </div>
+                        </InputField>
+                      )}
                       <InputField label="%">
                         <div className="flex items-end gap-1 border-b border-black/20 focus-within:border-black transition-colors">
                           <input
@@ -678,23 +682,6 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
                         </div>
                       </InputField>
                     </div>
-                    {percentCalc.basis === "custom" && (
-                      <div className="mt-3">
-                        <InputField label={t("percentCalcCustomAmount")}>
-                          <div className="flex items-end gap-1 border-b border-black/20 focus-within:border-black transition-colors">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={percentCalc.customAmount}
-                              onChange={(e) => updatePercentCalc("customAmount", e.target.value)}
-                              className="w-full bg-transparent pb-1 text-right font-mono text-sm font-bold outline-none"
-                              placeholder="0"
-                            />
-                            <span className="pb-1 text-[10px] font-black text-gray-400">g</span>
-                          </div>
-                        </InputField>
-                      </div>
-                    )}
                     <div className="mt-3 flex justify-between rounded-xl bg-[#f7f6f3] px-4 py-3 text-sm">
                       <span className="font-black uppercase tracking-tight">{t("percentCalcResult")}</span>
                       <span className="font-mono font-black">{formatAutoCalcGrams(percentCalcResult)}</span>
