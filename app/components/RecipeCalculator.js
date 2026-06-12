@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 
 import { InputField, SummaryCard, SummaryRow } from "./common";
 import { INGREDIENT_TYPE_LABEL_KEYS, LOG_TYPE_LABEL_KEYS, TEMP_FIELD_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
@@ -38,7 +38,7 @@ function readCalculatorState(storageKey) {
   if (!storageKey || typeof window === "undefined") return {};
 
   try {
-    const storedState = window.sessionStorage.getItem(storageKey);
+    const storedState = window.localStorage.getItem(storageKey) || window.sessionStorage.getItem(storageKey);
     return storedState ? JSON.parse(storedState) : {};
   } catch {
     return {};
@@ -49,25 +49,32 @@ function writeCalculatorState(storageKey, state) {
   if (!storageKey || typeof window === "undefined") return;
 
   try {
-    window.sessionStorage.setItem(storageKey, JSON.stringify(state));
+    window.localStorage.setItem(storageKey, JSON.stringify(state));
+    window.sessionStorage.removeItem(storageKey);
   } catch {
-    // Session storage is a convenience only; the calculator still works without it.
+    // Local storage is a convenience only; the calculator still works without it.
   }
+}
+
+function getRecipeCalculatorState(restoredState, recipeId) {
+  return restoredState.calculatorByRecipeId?.[recipeId] || {};
 }
 
 export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [], tempLogs, setTempLogs, requestSafetyCheck, stateStorageKey }) {
   const [restoredState] = useState(() => readCalculatorState(stateStorageKey));
+  const restoredRecipeState = getRecipeCalculatorState(restoredState, restoredState.selectedRecipeId || "");
   const [category, setCategory] = useState(restoredState.category || "하드계열");
   const [selectedRecipeId, setSelectedRecipeId] = useState(restoredState.selectedRecipeId || "");
-  const [totalDough, setTotalDough] = useState(restoredState.totalDough || "");
-  const [flourWeight, setFlourWeight] = useState(restoredState.flourWeight || "");
-  const [pfYields, setPfYields] = useState(restoredState.pfYields || {});
-  const [memo, setMemo] = useState(restoredState.memo || "");
-  const [doughMultiplier, setDoughMultiplier] = useState(restoredState.doughMultiplier || "1");
-  const [flourMultiplier, setFlourMultiplier] = useState(restoredState.flourMultiplier || "1");
-  const [productWeight, setProductWeight] = useState(restoredState.productWeight || "");
-  const [productPrice, setProductPrice] = useState(restoredState.productPrice || "");
+  const [totalDough, setTotalDough] = useState(restoredRecipeState.totalDough ?? restoredState.totalDough ?? "");
+  const [flourWeight, setFlourWeight] = useState(restoredRecipeState.flourWeight ?? restoredState.flourWeight ?? "");
+  const [pfYields, setPfYields] = useState(restoredRecipeState.pfYields ?? restoredState.pfYields ?? {});
+  const [memo, setMemo] = useState(restoredRecipeState.memo ?? restoredState.memo ?? "");
+  const [doughMultiplier, setDoughMultiplier] = useState(restoredRecipeState.doughMultiplier ?? restoredState.doughMultiplier ?? "1");
+  const [flourMultiplier, setFlourMultiplier] = useState(restoredRecipeState.flourMultiplier ?? restoredState.flourMultiplier ?? "1");
+  const [productWeight, setProductWeight] = useState(restoredRecipeState.productWeight ?? restoredState.productWeight ?? "");
+  const [productPrice, setProductPrice] = useState(restoredRecipeState.productPrice ?? restoredState.productPrice ?? "");
   const [printSections, setPrintSections] = useState(restoredState.printSections || DEFAULT_PRINT_SECTIONS);
+  const calculatorByRecipeIdRef = useRef(restoredState.calculatorByRecipeId || {});
   const [autoCalcByRecipeId, setAutoCalcByRecipeId] = useState(restoredState.autoCalcByRecipeId || {});
   const [percentCalcByRecipeId, setPercentCalcByRecipeId] = useState(restoredState.percentCalcByRecipeId || {});
 
@@ -106,18 +113,34 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   }, [autoCalcRows]);
 
   useEffect(() => {
+    if (selectedRecipeId && !currentRecipe) return;
+
+    if (activeSelectedRecipeId) {
+      const nextRecipeState = {
+        totalDough,
+        flourWeight,
+        pfYields,
+        memo,
+        doughMultiplier,
+        flourMultiplier,
+        productWeight,
+        productPrice,
+      };
+      const previousRecipeState = calculatorByRecipeIdRef.current[activeSelectedRecipeId];
+
+      if (JSON.stringify(previousRecipeState) !== JSON.stringify(nextRecipeState)) {
+        calculatorByRecipeIdRef.current = {
+          ...calculatorByRecipeIdRef.current,
+          [activeSelectedRecipeId]: nextRecipeState,
+        };
+      }
+    }
+
     writeCalculatorState(stateStorageKey, {
       category,
       selectedRecipeId: activeSelectedRecipeId,
-      totalDough,
-      flourWeight,
-      pfYields,
-      memo,
-      doughMultiplier,
-      flourMultiplier,
-      productWeight,
-      productPrice,
       printSections,
+      calculatorByRecipeId: calculatorByRecipeIdRef.current,
       autoCalcByRecipeId,
       percentCalcByRecipeId,
       printMultipliers,
@@ -136,6 +159,8 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     productPrice,
     productWeight,
     activeSelectedRecipeId,
+    currentRecipe,
+    selectedRecipeId,
     stateStorageKey,
     totalDough,
   ]);
@@ -317,9 +342,26 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
 
   const resetRecipeSelection = useCallback((recipeId) => {
     setSelectedRecipeId(recipeId);
+    const savedCalculatorState = calculatorByRecipeIdRef.current[recipeId];
+
+    if (savedCalculatorState) {
+      setTotalDough(savedCalculatorState.totalDough ?? "");
+      setFlourWeight(savedCalculatorState.flourWeight ?? "");
+      setPfYields(savedCalculatorState.pfYields ?? {});
+      setMemo(savedCalculatorState.memo ?? "");
+      setDoughMultiplier(savedCalculatorState.doughMultiplier ?? "1");
+      setFlourMultiplier(savedCalculatorState.flourMultiplier ?? "1");
+      setProductWeight(savedCalculatorState.productWeight ?? "");
+      setProductPrice(savedCalculatorState.productPrice ?? "");
+      return;
+    }
+
     setPfYields({});
+    setMemo("");
     setDoughMultiplier("1");
     setFlourMultiplier("1");
+    setProductWeight("");
+    setProductPrice("");
 
     const recipe = recipes.find(r => r.id === Number(recipeId));
     const rawTotalPercent = getRecipeTotalPercent(recipe?.ingredients);
