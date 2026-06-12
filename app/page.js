@@ -90,9 +90,10 @@ function clearCalculatorState(authUser) {
   if (!storageKey) return;
 
   try {
+    localStorage.removeItem(storageKey);
     sessionStorage.removeItem(storageKey);
   } catch {
-    // Session storage can be unavailable in some private browsing contexts.
+    // Browser storage can be unavailable in some private browsing contexts.
   }
 }
 
