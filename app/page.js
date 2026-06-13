@@ -23,6 +23,7 @@ const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
 const REMOTE_REFRESH_INTERVAL_MS = 15000;
 const CALCULATOR_STATE_STORAGE_PREFIX = "bakery_recipe_calculator_state";
+const RECIPE_CATEGORY_ORDER = ["하드계열", "소프트계열", "사전반죽"];
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
   costItems: "bakery_cost_items",
@@ -1934,16 +1935,45 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
+function getRecipeCategoryLabel(category, t) {
+  if (category === "하드계열") return t("hardCategory");
+  if (category === "소프트계열") return t("softCategory");
+  if (category === "사전반죽") return t("prefermentCategory");
+  return category || t("uncategorized");
+}
+
+function sortRecipesForBackup(recipes, t) {
+  return [...recipes].sort((firstRecipe, secondRecipe) => {
+    const firstCategory = firstRecipe.category || "";
+    const secondCategory = secondRecipe.category || "";
+    const firstCategoryIndex = RECIPE_CATEGORY_ORDER.indexOf(firstCategory);
+    const secondCategoryIndex = RECIPE_CATEGORY_ORDER.indexOf(secondCategory);
+    const firstRank = firstCategoryIndex === -1 ? RECIPE_CATEGORY_ORDER.length : firstCategoryIndex;
+    const secondRank = secondCategoryIndex === -1 ? RECIPE_CATEGORY_ORDER.length : secondCategoryIndex;
+
+    if (firstRank !== secondRank) return firstRank - secondRank;
+
+    const categoryCompare = getRecipeCategoryLabel(firstCategory, t).localeCompare(
+      getRecipeCategoryLabel(secondCategory, t),
+      "ko"
+    );
+    if (categoryCompare !== 0) return categoryCompare;
+
+    return String(firstRecipe.productName || "").localeCompare(String(secondRecipe.productName || ""), "ko");
+  });
+}
+
 function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], recipes = [], onSignOut }) {
   const [isRecipeExportOpen, setIsRecipeExportOpen] = useState(false);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState(() => new Set(recipes.map(recipe => Number(recipe.id))));
   const readAnnouncementIds = useMemo(() => new Set(announcementReads.map(read => Number(read.announcement_id))), [announcementReads]);
+  const sortedRecipes = useMemo(() => sortRecipesForBackup(recipes, t), [recipes, t]);
   const recipeCategories = useMemo(() => {
-    return Array.from(new Set(recipes.map(recipe => recipe.category || t("uncategorized"))));
-  }, [recipes, t]);
+    return Array.from(new Set(sortedRecipes.map(recipe => recipe.category || "")));
+  }, [sortedRecipes]);
   const selectedRecipes = useMemo(() => {
-    return recipes.filter(recipe => selectedRecipeIds.has(Number(recipe.id)));
-  }, [recipes, selectedRecipeIds]);
+    return sortedRecipes.filter(recipe => selectedRecipeIds.has(Number(recipe.id)));
+  }, [selectedRecipeIds, sortedRecipes]);
 
   const updateSelectedRecipeIds = (updater) => {
     setSelectedRecipeIds(prev => {
@@ -1960,7 +1990,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
     ));
   };
   const toggleRecipeCategory = (category) => {
-    const categoryRecipes = recipes.filter(recipe => (recipe.category || t("uncategorized")) === category);
+    const categoryRecipes = sortedRecipes.filter(recipe => (recipe.category || "") === category);
     const allSelected = categoryRecipes.every(recipe => selectedRecipeIds.has(Number(recipe.id)));
 
     updateSelectedRecipeIds(next => {
@@ -1979,12 +2009,41 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-8 text-black print:max-w-full print:px-0">
       <style jsx global>{`
+        @page {
+          size: A4;
+          margin: 12mm;
+        }
         @media print {
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+          }
           body * { visibility: hidden; }
           .recipe-backup-print, .recipe-backup-print * { visibility: visible; }
-          .recipe-backup-print { display: block !important; position: absolute; inset: 0; background: white; color: black; }
-          .recipe-backup-page { page-break-after: always; break-after: page; min-height: 100vh; padding: 24px; }
-          .recipe-backup-page:last-child { page-break-after: auto; break-after: auto; }
+          .recipe-backup-print {
+            display: block !important;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            background: white;
+            color: black;
+          }
+          .recipe-backup-page {
+            display: block;
+            box-sizing: border-box;
+            min-height: calc(297mm - 24mm);
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid;
+            break-inside: avoid-page;
+            padding: 0;
+          }
+          .recipe-backup-page:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
         }
       `}</style>
       <div className="border-b-2 border-black pb-4 mb-6">
@@ -2136,7 +2195,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
 
             <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
               {recipeCategories.map(category => {
-                const categoryRecipes = recipes.filter(recipe => (recipe.category || t("uncategorized")) === category);
+                const categoryRecipes = sortedRecipes.filter(recipe => (recipe.category || "") === category);
                 const checkedCount = categoryRecipes.filter(recipe => selectedRecipeIds.has(Number(recipe.id))).length;
 
                 return (
@@ -2146,7 +2205,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
                       onClick={() => toggleRecipeCategory(category)}
                       className="flex w-full items-center justify-between text-left"
                     >
-                      <span className="text-sm font-black tracking-tight">{category}</span>
+                      <span className="text-sm font-black tracking-tight">{getRecipeCategoryLabel(category, t)}</span>
                       <span className="font-mono text-[10px] font-black text-gray-400">{checkedCount}/{categoryRecipes.length}</span>
                     </button>
                     <div className="mt-3 space-y-2">
@@ -2194,18 +2253,18 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
         </div>
       )}
 
-      <RecipeBackupPrintDocument recipes={selectedRecipes} />
+      <RecipeBackupPrintDocument recipes={selectedRecipes} t={t} />
     </main>
   );
 }
 
-function RecipeBackupPrintDocument({ recipes }) {
+function RecipeBackupPrintDocument({ recipes, t }) {
   return (
     <div className="recipe-backup-print hidden">
       {recipes.map((recipe, index) => (
         <article key={recipe.id} className="recipe-backup-page">
           <div className="border-b-2 border-black pb-3">
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">{recipe.category}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">{getRecipeCategoryLabel(recipe.category, t)}</p>
             <h1 className="mt-1 text-3xl font-black tracking-tighter">{recipe.productName}</h1>
             <p className="mt-1 font-mono text-[10px] font-bold text-gray-400">{index + 1} / {recipes.length}</p>
           </div>
