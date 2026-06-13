@@ -1434,7 +1434,7 @@ export default function Home() {
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} onAnnouncementsChange={setAnnouncements} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} onSignOut={handleSignOut} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} recipes={recipes} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -1934,11 +1934,59 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], onSignOut }) {
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], recipes = [], onSignOut }) {
+  const [isRecipeExportOpen, setIsRecipeExportOpen] = useState(false);
+  const [selectedRecipeIds, setSelectedRecipeIds] = useState(() => new Set(recipes.map(recipe => Number(recipe.id))));
   const readAnnouncementIds = useMemo(() => new Set(announcementReads.map(read => Number(read.announcement_id))), [announcementReads]);
+  const recipeCategories = useMemo(() => {
+    return Array.from(new Set(recipes.map(recipe => recipe.category || t("uncategorized"))));
+  }, [recipes, t]);
+  const selectedRecipes = useMemo(() => {
+    return recipes.filter(recipe => selectedRecipeIds.has(Number(recipe.id)));
+  }, [recipes, selectedRecipeIds]);
+
+  const updateSelectedRecipeIds = (updater) => {
+    setSelectedRecipeIds(prev => {
+      const next = new Set(prev);
+      updater(next);
+      return next;
+    });
+  };
+  const toggleAllRecipes = () => {
+    setSelectedRecipeIds(prev => (
+      prev.size === recipes.length
+        ? new Set()
+        : new Set(recipes.map(recipe => Number(recipe.id)))
+    ));
+  };
+  const toggleRecipeCategory = (category) => {
+    const categoryRecipes = recipes.filter(recipe => (recipe.category || t("uncategorized")) === category);
+    const allSelected = categoryRecipes.every(recipe => selectedRecipeIds.has(Number(recipe.id)));
+
+    updateSelectedRecipeIds(next => {
+      categoryRecipes.forEach(recipe => {
+        const recipeId = Number(recipe.id);
+        if (allSelected) next.delete(recipeId);
+        else next.add(recipeId);
+      });
+    });
+  };
+  const printRecipeBackup = () => {
+    if (selectedRecipes.length === 0) return;
+    setTimeout(() => window.print(), 100);
+  };
 
   return (
-    <main className="max-w-3xl mx-auto px-4 md:px-8 text-black">
+    <main className="max-w-3xl mx-auto px-4 md:px-8 text-black print:max-w-full print:px-0">
+      <style jsx global>{`
+        @media print {
+          body * { visibility: hidden; }
+          .recipe-backup-print, .recipe-backup-print * { visibility: visible; }
+          .recipe-backup-print { display: block !important; position: absolute; inset: 0; background: white; color: black; }
+          .recipe-backup-page { page-break-after: always; break-after: page; min-height: 100vh; padding: 24px; }
+          .recipe-backup-page:last-child { page-break-after: auto; break-after: auto; }
+        }
+      `}</style>
       <div className="border-b-2 border-black pb-4 mb-6">
         <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">{t("settingsTitle")}</h1>
       </div>
@@ -1971,6 +2019,29 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
               );
             })
           )}
+        </div>
+      </section>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4 print:hidden">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("recipeBackupTitle")}</div>
+            <h2 className="mt-1 text-xl font-black tracking-tighter">{t("recipeBackupDescription")}</h2>
+            <p className="mt-2 text-xs font-bold text-gray-400">
+              {t("recipeBackupCount").replace("{count}", recipes.length)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedRecipeIds(new Set(recipes.map(recipe => Number(recipe.id))));
+              setIsRecipeExportOpen(true);
+            }}
+            className="bg-black text-white px-5 py-3 rounded-xl text-sm font-black uppercase tracking-tight disabled:bg-gray-300 disabled:cursor-not-allowed"
+            disabled={recipes.length === 0}
+          >
+            {t("recipeBackupOpen")}
+          </button>
         </div>
       </section>
 
@@ -2042,7 +2113,124 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
           </button>
         </div>
       </section>
+
+      {isRecipeExportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-sm p-4 print:hidden">
+          <section className="flex max-h-[86vh] w-full max-w-2xl flex-col rounded-2xl border border-black/10 bg-white p-5 text-black shadow-2xl md:p-6">
+            <div className="border-b-2 border-black pb-3">
+              <h2 className="text-2xl font-black tracking-tighter">{t("recipeBackupSelectTitle")}</h2>
+              <p className="mt-1 text-xs font-bold text-gray-400">
+                {t("recipeBackupSelectedCount").replace("{count}", selectedRecipes.length)}
+              </p>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={toggleAllRecipes}
+                className="rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-2 text-xs font-black uppercase tracking-tight hover:border-black"
+              >
+                {selectedRecipeIds.size === recipes.length ? t("recipeBackupClearAll") : t("recipeBackupSelectAll")}
+              </button>
+            </div>
+
+            <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
+              {recipeCategories.map(category => {
+                const categoryRecipes = recipes.filter(recipe => (recipe.category || t("uncategorized")) === category);
+                const checkedCount = categoryRecipes.filter(recipe => selectedRecipeIds.has(Number(recipe.id))).length;
+
+                return (
+                  <div key={category} className="rounded-xl border border-gray-100 bg-[#f7f6f3] p-4">
+                    <button
+                      type="button"
+                      onClick={() => toggleRecipeCategory(category)}
+                      className="flex w-full items-center justify-between text-left"
+                    >
+                      <span className="text-sm font-black tracking-tight">{category}</span>
+                      <span className="font-mono text-[10px] font-black text-gray-400">{checkedCount}/{categoryRecipes.length}</span>
+                    </button>
+                    <div className="mt-3 space-y-2">
+                      {categoryRecipes.map(recipe => {
+                        const recipeId = Number(recipe.id);
+                        return (
+                          <label key={recipe.id} className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 text-sm font-bold">
+                            <input
+                              type="checkbox"
+                              checked={selectedRecipeIds.has(recipeId)}
+                              onChange={() => updateSelectedRecipeIds(next => {
+                                if (next.has(recipeId)) next.delete(recipeId);
+                                else next.add(recipeId);
+                              })}
+                              className="h-4 w-4 accent-black"
+                            />
+                            <span className="min-w-0 flex-1 truncate">{recipe.productName}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsRecipeExportOpen(false)}
+                className="rounded-xl border border-gray-200 bg-white py-3 text-sm font-black uppercase tracking-tight"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={printRecipeBackup}
+                disabled={selectedRecipes.length === 0}
+                className="rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {t("recipeBackupPrint")}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      <RecipeBackupPrintDocument recipes={selectedRecipes} />
     </main>
+  );
+}
+
+function RecipeBackupPrintDocument({ recipes }) {
+  return (
+    <div className="recipe-backup-print hidden">
+      {recipes.map((recipe, index) => (
+        <article key={recipe.id} className="recipe-backup-page">
+          <div className="border-b-2 border-black pb-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">{recipe.category}</p>
+            <h1 className="mt-1 text-3xl font-black tracking-tighter">{recipe.productName}</h1>
+            <p className="mt-1 font-mono text-[10px] font-bold text-gray-400">{index + 1} / {recipes.length}</p>
+          </div>
+
+          <table className="mt-6 w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-y border-black text-[10px] uppercase tracking-widest text-gray-500">
+                <th className="py-2 text-left">TYPE</th>
+                <th className="py-2 text-left">INGREDIENT</th>
+                <th className="py-2 text-right">%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(recipe.ingredients || []).map((ingredient, ingredientIndex) => (
+                <tr key={`${ingredient.name}-${ingredientIndex}`} className="border-b border-gray-200">
+                  <td className="py-2 pr-3 text-[10px] font-bold uppercase text-gray-500">{ingredient.type}</td>
+                  <td className="py-2 pr-3 font-black">{ingredient.name}</td>
+                  <td className="py-2 text-right font-mono font-black">{ingredient.percent}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </article>
+      ))}
+    </div>
   );
 }
 
