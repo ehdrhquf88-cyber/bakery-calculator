@@ -2019,30 +2019,102 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
             padding: 0 !important;
             background: white !important;
           }
-          body * { visibility: hidden; }
-          .recipe-backup-print, .recipe-backup-print * { visibility: visible; }
+          body * {
+            visibility: hidden !important;
+          }
+          .recipe-backup-print, .recipe-backup-print * {
+            visibility: visible !important;
+          }
           .recipe-backup-print {
             display: block !important;
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
+            position: fixed;
+            inset: 0;
+            width: 186mm;
+            margin: 0 auto;
             background: white;
             color: black;
           }
           .recipe-backup-page {
             display: block;
             box-sizing: border-box;
-            min-height: calc(297mm - 24mm);
+            width: 186mm;
+            height: 273mm;
+            max-height: 273mm;
+            overflow: hidden;
+            page-break-before: always !important;
             page-break-after: always !important;
+            break-before: page !important;
             break-after: page !important;
             page-break-inside: avoid;
             break-inside: avoid-page;
             padding: 0;
           }
+          .recipe-backup-page:first-child {
+            page-break-before: auto !important;
+            break-before: auto !important;
+          }
           .recipe-backup-page:last-child {
             page-break-after: auto !important;
             break-after: auto !important;
+          }
+          .recipe-backup-header {
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+          }
+          .recipe-backup-category {
+            color: #6b7280;
+            font-size: 10px;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+          }
+          .recipe-backup-title {
+            margin-top: 4px;
+            font-size: 30px;
+            font-weight: 900;
+            letter-spacing: -0.04em;
+          }
+          .recipe-backup-index {
+            margin-top: 4px;
+            color: #9ca3af;
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: 700;
+          }
+          .recipe-backup-table {
+            border-collapse: collapse;
+            margin-top: 22px;
+            width: 100%;
+            font-size: 13px;
+          }
+          .recipe-backup-table thead tr {
+            border-bottom: 1px solid #000;
+            border-top: 1px solid #000;
+            color: #6b7280;
+            font-size: 10px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+          }
+          .recipe-backup-table th,
+          .recipe-backup-table td {
+            padding: 8px 0;
+          }
+          .recipe-backup-table tbody tr {
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .recipe-backup-type {
+            color: #6b7280;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+          }
+          .recipe-backup-name {
+            font-weight: 900;
+          }
+          .recipe-backup-percent {
+            font-family: monospace;
+            font-weight: 900;
+            text-align: right;
           }
         }
       `}</style>
@@ -2263,26 +2335,26 @@ function RecipeBackupPrintDocument({ recipes, t }) {
     <div className="recipe-backup-print hidden">
       {recipes.map((recipe, index) => (
         <article key={recipe.id} className="recipe-backup-page">
-          <div className="border-b-2 border-black pb-3">
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">{getRecipeCategoryLabel(recipe.category, t)}</p>
-            <h1 className="mt-1 text-3xl font-black tracking-tighter">{recipe.productName}</h1>
-            <p className="mt-1 font-mono text-[10px] font-bold text-gray-400">{index + 1} / {recipes.length}</p>
+          <div className="recipe-backup-header">
+            <p className="recipe-backup-category">{getRecipeCategoryLabel(recipe.category, t)}</p>
+            <h1 className="recipe-backup-title">{recipe.productName}</h1>
+            <p className="recipe-backup-index">{index + 1} / {recipes.length}</p>
           </div>
 
-          <table className="mt-6 w-full border-collapse text-sm">
+          <table className="recipe-backup-table">
             <thead>
-              <tr className="border-y border-black text-[10px] uppercase tracking-widest text-gray-500">
-                <th className="py-2 text-left">TYPE</th>
-                <th className="py-2 text-left">INGREDIENT</th>
-                <th className="py-2 text-right">%</th>
+              <tr>
+                <th style={{ textAlign: "left", width: "28%" }}>TYPE</th>
+                <th style={{ textAlign: "left" }}>INGREDIENT</th>
+                <th style={{ textAlign: "right", width: "18%" }}>%</th>
               </tr>
             </thead>
             <tbody>
               {(recipe.ingredients || []).map((ingredient, ingredientIndex) => (
-                <tr key={`${ingredient.name}-${ingredientIndex}`} className="border-b border-gray-200">
-                  <td className="py-2 pr-3 text-[10px] font-bold uppercase text-gray-500">{ingredient.type}</td>
-                  <td className="py-2 pr-3 font-black">{ingredient.name}</td>
-                  <td className="py-2 text-right font-mono font-black">{ingredient.percent}</td>
+                <tr key={`${ingredient.name}-${ingredientIndex}`}>
+                  <td className="recipe-backup-type">{ingredient.type}</td>
+                  <td className="recipe-backup-name">{ingredient.name}</td>
+                  <td className="recipe-backup-percent">{ingredient.percent}</td>
                 </tr>
               ))}
             </tbody>
