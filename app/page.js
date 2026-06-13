@@ -2032,16 +2032,16 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
           .recipe-backup-print {
             display: block !important;
             position: static !important;
-            width: 186mm;
-            margin: 0 auto;
+            width: 100%;
+            margin: 0;
             background: white;
             color: black;
           }
           .recipe-backup-page {
             display: block;
             box-sizing: border-box;
-            width: 186mm;
-            height: 273mm;
+            width: 100%;
+            min-height: 0;
             overflow: hidden;
             page-break-after: always !important;
             break-after: page !important;
