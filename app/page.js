@@ -2007,7 +2007,7 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
   };
 
   return (
-    <main className="max-w-3xl mx-auto px-4 md:px-8 text-black print:max-w-full print:px-0">
+    <main className="settings-print-root max-w-3xl mx-auto px-4 md:px-8 text-black print:max-w-full print:px-0">
       <style jsx global>{`
         @page {
           size: A4;
@@ -2019,16 +2019,19 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
             padding: 0 !important;
             background: white !important;
           }
-          body * {
-            visibility: hidden !important;
+          .settings-print-root > :not(.recipe-backup-print) {
+            display: none !important;
           }
-          .recipe-backup-print, .recipe-backup-print * {
-            visibility: visible !important;
+          .settings-print-root {
+            display: block !important;
+            margin: 0 !important;
+            max-width: none !important;
+            padding: 0 !important;
+            width: 100% !important;
           }
           .recipe-backup-print {
             display: block !important;
-            position: fixed;
-            inset: 0;
+            position: static !important;
             width: 186mm;
             margin: 0 auto;
             background: white;
@@ -2039,19 +2042,12 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
             box-sizing: border-box;
             width: 186mm;
             height: 273mm;
-            max-height: 273mm;
             overflow: hidden;
-            page-break-before: always !important;
             page-break-after: always !important;
-            break-before: page !important;
             break-after: page !important;
             page-break-inside: avoid;
             break-inside: avoid-page;
             padding: 0;
-          }
-          .recipe-backup-page:first-child {
-            page-break-before: auto !important;
-            break-before: auto !important;
           }
           .recipe-backup-page:last-child {
             page-break-after: auto !important;
