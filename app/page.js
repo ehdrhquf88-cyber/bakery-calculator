@@ -23,6 +23,7 @@ const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
 const REMOTE_REFRESH_INTERVAL_MS = 15000;
 const CALCULATOR_STATE_STORAGE_PREFIX = "bakery_recipe_calculator_state";
+const RECIPE_CATEGORY_ORDER = ["하드계열", "소프트계열", "사전반죽"];
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
   costItems: "bakery_cost_items",
@@ -1440,7 +1441,7 @@ export default function Home() {
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} onAnnouncementsChange={setAnnouncements} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} onSignOut={handleSignOut} />}
+        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} recipes={recipes} onSignOut={handleSignOut} />}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -1940,11 +1941,185 @@ function AdminUnlockModal({ t, error, onCancel, onConfirm }) {
   );
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], onSignOut }) {
+function getRecipeCategoryLabel(category, t) {
+  if (category === "하드계열") return t("hardCategory");
+  if (category === "소프트계열") return t("softCategory");
+  if (category === "사전반죽") return t("prefermentCategory");
+  return category || t("uncategorized");
+}
+
+function sortRecipesForBackup(recipes, t) {
+  return [...recipes].sort((firstRecipe, secondRecipe) => {
+    const firstCategory = firstRecipe.category || "";
+    const secondCategory = secondRecipe.category || "";
+    const firstCategoryIndex = RECIPE_CATEGORY_ORDER.indexOf(firstCategory);
+    const secondCategoryIndex = RECIPE_CATEGORY_ORDER.indexOf(secondCategory);
+    const firstRank = firstCategoryIndex === -1 ? RECIPE_CATEGORY_ORDER.length : firstCategoryIndex;
+    const secondRank = secondCategoryIndex === -1 ? RECIPE_CATEGORY_ORDER.length : secondCategoryIndex;
+
+    if (firstRank !== secondRank) return firstRank - secondRank;
+
+    const categoryCompare = getRecipeCategoryLabel(firstCategory, t).localeCompare(
+      getRecipeCategoryLabel(secondCategory, t),
+      "ko"
+    );
+    if (categoryCompare !== 0) return categoryCompare;
+
+    return String(firstRecipe.productName || "").localeCompare(String(secondRecipe.productName || ""), "ko");
+  });
+}
+
+function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], recipes = [], onSignOut }) {
+  const [isRecipeExportOpen, setIsRecipeExportOpen] = useState(false);
+  const [selectedRecipeIds, setSelectedRecipeIds] = useState(() => new Set(recipes.map(recipe => Number(recipe.id))));
   const readAnnouncementIds = useMemo(() => new Set(announcementReads.map(read => Number(read.announcement_id))), [announcementReads]);
+  const sortedRecipes = useMemo(() => sortRecipesForBackup(recipes, t), [recipes, t]);
+  const recipeCategories = useMemo(() => {
+    return Array.from(new Set(sortedRecipes.map(recipe => recipe.category || "")));
+  }, [sortedRecipes]);
+  const selectedRecipes = useMemo(() => {
+    return sortedRecipes.filter(recipe => selectedRecipeIds.has(Number(recipe.id)));
+  }, [selectedRecipeIds, sortedRecipes]);
+
+  const updateSelectedRecipeIds = (updater) => {
+    setSelectedRecipeIds(prev => {
+      const next = new Set(prev);
+      updater(next);
+      return next;
+    });
+  };
+  const toggleAllRecipes = () => {
+    setSelectedRecipeIds(prev => (
+      prev.size === recipes.length
+        ? new Set()
+        : new Set(recipes.map(recipe => Number(recipe.id)))
+    ));
+  };
+  const toggleRecipeCategory = (category) => {
+    const categoryRecipes = sortedRecipes.filter(recipe => (recipe.category || "") === category);
+    const allSelected = categoryRecipes.every(recipe => selectedRecipeIds.has(Number(recipe.id)));
+
+    updateSelectedRecipeIds(next => {
+      categoryRecipes.forEach(recipe => {
+        const recipeId = Number(recipe.id);
+        if (allSelected) next.delete(recipeId);
+        else next.add(recipeId);
+      });
+    });
+  };
+  const printRecipeBackup = () => {
+    if (selectedRecipes.length === 0) return;
+    setTimeout(() => window.print(), 100);
+  };
 
   return (
-    <main className="max-w-3xl mx-auto px-4 md:px-8 text-black">
+    <main className="settings-print-root max-w-3xl mx-auto px-4 md:px-8 text-black print:max-w-full print:px-0">
+      <style jsx global>{`
+        @page {
+          size: A4;
+          margin: 12mm;
+        }
+        @media print {
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+          }
+          .settings-print-root > :not(.recipe-backup-print) {
+            display: none !important;
+          }
+          .settings-print-root {
+            display: block !important;
+            margin: 0 !important;
+            max-width: none !important;
+            padding: 0 !important;
+            width: 100% !important;
+          }
+          .recipe-backup-print {
+            display: block !important;
+            position: static !important;
+            width: 100%;
+            margin: 0;
+            background: white;
+            color: black;
+          }
+          .recipe-backup-page {
+            display: block;
+            box-sizing: border-box;
+            width: 100%;
+            min-height: 0;
+            overflow: hidden;
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid;
+            break-inside: avoid-page;
+            padding: 0;
+          }
+          .recipe-backup-page:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
+          .recipe-backup-header {
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+          }
+          .recipe-backup-category {
+            color: #6b7280;
+            font-size: 10px;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+          }
+          .recipe-backup-title {
+            margin-top: 4px;
+            font-size: 30px;
+            font-weight: 900;
+            letter-spacing: -0.04em;
+          }
+          .recipe-backup-index {
+            margin-top: 4px;
+            color: #9ca3af;
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: 700;
+          }
+          .recipe-backup-table {
+            border-collapse: collapse;
+            margin-top: 22px;
+            width: 100%;
+            font-size: 13px;
+          }
+          .recipe-backup-table thead tr {
+            border-bottom: 1px solid #000;
+            border-top: 1px solid #000;
+            color: #6b7280;
+            font-size: 10px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+          }
+          .recipe-backup-table th,
+          .recipe-backup-table td {
+            padding: 8px 0;
+          }
+          .recipe-backup-table tbody tr {
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .recipe-backup-type {
+            color: #6b7280;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+          }
+          .recipe-backup-name {
+            font-weight: 900;
+          }
+          .recipe-backup-percent {
+            font-family: monospace;
+            font-weight: 900;
+            text-align: right;
+          }
+        }
+      `}</style>
       <div className="border-b-2 border-black pb-4 mb-6">
         <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">{t("settingsTitle")}</h1>
       </div>
@@ -1977,6 +2152,29 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
               );
             })
           )}
+        </div>
+      </section>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4 print:hidden">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("recipeBackupTitle")}</div>
+            <h2 className="mt-1 text-xl font-black tracking-tighter">{t("recipeBackupDescription")}</h2>
+            <p className="mt-2 text-xs font-bold text-gray-400">
+              {t("recipeBackupCount").replace("{count}", recipes.length)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedRecipeIds(new Set(recipes.map(recipe => Number(recipe.id))));
+              setIsRecipeExportOpen(true);
+            }}
+            className="bg-black text-white px-5 py-3 rounded-xl text-sm font-black uppercase tracking-tight disabled:bg-gray-300 disabled:cursor-not-allowed"
+            disabled={recipes.length === 0}
+          >
+            {t("recipeBackupOpen")}
+          </button>
         </div>
       </section>
 
@@ -2048,7 +2246,124 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
           </button>
         </div>
       </section>
+
+      {isRecipeExportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-sm p-4 print:hidden">
+          <section className="flex max-h-[86vh] w-full max-w-2xl flex-col rounded-2xl border border-black/10 bg-white p-5 text-black shadow-2xl md:p-6">
+            <div className="border-b-2 border-black pb-3">
+              <h2 className="text-2xl font-black tracking-tighter">{t("recipeBackupSelectTitle")}</h2>
+              <p className="mt-1 text-xs font-bold text-gray-400">
+                {t("recipeBackupSelectedCount").replace("{count}", selectedRecipes.length)}
+              </p>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={toggleAllRecipes}
+                className="rounded-xl border border-gray-200 bg-[#f7f6f3] px-4 py-2 text-xs font-black uppercase tracking-tight hover:border-black"
+              >
+                {selectedRecipeIds.size === recipes.length ? t("recipeBackupClearAll") : t("recipeBackupSelectAll")}
+              </button>
+            </div>
+
+            <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
+              {recipeCategories.map(category => {
+                const categoryRecipes = sortedRecipes.filter(recipe => (recipe.category || "") === category);
+                const checkedCount = categoryRecipes.filter(recipe => selectedRecipeIds.has(Number(recipe.id))).length;
+
+                return (
+                  <div key={category} className="rounded-xl border border-gray-100 bg-[#f7f6f3] p-4">
+                    <button
+                      type="button"
+                      onClick={() => toggleRecipeCategory(category)}
+                      className="flex w-full items-center justify-between text-left"
+                    >
+                      <span className="text-sm font-black tracking-tight">{getRecipeCategoryLabel(category, t)}</span>
+                      <span className="font-mono text-[10px] font-black text-gray-400">{checkedCount}/{categoryRecipes.length}</span>
+                    </button>
+                    <div className="mt-3 space-y-2">
+                      {categoryRecipes.map(recipe => {
+                        const recipeId = Number(recipe.id);
+                        return (
+                          <label key={recipe.id} className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 text-sm font-bold">
+                            <input
+                              type="checkbox"
+                              checked={selectedRecipeIds.has(recipeId)}
+                              onChange={() => updateSelectedRecipeIds(next => {
+                                if (next.has(recipeId)) next.delete(recipeId);
+                                else next.add(recipeId);
+                              })}
+                              className="h-4 w-4 accent-black"
+                            />
+                            <span className="min-w-0 flex-1 truncate">{recipe.productName}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsRecipeExportOpen(false)}
+                className="rounded-xl border border-gray-200 bg-white py-3 text-sm font-black uppercase tracking-tight"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={printRecipeBackup}
+                disabled={selectedRecipes.length === 0}
+                className="rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {t("recipeBackupPrint")}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      <RecipeBackupPrintDocument recipes={selectedRecipes} t={t} />
     </main>
+  );
+}
+
+function RecipeBackupPrintDocument({ recipes, t }) {
+  return (
+    <div className="recipe-backup-print hidden">
+      {recipes.map((recipe, index) => (
+        <article key={recipe.id} className="recipe-backup-page">
+          <div className="recipe-backup-header">
+            <p className="recipe-backup-category">{getRecipeCategoryLabel(recipe.category, t)}</p>
+            <h1 className="recipe-backup-title">{recipe.productName}</h1>
+            <p className="recipe-backup-index">{index + 1} / {recipes.length}</p>
+          </div>
+
+          <table className="recipe-backup-table">
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left", width: "28%" }}>TYPE</th>
+                <th style={{ textAlign: "left" }}>INGREDIENT</th>
+                <th style={{ textAlign: "right", width: "18%" }}>%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(recipe.ingredients || []).map((ingredient, ingredientIndex) => (
+                <tr key={`${ingredient.name}-${ingredientIndex}`}>
+                  <td className="recipe-backup-type">{ingredient.type}</td>
+                  <td className="recipe-backup-name">{ingredient.name}</td>
+                  <td className="recipe-backup-percent">{ingredient.percent}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </article>
+      ))}
+    </div>
   );
 }
 
