@@ -1,6 +1,6 @@
 # Supabase Auth Setup
 
-This app uses Supabase Google OAuth for login. Recipes, cost items, temp/pH logs, community data, and announcements are stored in Supabase. Recipe images are stored in Cloudflare R2 through server-side API routes.
+This app uses Supabase Google OAuth for login. Recipes, cost items, temp/pH logs, and announcements are stored in Supabase. Recipe images are stored in Cloudflare R2 through server-side API routes.
 
 Official Supabase references:
 
@@ -43,8 +43,6 @@ R2_BUCKET_NAME=YOUR_R2_BUCKET_NAME
    - `public.recipes`
    - `public.cost_items`
    - `public.temp_logs`
-   - `public.community_bookmarks`
-   - `public.community_saves`
    - `public.announcements`
    - `public.announcement_reads`
 
@@ -95,7 +93,7 @@ The SQL setup prevents removing or demoting the last existing admin profile. Cre
 - `user_id`: the Supabase Auth user id
 - `id`: the app's numeric recipe id
 - `recipe_data`: the full recipe object used by the app
-- `is_public` and `published_at`: mirror fields for publishing state
+- `is_public` and `published_at`: legacy publishing fields kept for compatibility while community sharing is disabled
 
 RLS allows authenticated `admin` or `user` profiles to select, insert, update, and delete only rows where `user_id = auth.uid()`. Existing browser-local recipes are uploaded to Supabase the first time a user opens the app and no remote recipes exist yet.
 
@@ -121,11 +119,13 @@ RLS allows authenticated `admin` or `user` profiles to select, insert, update, a
 
 ## Community And Announcements
 
-`public.community_bookmarks` stores each user's bookmarks for public recipes. `public.community_saves` stores save counts through RPC helpers, so users do not need direct table select access.
+The community feature is currently disabled. `public.community_bookmarks`, `public.community_saves`, and the community RPC helpers are kept in the schema for compatibility, but authenticated users are not granted access to them. The community tables keep explicit deny-all RLS policies so the disabled state is intentional and visible to Supabase Security Advisor.
+
+If the community feature is enabled again later, restore the relevant Data API exposure, RLS policies, and RPC execute grants deliberately.
 
 `public.announcements` stores active admin announcements. `public.announcement_reads` stores each user's read state.
 
-RLS keeps community and announcement writes tied to the authenticated user, while admin-only policies control allowlist/profile administration and announcement management.
+RLS keeps announcement writes tied to admins and read state tied to the authenticated user, while admin-only policies control allowlist/profile administration and announcement management.
 
 ## Cloudflare R2
 
@@ -147,4 +147,6 @@ Use an R2 access key scoped to the target bucket with only the object permission
 - Do not put a Supabase service role key in `NEXT_PUBLIC_*` variables or browser code.
 - Do not put Cloudflare R2 secrets in `NEXT_PUBLIC_*` variables or browser code.
 - Security definer functions use an empty `search_path` and fully-qualified table names.
+- Keep community RPC execute grants revoked while the community feature is disabled.
+- Enable leaked password protection in Supabase Auth settings to clear the dashboard security warning.
 - If you remove an existing user from the allowlist, also remove or disable the user in `Authentication > Users` when you want to block the Supabase Auth account itself, not only app/API access.

@@ -13,7 +13,7 @@ function destinationKeyFor(userId, sourceKey) {
 
 export async function POST(request) {
   try {
-    const { user, supabase, error } = await getRequestUser(request);
+    const { user, error } = await getRequestUser(request);
 
     if (error) {
       return Response.json({ error }, { status: 401 });
@@ -25,7 +25,7 @@ export async function POST(request) {
       return Response.json({ error: "Missing sourceKey" }, { status: 400 });
     }
 
-    const canRead = await canReadRecipeImage({ key: sourceKey, user, supabase });
+    const canRead = await canReadRecipeImage({ key: sourceKey, user });
 
     if (!canRead) {
       return Response.json({ error: "Forbidden" }, { status: 403 });

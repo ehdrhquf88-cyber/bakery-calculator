@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function GET(request) {
   try {
-    const { user, supabase, error } = await getRequestUser(request);
+    const { user, error } = await getRequestUser(request);
 
     if (error) {
       return Response.json({ error }, { status: 401 });
@@ -19,7 +19,7 @@ export async function GET(request) {
       return Response.json({ error: "Missing key" }, { status: 400 });
     }
 
-    const canRead = await canReadRecipeImage({ key, user, supabase });
+    const canRead = await canReadRecipeImage({ key, user });
 
     if (!canRead) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
