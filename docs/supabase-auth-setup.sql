@@ -135,10 +135,10 @@ revoke all on public.temp_logs from anon;
 grant select, insert, update, delete on public.temp_logs to authenticated;
 
 revoke all on public.community_bookmarks from anon;
-grant select, insert, delete on public.community_bookmarks to authenticated;
+revoke all on public.community_bookmarks from authenticated;
 
 revoke all on public.community_saves from anon;
-grant insert, update, delete on public.community_saves to authenticated;
+revoke all on public.community_saves from authenticated;
 
 revoke all on public.announcements from anon;
 grant select, insert, update, delete on public.announcements to authenticated;
@@ -205,10 +205,6 @@ revoke execute
   on function public.update_public_display_name(text)
   from authenticated, anon, public;
 
-grant execute
-  on function public.update_public_display_name(text)
-  to authenticated;
-
 drop function if exists public.record_community_save(uuid, bigint);
 
 create or replace function public.record_community_save(
@@ -257,10 +253,6 @@ revoke execute
   on function public.record_community_save(uuid, bigint)
   from authenticated, anon, public;
 
-grant execute
-  on function public.record_community_save(uuid, bigint)
-  to authenticated;
-
 create or replace function public.get_community_save_counts()
 returns table(source_user_id uuid, source_recipe_id bigint, save_count bigint)
 language sql
@@ -283,10 +275,6 @@ $$;
 revoke execute
   on function public.get_community_save_counts()
   from authenticated, anon, public;
-
-grant execute
-  on function public.get_community_save_counts()
-  to authenticated;
 
 create or replace function private.prevent_last_admin_role_removal()
 returns trigger
@@ -430,7 +418,7 @@ on public.profiles
 for update
 to authenticated
 using ((select private.is_admin()))
-with check (true);
+with check ((select private.is_admin()));
 
 drop policy if exists "Users can view their own recipes" on public.recipes;
 create policy "Users can view their own recipes"
@@ -443,14 +431,6 @@ using (
 );
 
 drop policy if exists "Users can view public community recipes" on public.recipes;
-create policy "Users can view public community recipes"
-on public.recipes
-for select
-to authenticated
-using (
-  is_public = true
-  and (select private.has_app_access())
-);
 
 drop policy if exists "Users can insert their own recipes" on public.recipes;
 create policy "Users can insert their own recipes"
@@ -487,83 +467,16 @@ using (
 );
 
 drop policy if exists "Users can view their own community bookmarks" on public.community_bookmarks;
-create policy "Users can view their own community bookmarks"
-on public.community_bookmarks
-for select
-to authenticated
-using (
-  user_id = (select auth.uid())
-  and (select private.has_app_access())
-);
 
 drop policy if exists "Users can insert their own community bookmarks" on public.community_bookmarks;
-create policy "Users can insert their own community bookmarks"
-on public.community_bookmarks
-for insert
-to authenticated
-with check (
-  user_id = (select auth.uid())
-  and (select private.has_app_access())
-  and exists (
-    select 1
-    from public.recipes
-    where recipes.user_id = source_user_id
-      and recipes.id = source_recipe_id
-      and recipes.is_public = true
-  )
-);
 
 drop policy if exists "Users can delete their own community bookmarks" on public.community_bookmarks;
-create policy "Users can delete their own community bookmarks"
-on public.community_bookmarks
-for delete
-to authenticated
-using (
-  user_id = (select auth.uid())
-  and (select private.has_app_access())
-);
 
 drop policy if exists "Users can insert their own community saves" on public.community_saves;
-create policy "Users can insert their own community saves"
-on public.community_saves
-for insert
-to authenticated
-with check (
-  saved_by_user_id = (select auth.uid())
-  and source_user_id <> (select auth.uid())
-  and (select private.has_app_access())
-  and exists (
-    select 1
-    from public.recipes
-    where recipes.user_id = source_user_id
-      and recipes.id = source_recipe_id
-      and recipes.is_public = true
-  )
-);
 
 drop policy if exists "Users can update their own community saves" on public.community_saves;
-create policy "Users can update their own community saves"
-on public.community_saves
-for update
-to authenticated
-using (
-  saved_by_user_id = (select auth.uid())
-  and (select private.has_app_access())
-)
-with check (
-  saved_by_user_id = (select auth.uid())
-  and (select private.has_app_access())
-);
 
 drop policy if exists "Users can delete their own community saves" on public.community_saves;
-create policy "Users can delete their own community saves"
-on public.community_saves
-for delete
-to authenticated
-using (
-  saved_by_user_id = (select auth.uid())
-  and (select private.has_app_access())
-);
 
 drop policy if exists "Users can view active announcements" on public.announcements;
 create policy "Users can view active announcements"
