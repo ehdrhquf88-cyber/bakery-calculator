@@ -119,7 +119,7 @@ RLS allows authenticated `admin` or `user` profiles to select, insert, update, a
 
 ## Community And Announcements
 
-The community feature is currently disabled. `public.community_bookmarks`, `public.community_saves`, and the community RPC helpers are kept in the schema for compatibility, but authenticated users are not granted access to them.
+The community feature is currently disabled. `public.community_bookmarks`, `public.community_saves`, and the community RPC helpers are kept in the schema for compatibility, but authenticated users are not granted access to them. The community tables keep explicit deny-all RLS policies so the disabled state is intentional and visible to Supabase Security Advisor.
 
 If the community feature is enabled again later, restore the relevant Data API exposure, RLS policies, and RPC execute grants deliberately.
 

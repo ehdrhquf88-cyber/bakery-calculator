@@ -472,11 +472,27 @@ drop policy if exists "Users can insert their own community bookmarks" on public
 
 drop policy if exists "Users can delete their own community bookmarks" on public.community_bookmarks;
 
+drop policy if exists "Community bookmarks are disabled" on public.community_bookmarks;
+create policy "Community bookmarks are disabled"
+on public.community_bookmarks
+for all
+to public
+using (false)
+with check (false);
+
 drop policy if exists "Users can insert their own community saves" on public.community_saves;
 
 drop policy if exists "Users can update their own community saves" on public.community_saves;
 
 drop policy if exists "Users can delete their own community saves" on public.community_saves;
+
+drop policy if exists "Community saves are disabled" on public.community_saves;
+create policy "Community saves are disabled"
+on public.community_saves
+for all
+to public
+using (false)
+with check (false);
 
 drop policy if exists "Users can view active announcements" on public.announcements;
 create policy "Users can view active announcements"
