@@ -20,7 +20,7 @@ function HistoryChart({ t, logs, isPreFerment }) {
     : ["르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"], [isPreFerment]);
   // 선택된 항목은 그래프에서 비교할 공정 단계입니다.
   const [selectedXField, setSelectedXField] = useState("결과"); 
-  // 사용자가 직접 선택한 비교 날짜 목록입니다. 비어 있으면 최근 2개 날짜를 기본값으로 씁니다.
+  // 사용자가 직접 선택한 비교 날짜 목록입니다. 비어 있으면 저장된 모든 날짜를 기본값으로 씁니다.
   const [selectedDates, setSelectedDates] = useState([]);
   // 달력 입력창에서 선택 중인 날짜입니다.
   const [datePickerValue, setDatePickerValue] = useState("");
@@ -36,8 +36,8 @@ function HistoryChart({ t, logs, isPreFerment }) {
     return Array.from(new Set(dates));
   }, [allTimelineLogs]);
 
-  // 직접 선택값이 없을 때만 최근 2개 날짜를 자동 비교 대상으로 잡습니다.
-  const activeSelectedDates = selectedDates.length > 0 ? selectedDates : uniqueDates.slice(-2);
+  // 직접 선택값이 없을 때만 저장된 모든 날짜를 자동 비교 대상으로 잡습니다.
+  const activeSelectedDates = selectedDates.length > 0 ? selectedDates : uniqueDates;
 
   // 달력에서 선택할 수 있는 기록 날짜 범위입니다.
   const dateBounds = useMemo(() => {
