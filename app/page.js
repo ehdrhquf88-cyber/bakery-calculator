@@ -1473,6 +1473,8 @@ function AdminPanel({ t, onAnnouncementsChange }) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("user");
   const [isSavingInvite, setIsSavingInvite] = useState(false);
+  const [isInviteSectionExpanded, setIsInviteSectionExpanded] = useState(false);
+  const [isUsersSectionExpanded, setIsUsersSectionExpanded] = useState(false);
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementBody, setAnnouncementBody] = useState("");
   const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
@@ -1778,113 +1780,150 @@ function AdminPanel({ t, onAnnouncementsChange }) {
         </div>
       </section>
 
-      <section className="mb-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm md:p-6">
-        <div className="mb-4 flex flex-col gap-1">
-          <h2 className="text-2xl font-black tracking-tighter">{t("inviteUsers")}</h2>
-          <p className="text-xs font-bold text-gray-400">{t("inviteUsersDescription")}</p>
-        </div>
+      <section className="mb-4 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <button
+          type="button"
+          onClick={() => setIsInviteSectionExpanded(prev => !prev)}
+          className="w-full p-5 text-left hover:bg-gray-50 transition-all md:p-6"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h2 className="text-2xl font-black tracking-tighter">{t("inviteUsers")}</h2>
+              <p className="mt-1 text-xs font-bold text-gray-400">{t("inviteUsersDescription")}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-3">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{allowlist.length} {t("items")}</span>
+              <span className="text-xs">{isInviteSectionExpanded ? "▲" : "▼"}</span>
+            </div>
+          </div>
+        </button>
 
-        <form onSubmit={addInvite} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_140px_120px]">
-          <input
-            type="email"
-            value={inviteEmail}
-            onChange={event => setInviteEmail(event.target.value)}
-            placeholder={t("email")}
-            className="h-11 rounded-xl border border-gray-200 bg-[#f7f6f3] px-3 text-sm font-bold outline-none"
-            required
-          />
-          <select
-            value={inviteRole}
-            onChange={event => setInviteRole(event.target.value)}
-            className="h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-black outline-none"
-          >
-            <option value="user">user</option>
-            <option value="admin">admin</option>
-          </select>
-          <button
-            type="submit"
-            disabled={isSavingInvite}
-            className="h-11 rounded-xl bg-black px-4 text-sm font-black uppercase tracking-tight text-white disabled:bg-gray-300"
-          >
-            {isSavingInvite ? t("saving") : t("add")}
-          </button>
-        </form>
+        {isInviteSectionExpanded && (
+          <div className="border-t border-gray-100 bg-[#fcfcfb] p-5 md:p-6">
+            <form onSubmit={addInvite} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_140px_120px]">
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={event => setInviteEmail(event.target.value)}
+                placeholder={t("email")}
+                className="h-11 rounded-xl border border-gray-200 bg-[#f7f6f3] px-3 text-sm font-bold outline-none"
+                required
+              />
+              <select
+                value={inviteRole}
+                onChange={event => setInviteRole(event.target.value)}
+                className="h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-black outline-none"
+              >
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+              </select>
+              <button
+                type="submit"
+                disabled={isSavingInvite}
+                className="h-11 rounded-xl bg-black px-4 text-sm font-black uppercase tracking-tight text-white disabled:bg-gray-300"
+              >
+                {isSavingInvite ? t("saving") : t("add")}
+              </button>
+            </form>
 
-        <div className="mt-5 overflow-hidden rounded-xl border border-gray-100">
-          {isLoading ? (
-            <div className="p-4 text-sm font-bold text-gray-400">{t("loading")}</div>
-          ) : allowlist.length === 0 ? (
-            <div className="p-4 text-sm font-bold text-gray-400">{t("noInvites")}</div>
-          ) : (
-            allowlist.map(invite => (
-              <div key={invite.email} className="grid grid-cols-[1fr_100px_36px] items-center gap-3 border-b border-gray-100 px-4 py-3 last:border-b-0 md:grid-cols-[1fr_120px_170px_36px]">
-                <div className="truncate text-sm font-black tracking-tight">{invite.email}</div>
-                <div className="text-xs font-black text-gray-500">{invite.role || t("roleNull")}</div>
-                <div className="hidden text-xs font-bold text-gray-400 md:block">{formatDateTime(invite.created_at)}</div>
-                <button
-                  type="button"
-                  onClick={() => removeInvite(invite.email)}
-                  className="text-sm font-black text-gray-300 hover:text-red-500"
-                  title={t("deleteInvite")}
-                >
-                  x
-                </button>
-              </div>
-            ))
-          )}
-        </div>
+            <div className="mt-5 overflow-hidden rounded-xl border border-gray-100 bg-white">
+              {isLoading ? (
+                <div className="p-4 text-sm font-bold text-gray-400">{t("loading")}</div>
+              ) : allowlist.length === 0 ? (
+                <div className="p-4 text-sm font-bold text-gray-400">{t("noInvites")}</div>
+              ) : (
+                allowlist.map(invite => (
+                  <div key={invite.email} className="grid grid-cols-[1fr_100px_36px] items-center gap-3 border-b border-gray-100 px-4 py-3 last:border-b-0 md:grid-cols-[1fr_120px_170px_36px]">
+                    <div className="truncate text-sm font-black tracking-tight">{invite.email}</div>
+                    <div className="text-xs font-black text-gray-500">{invite.role || t("roleNull")}</div>
+                    <div className="hidden text-xs font-bold text-gray-400 md:block">{formatDateTime(invite.created_at)}</div>
+                    <button
+                      type="button"
+                      onClick={() => removeInvite(invite.email)}
+                      className="text-sm font-black text-gray-300 hover:text-red-500"
+                      title={t("deleteInvite")}
+                    >
+                      x
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="grid grid-cols-[1.5fr_120px_150px] gap-3 border-b border-gray-100 bg-[#f7f6f3] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-400 md:grid-cols-[2fr_140px_180px_180px]">
-          <div>{t("user")}</div>
-          <div>{t("userRole")}</div>
-          <div>{t("joinedAt")}</div>
-          <div className="hidden md:block">{t("updatedAt")}</div>
-        </div>
-
-        {isLoading ? (
-          <div className="p-6 text-sm font-bold text-gray-400">{t("loading")}</div>
-        ) : profiles.length === 0 ? (
-          <div className="p-6 text-sm font-bold text-gray-400">{t("noUsers")}</div>
-        ) : (
-          profiles.map(profile => (
-            <div key={profile.id} className="grid grid-cols-[1.5fr_120px_150px] gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0 md:grid-cols-[2fr_140px_180px_180px]">
-              <div className="flex min-w-0 items-center gap-3">
-                {profile.avatar_url ? (
-                  <span
-                    aria-hidden="true"
-                    className="h-10 w-10 shrink-0 rounded-full bg-cover bg-center"
-                    style={{ backgroundImage: `url(${profile.avatar_url})` }}
-                  />
-                ) : (
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black text-xs font-black text-white">
-                    {profile.full_name?.[0] || profile.email?.[0] || "U"}
-                  </span>
-                )}
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-black tracking-tight">{profile.full_name || profile.email}</div>
-                  <div className="mt-1 truncate text-xs font-bold text-gray-400">{profile.email}</div>
-                </div>
-              </div>
-
-              <select
-                value={profile.role || ""}
-                onChange={event => updateProfileRole(profile.id, event.target.value)}
-                disabled={savingProfileId === profile.id}
-                className="h-10 rounded-xl border border-gray-200 bg-white px-2 text-xs font-black outline-none disabled:bg-gray-100"
-              >
-                {PROFILE_ROLES.map(role => (
-                  <option key={role || "null"} value={role}>
-                    {role || t("roleNull")}
-                  </option>
-                ))}
-              </select>
-
-              <div className="self-center text-xs font-bold text-gray-400">{formatDateTime(profile.created_at)}</div>
-              <div className="hidden self-center text-xs font-bold text-gray-400 md:block">{formatDateTime(profile.updated_at)}</div>
+        <button
+          type="button"
+          onClick={() => setIsUsersSectionExpanded(prev => !prev)}
+          className="w-full p-5 text-left hover:bg-gray-50 transition-all md:p-6"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-black tracking-tighter">{t("users")}</h2>
+              <p className="mt-1 text-xs font-bold text-gray-400">{t("userRole")}</p>
             </div>
-          ))
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{profiles.length} {t("users")}</span>
+              <span className="text-xs">{isUsersSectionExpanded ? "▲" : "▼"}</span>
+            </div>
+          </div>
+        </button>
+
+        {isUsersSectionExpanded && (
+          <div className="border-t border-gray-100">
+            <div className="grid grid-cols-[1.5fr_120px_150px] gap-3 border-b border-gray-100 bg-[#f7f6f3] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-400 md:grid-cols-[2fr_140px_180px_180px]">
+              <div>{t("user")}</div>
+              <div>{t("userRole")}</div>
+              <div>{t("joinedAt")}</div>
+              <div className="hidden md:block">{t("updatedAt")}</div>
+            </div>
+
+            {isLoading ? (
+              <div className="p-6 text-sm font-bold text-gray-400">{t("loading")}</div>
+            ) : profiles.length === 0 ? (
+              <div className="p-6 text-sm font-bold text-gray-400">{t("noUsers")}</div>
+            ) : (
+              profiles.map(profile => (
+                <div key={profile.id} className="grid grid-cols-[1.5fr_120px_150px] gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0 md:grid-cols-[2fr_140px_180px_180px]">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {profile.avatar_url ? (
+                      <span
+                        aria-hidden="true"
+                        className="h-10 w-10 shrink-0 rounded-full bg-cover bg-center"
+                        style={{ backgroundImage: `url(${profile.avatar_url})` }}
+                      />
+                    ) : (
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black text-xs font-black text-white">
+                        {profile.full_name?.[0] || profile.email?.[0] || "U"}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-black tracking-tight">{profile.full_name || profile.email}</div>
+                      <div className="mt-1 truncate text-xs font-bold text-gray-400">{profile.email}</div>
+                    </div>
+                  </div>
+
+                  <select
+                    value={profile.role || ""}
+                    onChange={event => updateProfileRole(profile.id, event.target.value)}
+                    disabled={savingProfileId === profile.id}
+                    className="h-10 rounded-xl border border-gray-200 bg-white px-2 text-xs font-black outline-none disabled:bg-gray-100"
+                  >
+                    {PROFILE_ROLES.map(role => (
+                      <option key={role || "null"} value={role}>
+                        {role || t("roleNull")}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="self-center text-xs font-bold text-gray-400">{formatDateTime(profile.created_at)}</div>
+                  <div className="hidden self-center text-xs font-bold text-gray-400 md:block">{formatDateTime(profile.updated_at)}</div>
+                </div>
+              ))
+            )}
+          </div>
         )}
       </section>
     </main>
