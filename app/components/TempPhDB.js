@@ -1,7 +1,16 @@
 import { useState, useMemo } from "react";
 
-import { LOG_TYPE_LABEL_KEYS, TEMP_FIELD_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
+import { LOG_TYPE_LABEL_KEYS, RECIPE_CATEGORY_LABEL_KEYS, TEMP_FIELD_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
+const TEMP_CATEGORY_ORDER = ["하드계열", "소프트계열", "사전반죽", "미등록"];
+
+function getTempLogCategory(log, recipeCategoryByName) {
+  if (log?.category) return log.category;
+  if (log?.type === "사전반죽 기록") return "사전반죽";
+
+  const productName = String(log?.productName || "").trim().toLowerCase();
+  return recipeCategoryByName.get(productName) || "미등록";
+}
 
 // 제품별 온도/pH 기록을 날짜 기준으로 비교하는 미니 차트 컴포넌트입니다.
 function HistoryChart({ t, logs, isPreFerment }) {
@@ -189,7 +198,7 @@ function HistoryChart({ t, logs, isPreFerment }) {
 }
 
 // 온도/pH 기록 전체를 제품별, 날짜별로 묶어 보여주는 히스토리 화면입니다.
-export default function TempPhDB({ t, tempLogs, setTempLogs }) {
+export default function TempPhDB({ t, recipes = [], tempLogs = [], setTempLogs }) {
   // 일반 반죽 기록에 표시할 공정 단계 목록입니다.
   const normalItems = ["날짜", "르방", "밀", "물", "결과", "오토리즈", "오토리즈완료", "반죽완료", "하바1", "하바2", "하바3", "하바4", "분할", "성형", "굽기"];
   // 사전반죽 기록에 표시할 항목 목록입니다.
@@ -197,6 +206,7 @@ export default function TempPhDB({ t, tempLogs, setTempLogs }) {
 
   // 검색어와 펼쳐진 제품/날짜 카드 상태입니다.
   const [searchTerm, setSearchTerm] = useState("");
+  const [expandedCategory, setExpandedCategory] = useState(null);
   const [expandedProduct, setExpandedProduct] = useState(null);
   const [expandedDate, setExpandedDate] = useState(null);
 
@@ -206,16 +216,37 @@ export default function TempPhDB({ t, tempLogs, setTempLogs }) {
   const [inlineMemo, setInlineMemo] = useState("");
   const [inlineType, setInlineType] = useState("");
 
-  // 검색어를 반영한 뒤 제품명 기준으로 로그를 그룹화합니다.
-  const groupedLogs = useMemo(() => {
+  const recipeCategoryByName = useMemo(() => {
+    return new Map(
+      recipes
+        .filter(recipe => recipe?.productName)
+        .map(recipe => [String(recipe.productName).trim().toLowerCase(), recipe.category || "미등록"])
+    );
+  }, [recipes]);
+
+  // 검색어를 반영한 뒤 카테고리, 제품명 기준으로 로그를 그룹화합니다.
+  const groupedLogsByCategory = useMemo(() => {
     const groups = {};
-    const filtered = tempLogs.filter(log => log.productName.toLowerCase().includes(searchTerm.toLowerCase()));
+    const keyword = searchTerm.toLowerCase();
+    const filtered = tempLogs.filter(log => String(log.productName || "").toLowerCase().includes(keyword));
     filtered.forEach(log => {
-      if (!groups[log.productName]) groups[log.productName] = [];
-      groups[log.productName].push(log);
+      const category = getTempLogCategory(log, recipeCategoryByName);
+      const productName = log.productName || "미등록";
+      if (!groups[category]) groups[category] = {};
+      if (!groups[category][productName]) groups[category][productName] = [];
+      groups[category][productName].push(log);
     });
     return groups;
-  }, [tempLogs, searchTerm]);
+  }, [tempLogs, searchTerm, recipeCategoryByName, t]);
+
+  const groupedCategoryEntries = useMemo(() => {
+    return Object.entries(groupedLogsByCategory).sort(([categoryA], [categoryB]) => {
+      const orderA = TEMP_CATEGORY_ORDER.includes(categoryA) ? TEMP_CATEGORY_ORDER.indexOf(categoryA) : TEMP_CATEGORY_ORDER.length;
+      const orderB = TEMP_CATEGORY_ORDER.includes(categoryB) ? TEMP_CATEGORY_ORDER.indexOf(categoryB) : TEMP_CATEGORY_ORDER.length;
+      if (orderA !== orderB) return orderA - orderB;
+      return categoryA.localeCompare(categoryB, "ko");
+    });
+  }, [groupedLogsByCategory]);
 
   // 선택한 기록 카드의 현재 값을 편집 폼에 복사합니다.
   const startInlineEdit = (log) => {
@@ -249,7 +280,35 @@ export default function TempPhDB({ t, tempLogs, setTempLogs }) {
       </div>
       
       <div className="space-y-4">
-        {Object.entries(groupedLogs).map(([productName, logs]) => {
+        {groupedCategoryEntries.map(([category, productGroups]) => {
+          const productEntries = Object.entries(productGroups).sort(([nameA], [nameB]) => nameA.localeCompare(nameB, "ko"));
+          const recordCount = productEntries.reduce((sum, [, logs]) => sum + logs.length, 0);
+          const isCategoryExpanded = expandedCategory === category;
+
+          return (
+            <div key={category} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setExpandedCategory(isCategoryExpanded ? null : category);
+                  setExpandedProduct(null);
+                  setExpandedDate(null);
+                }}
+                className="w-full p-5 flex justify-between items-center text-left hover:bg-gray-50 transition-all"
+              >
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("category")}</div>
+                  <div className="text-xl font-black tracking-tighter uppercase">{category === "미등록" ? t("uncategorized") : labelFromMap(t, RECIPE_CATEGORY_LABEL_KEYS, category)}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{recordCount} {t("records")}</span>
+                  <span className="text-xs">{isCategoryExpanded ? "▲" : "▼"}</span>
+                </div>
+              </button>
+
+              {isCategoryExpanded && (
+                <div className="px-5 pb-5 bg-[#fcfcfb] space-y-4 border-t border-gray-100 pt-4">
+                  {productEntries.map(([productName, logs]) => {
           // 제품 안에서 다시 날짜별로 기록을 묶어 접고 펼칠 수 있게 만듭니다.
           const dateGroups = {};
           logs.forEach(log => {
@@ -279,7 +338,7 @@ export default function TempPhDB({ t, tempLogs, setTempLogs }) {
                   </div>
 
                   {Object.entries(dateGroups).map(([date, dateLogs]) => {
-                    const dateKey = `${productName}-${date}`;
+                    const dateKey = `${category}-${productName}-${date}`;
                     const isDateExpanded = expandedDate === dateKey;
 
                     return (
@@ -386,6 +445,11 @@ export default function TempPhDB({ t, tempLogs, setTempLogs }) {
                       )}
                     </div>
                     );
+                  })}
+                </div>
+              )}
+            </div>
+          );
                   })}
                 </div>
               )}
