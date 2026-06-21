@@ -396,21 +396,20 @@ to authenticated
 using ((select private.is_admin()));
 
 drop policy if exists "Users can view their own profile" on public.profiles;
-create policy "Users can view their own profile"
+
+drop policy if exists "Admins can view all profiles" on public.profiles;
+drop policy if exists "Users can view allowed profiles" on public.profiles;
+create policy "Users can view allowed profiles"
 on public.profiles
 for select
 to authenticated
 using (
-  (select auth.uid()) = id
-  and (select private.has_app_access())
+  (select private.is_admin())
+  or (
+    (select auth.uid()) = id
+    and (select private.has_app_access())
+  )
 );
-
-drop policy if exists "Admins can view all profiles" on public.profiles;
-create policy "Admins can view all profiles"
-on public.profiles
-for select
-to authenticated
-using ((select private.is_admin()));
 
 drop policy if exists "Admins can update profiles" on public.profiles;
 create policy "Admins can update profiles"

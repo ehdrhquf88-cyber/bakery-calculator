@@ -12,6 +12,7 @@ import { DEFAULT_LANGUAGE, LANGUAGES, getTranslator } from "./i18n";
 import { SUPABASE_AUTH_STORAGE_KEY, isSupabaseConfigured, supabase } from "./lib/supabaseClient";
 
 const INVITE_ONLY_MESSAGE = "초대된 사람만 로그인 가능합니다";
+const AUTH_PROFILE_ERROR_MESSAGE = "권한 정보를 확인하지 못했습니다. 다시 로그인해 주세요.";
 const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
 const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
@@ -125,6 +126,7 @@ function clearDeletedUserDataIds(authUser, baseKey) {
 
 function normalizeOfflineUser(user) {
   if (!user?.id) return null;
+  if (!APP_ACCESS_ROLES.includes(user.role)) return null;
 
   return {
     id: user.id,
@@ -664,8 +666,10 @@ async function getSupabaseAuthUser(session) {
       error = fallback.error;
     }
 
-    if (error) console.warn("프로필 정보를 읽지 못해 권한을 미지정으로 표시합니다.", error.message);
-    else if (!data) {
+    if (error) {
+      await supabase.auth.signOut({ scope: "local" });
+      throw new Error(AUTH_PROFILE_ERROR_MESSAGE);
+    } else if (!data) {
       await supabase.auth.signOut({ scope: "local" });
       throw new Error(INVITE_ONLY_MESSAGE);
     } else if (!APP_ACCESS_ROLES.includes(data.role)) {
@@ -797,10 +801,10 @@ export default function Home() {
           }
         }
       } catch (e) {
-        if (e.message === INVITE_ONLY_MESSAGE) {
+        if (e.message === INVITE_ONLY_MESSAGE || e.message === AUTH_PROFILE_ERROR_MESSAGE) {
           if (isMounted) {
             setAuthUser(null);
-            setAuthError(INVITE_ONLY_MESSAGE);
+            setAuthError(e.message);
           }
         } else {
           console.error("앱 데이터를 읽는 중 오류가 발생했습니다.", e);
@@ -1202,10 +1206,10 @@ export default function Home() {
           }
         })
         .catch(error => {
-          if (error.message === INVITE_ONLY_MESSAGE) {
+          if (error.message === INVITE_ONLY_MESSAGE || error.message === AUTH_PROFILE_ERROR_MESSAGE) {
             if (isMounted) {
               setAuthUser(null);
-              setAuthError(INVITE_ONLY_MESSAGE);
+              setAuthError(error.message);
             }
           } else {
             console.error("로그인 상태를 갱신하는 중 오류가 발생했습니다.", error);
