@@ -807,7 +807,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
           )}
 
           <div className="print:hidden">
-            <QuickTempEntry t={t} tempLogs={tempLogs} setTempLogs={setTempLogs} currentProductName={currentRecipe?.productName} memo={memo} setMemo={setMemo} isPreFermentMode={category === "사전반죽"} />
+            <QuickTempEntry t={t} tempLogs={tempLogs} setTempLogs={setTempLogs} currentProductName={currentRecipe?.productName} currentCategory={category} memo={memo} setMemo={setMemo} isPreFermentMode={category === "사전반죽"} />
           </div>
         </div>
       </div>
@@ -902,7 +902,7 @@ function PrintOptionsModal({ multipliers, setMultipliers, printSections, setPrin
   );
 }
 
-function QuickTempEntry({ t, tempLogs, setTempLogs, currentProductName, memo, setMemo, isPreFermentMode }) {
+function QuickTempEntry({ t, tempLogs, setTempLogs, currentProductName, currentCategory, memo, setMemo, isPreFermentMode }) {
   const [isEntryMode, setIsEntryMode] = useState(false);
   const [logType, setLogType] = useState("1차 저온");
   const [currentEntry, setCurrentEntry] = useState({});
@@ -927,6 +927,7 @@ function QuickTempEntry({ t, tempLogs, setTempLogs, currentProductName, memo, se
         if (log.id === editingLogId) {
           return {
             ...log,
+            category: isPreFermentMode ? "사전반죽" : currentCategory,
             type: isPreFermentMode ? "사전반죽 기록" : logType,
             data: currentEntry,
             memo: memo,
@@ -941,6 +942,7 @@ function QuickTempEntry({ t, tempLogs, setTempLogs, currentProductName, memo, se
       const newLog = { 
         id: Date.now(),
         productName: currentProductName,
+        category: isPreFermentMode ? "사전반죽" : currentCategory,
         type: isPreFermentMode ? "사전반죽 기록" : logType, 
         displayTime: now.toLocaleString(),
         timestamp: currentEntry["날짜"]?.t || now.toLocaleDateString(), 

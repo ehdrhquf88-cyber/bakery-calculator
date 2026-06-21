@@ -100,6 +100,18 @@ create table if not exists public.announcement_reads (
   primary key (announcement_id, user_id)
 );
 
+create index if not exists community_bookmarks_user_id_idx
+on public.community_bookmarks(user_id);
+
+create index if not exists community_saves_saved_by_user_id_idx
+on public.community_saves(saved_by_user_id);
+
+create index if not exists announcements_created_by_idx
+on public.announcements(created_by);
+
+create index if not exists announcement_reads_user_id_idx
+on public.announcement_reads(user_id);
+
 alter table public.profiles
   add column if not exists display_name text null;
 

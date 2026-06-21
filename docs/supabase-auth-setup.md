@@ -127,6 +127,8 @@ If the community feature is enabled again later, restore the relevant Data API e
 
 RLS keeps announcement writes tied to admins and read state tied to the authenticated user, while admin-only policies control allowlist/profile administration and announcement management.
 
+Foreign-key helper indexes are included for announcement reads and legacy community tables so Supabase deletes and joins do not scan avoidable rows.
+
 ## Cloudflare R2
 
 Recipe images are uploaded, copied, read, and deleted through authenticated server routes. Keep the bucket private and store R2 credentials only as server-side environment variables.
