@@ -902,6 +902,23 @@ function PrintOptionsModal({ multipliers, setMultipliers, printSections, setPrin
   );
 }
 
+function getTempLogSortTime(log) {
+  const rawDate = String(log?.data?.["날짜"]?.t || log?.timestamp || "").trim();
+  const isoMatch = rawDate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const dottedMatch = rawDate.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?$/);
+  const matchedDate = isoMatch || dottedMatch;
+
+  if (matchedDate) {
+    const [, year, month, day] = matchedDate;
+    return Date.UTC(Number(year), Number(month) - 1, Number(day));
+  }
+
+  const parsedDate = Date.parse(rawDate);
+  if (!Number.isNaN(parsedDate)) return parsedDate;
+
+  return Number(log?.id) || 0;
+}
+
 function QuickTempEntry({ t, tempLogs, setTempLogs, currentProductName, currentCategory, memo, setMemo, isPreFermentMode }) {
   const [isEntryMode, setIsEntryMode] = useState(false);
   const [logType, setLogType] = useState("1차 저온");
@@ -911,7 +928,17 @@ function QuickTempEntry({ t, tempLogs, setTempLogs, currentProductName, currentC
   const pfItems = ["날짜", "르방", "수분", "밀", "결과", "사용시점", "정점"];
   const items = isPreFermentMode ? pfItems : normalItems;
   const latestLog = useMemo(() => {
-    return tempLogs.find(l => l.productName === currentProductName);
+    const currentName = String(currentProductName || "").trim().toLowerCase();
+
+    return tempLogs
+      .filter(log => String(log.productName || "").trim().toLowerCase() === currentName)
+      .reduce((latest, log) => {
+        if (!latest) return log;
+        const latestTime = getTempLogSortTime(latest);
+        const logTime = getTempLogSortTime(log);
+        if (logTime !== latestTime) return logTime > latestTime ? log : latest;
+        return Number(log.id) > Number(latest.id) ? log : latest;
+      }, null);
   }, [tempLogs, currentProductName]);
   const handleEditActive = (log) => {
     setEditingLogId(log.id);
