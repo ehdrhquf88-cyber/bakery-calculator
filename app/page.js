@@ -2241,6 +2241,21 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
 
       <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("privacyPolicy")}</div>
+            <p className="mt-2 text-xs font-bold text-gray-400">{t("privacyPolicyDescription")}</p>
+          </div>
+          <a
+            href="/privacy"
+            className="bg-black text-white px-5 py-3 rounded-xl text-sm font-black uppercase tracking-tight text-center"
+          >
+            {t("privacyPolicy")}
+          </a>
+        </div>
+      </section>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-3">
             {authUser.picture ? (
               <span
@@ -2509,6 +2524,12 @@ function LoginScreen({ t, isOnline, offlineLoginUsers, onGoogleSignIn, onOffline
                 </form>
               )}
               {authError && <p className="mt-3 text-xs font-bold text-red-600">{authError}</p>}
+              <a
+                href="/privacy"
+                className="mt-4 inline-flex text-xs font-black uppercase tracking-tight text-black underline underline-offset-4"
+              >
+                {t("privacyPolicy")}
+              </a>
             </>
           ) : (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
