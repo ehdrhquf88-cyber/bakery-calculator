@@ -211,9 +211,10 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   }, [currentRecipe, selectedRecipeId, setRecipes, syncWeightsToTotalPercent]);
 
   const totals = useMemo(() => {
-    if (!currentRecipe) return { totalPercent: 0, totalSaltPercent: "0.00", finalYield: 0, totalCost: 0, baseTotalDough: 0, waterWeight: 0 };
+    if (!currentRecipe) return { totalPercent: 0, totalSaltPercent: "0.00", finalYield: 0, totalCost: 0, baseTotalDough: 0, waterWeight: 0, directWaterWeight: 0 };
     let totalFlourPct = 0; 
     let totalWaterPct = 0; 
+    let directWaterPct = 0;
     let totalSaltPct = 0; 
     let rawTotalPercent = 0;
 
@@ -221,7 +222,10 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
       const pct = parseDecimal(ing.percent);
       rawTotalPercent += pct;
       if (ing.type === "밀") totalFlourPct += pct;
-      else if (ing.type === "수분") totalWaterPct += pct;
+      else if (ing.type === "수분") {
+        totalWaterPct += pct;
+        directWaterPct += pct;
+      }
       else if (ing.type === "소금") totalSaltPct += pct;
       else if (ing.type === "사전반죽") {
         const yieldInput = parseFloat(String(pfYields[ing.name] || "100").replace(',', '.')) || 100;
@@ -237,6 +241,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     
     const parsedFlourWeight = parseDecimal(flourWeight);
     const waterWeight = parsedFlourWeight * (totalWaterPct / 100);
+    const directWaterWeight = parsedFlourWeight * (directWaterPct / 100);
     const cost = currentRecipe.ingredients.reduce((sum, ing) => {
         const pctVal = parseDecimal(ing.percent);
         const weight = parsedFlourWeight * (pctVal / 100);
@@ -252,15 +257,16 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
       totalCost: isNaN(cost) ? 0 : cost, 
       baseTotalDough,
       waterWeight: isNaN(waterWeight) ? 0 : waterWeight,
+      directWaterWeight: isNaN(directWaterWeight) ? 0 : directWaterWeight,
     };
   }, [currentRecipe, pfYields, flourWeight, getIngredientUnitCost]);
 
   const percentCalcBasisAmount = useMemo(() => {
-    if (percentCalc.basis === "water") return totals.waterWeight;
+    if (percentCalc.basis === "water") return totals.directWaterWeight;
     if (percentCalc.basis === "dough") return parseDecimal(totalDough);
     if (percentCalc.basis === "custom") return parseDecimal(percentCalc.customAmount);
     return parseDecimal(flourWeight);
-  }, [flourWeight, percentCalc.basis, percentCalc.customAmount, totalDough, totals.waterWeight]);
+  }, [flourWeight, percentCalc.basis, percentCalc.customAmount, totalDough, totals.directWaterWeight]);
   const percentCalcResult = useMemo(() => {
     return percentCalcBasisAmount * (parseDecimal(percentCalc.value) / 100);
   }, [percentCalcBasisAmount, percentCalc.value]);
