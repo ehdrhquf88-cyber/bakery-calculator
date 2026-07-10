@@ -22,13 +22,20 @@ const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
 const LOCAL_UPDATED_AT_FIELD = "_localUpdatedAt";
 const REMOTE_UPDATED_AT_FIELD = "_remoteUpdatedAt";
-const REMOTE_REFRESH_INTERVAL_MS = 15000;
+const REMOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const REMOTE_DELETION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const LAST_REMOTE_SYNC_STORAGE_PREFIX = "bakery_last_remote_sync";
 const CALCULATOR_STATE_STORAGE_PREFIX = "bakery_recipe_calculator_state";
 const RECIPE_CATEGORY_ORDER = ["하드계열", "소프트계열", "사전반죽"];
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
   costItems: "bakery_cost_items",
   tempLogs: "bakery_temp_ph",
+};
+const REMOTE_ITEM_TYPES = {
+  recipes: "recipe",
+  costItems: "cost_item",
+  tempLogs: "temp_log",
 };
 
 function getCalculatorStateStorageKey(authUser) {
@@ -41,6 +48,10 @@ function getUserDataStorageKey(baseKey, authUser) {
 
 function getDeletedUserDataStorageKey(baseKey, authUser) {
   return `${getUserDataStorageKey(baseKey, authUser)}:deleted`;
+}
+
+function getLastRemoteSyncStorageKey(authUser) {
+  return `${LAST_REMOTE_SYNC_STORAGE_PREFIX}:${authUser.id || authUser.email}`;
 }
 
 function loadUserData(authUser) {
@@ -85,6 +96,27 @@ function clearUserData(authUser) {
     localStorage.removeItem(getUserDataStorageKey(baseKey, authUser));
     localStorage.removeItem(getDeletedUserDataStorageKey(baseKey, authUser));
   });
+  localStorage.removeItem(getLastRemoteSyncStorageKey(authUser));
+}
+
+function readLastRemoteSyncAt(authUser) {
+  try {
+    const value = localStorage.getItem(getLastRemoteSyncStorageKey(authUser));
+    return Number.isFinite(Date.parse(value || "")) ? value : "";
+  } catch {
+    return "";
+  }
+}
+
+function writeLastRemoteSyncAt(authUser, syncedAt) {
+  if (!authUser || !syncedAt) return;
+  localStorage.setItem(getLastRemoteSyncStorageKey(authUser), syncedAt);
+}
+
+function shouldUseFullRemoteRefresh(lastSyncedAt) {
+  const syncedTime = Date.parse(lastSyncedAt || "");
+  if (!Number.isFinite(syncedTime)) return true;
+  return Date.now() - syncedTime > REMOTE_DELETION_RETENTION_MS;
 }
 
 function clearCalculatorState(authUser) {
@@ -250,6 +282,32 @@ function removeItemsByIds(items, ids, normalizeId) {
   return (items || []).filter(item => !ids.has(normalizeId(item)));
 }
 
+function mergeRemoteSnapshot(previousItems, changedItems, deletedIds, normalizeId) {
+  const nextById = new Map((previousItems || []).map(item => [normalizeId(item), item]));
+
+  (changedItems || []).forEach(item => {
+    nextById.set(normalizeId(item), item);
+  });
+
+  if (deletedIds?.size) {
+    deletedIds.forEach(id => nextById.delete(Number(id)));
+  }
+
+  return [...nextById.values()];
+}
+
+function getDeletedIdsByType(deletedItems) {
+  return (deletedItems || []).reduce((byType, item) => {
+    const type = item?.item_type;
+    const id = Number(item?.item_id);
+    if (!type || !Number.isFinite(id)) return byType;
+
+    if (!byType[type]) byType[type] = new Set();
+    byType[type].add(id);
+    return byType;
+  }, {});
+}
+
 function mergeLocalAndRemoteItems(localItems, remoteItems, normalizeId, deletedIds = new Set(), options = {}) {
   const remoteMissingDeletesSeen = Boolean(options.remoteMissingDeletesSeen);
   const localById = new Map((localItems || []).map(item => [normalizeId(item), item]));
@@ -351,14 +409,20 @@ function tempLogFromSupabaseRow(row) {
   };
 }
 
-async function loadSupabaseRecipes(authUser) {
+async function loadSupabaseRecipes(authUser, options = {}) {
   if (!supabase) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("recipes")
     .select("user_id, id, recipe_data, is_public, published_at, created_at, updated_at")
     .eq("user_id", authUser.id)
     .order("updated_at", { ascending: false });
+
+  if (options.since) {
+    query = query.gt("updated_at", options.since);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
   return (data || []).map(recipeFromSupabaseRow);
@@ -397,28 +461,134 @@ async function loadSupabaseAnnouncementReads(authUser) {
   return data || [];
 }
 
-async function loadSupabaseCostItems() {
+async function loadSupabaseCostItems(authUser, options = {}) {
   if (!supabase) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("cost_items")
     .select("id, item_data, created_at, updated_at")
+    .eq("user_id", authUser.id)
     .order("updated_at", { ascending: false });
+
+  if (options.since) {
+    query = query.gt("updated_at", options.since);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
   return (data || []).map(costItemFromSupabaseRow);
 }
 
-async function loadSupabaseTempLogs() {
+async function loadSupabaseTempLogs(authUser, options = {}) {
   if (!supabase) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("temp_logs")
     .select("id, log_data, created_at, updated_at")
+    .eq("user_id", authUser.id)
     .order("updated_at", { ascending: false });
+
+  if (options.since) {
+    query = query.gt("updated_at", options.since);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
   return (data || []).map(tempLogFromSupabaseRow);
+}
+
+async function loadSupabaseDeletedItems(authUser, options = {}) {
+  if (!supabase || !authUser) return [];
+
+  let query = supabase
+    .from("deleted_items")
+    .select("item_type, item_id, deleted_at")
+    .eq("user_id", authUser.id)
+    .order("deleted_at", { ascending: false });
+
+  if (options.since) {
+    query = query.gt("deleted_at", options.since);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+async function recordSupabaseDeletedItems(authUser, itemType, itemIds) {
+  if (!supabase || !authUser || !itemIds?.length) return;
+
+  const deletedAt = new Date().toISOString();
+  const rows = itemIds.map(id => ({
+    user_id: authUser.id,
+    item_type: itemType,
+    item_id: Number(id),
+    deleted_at: deletedAt,
+  }));
+
+  const { error } = await supabase
+    .from("deleted_items")
+    .upsert(rows, { onConflict: "user_id,item_type,item_id" });
+
+  if (error) throw error;
+}
+
+function getPendingLocalItems(items) {
+  return (items || []).filter((item) => {
+    const localEditedAt = getSyncTimestamp(item, LOCAL_UPDATED_AT_FIELD);
+    const remoteEditedAt = getSyncTimestamp(item, REMOTE_UPDATED_AT_FIELD);
+    return !hasRemoteVersion(item) || localEditedAt > remoteEditedAt;
+  });
+}
+
+async function upsertSupabaseRecipeItems(authUser, items) {
+  const rows = (items || []).map(recipe => recipeToSupabaseRow(authUser, recipe));
+  if (rows.length === 0) return;
+
+  const { error } = await supabase
+    .from("recipes")
+    .upsert(rows, { onConflict: "user_id,id" });
+
+  if (error) throw error;
+}
+
+async function upsertSupabaseCostItemRows(authUser, items) {
+  const rows = (items || []).map(item => costItemToSupabaseRow(authUser, item));
+  if (rows.length === 0) return;
+
+  const { error } = await supabase
+    .from("cost_items")
+    .upsert(rows, { onConflict: "user_id,id" });
+
+  if (error) throw error;
+}
+
+async function upsertSupabaseTempLogRows(authUser, items) {
+  const rows = (items || []).map(log => tempLogToSupabaseRow(authUser, log));
+  if (rows.length === 0) return;
+
+  const { error } = await supabase
+    .from("temp_logs")
+    .upsert(rows, { onConflict: "user_id,id" });
+
+  if (error) throw error;
+}
+
+async function deleteSupabaseItemsByIds(authUser, tableName, itemType, itemIds) {
+  const ids = [...(itemIds || [])].map(Number).filter(Number.isFinite);
+  if (!supabase || !authUser || ids.length === 0) return;
+
+  await recordSupabaseDeletedItems(authUser, itemType, ids);
+
+  const { error } = await supabase
+    .from(tableName)
+    .delete()
+    .eq("user_id", authUser.id)
+    .in("id", ids);
+
+  if (error) throw error;
 }
 
 async function syncSupabaseRecipes(authUser, previousRecipes, nextRecipes) {
@@ -444,6 +614,8 @@ async function syncSupabaseRecipes(authUser, previousRecipes, nextRecipes) {
   }
 
   if (removedIds.length > 0) {
+    await recordSupabaseDeletedItems(authUser, REMOTE_ITEM_TYPES.recipes, removedIds);
+
     const { error } = await supabase
       .from("recipes")
       .delete()
@@ -477,6 +649,8 @@ async function syncSupabaseCostItems(authUser, previousCostItems, nextCostItems)
   }
 
   if (removedIds.length > 0) {
+    await recordSupabaseDeletedItems(authUser, REMOTE_ITEM_TYPES.costItems, removedIds);
+
     const { error } = await supabase
       .from("cost_items")
       .delete()
@@ -510,6 +684,8 @@ async function syncSupabaseTempLogs(authUser, previousTempLogs, nextTempLogs) {
   }
 
   if (removedIds.length > 0) {
+    await recordSupabaseDeletedItems(authUser, REMOTE_ITEM_TYPES.tempLogs, removedIds);
+
     const { error } = await supabase
       .from("temp_logs")
       .delete()
@@ -854,59 +1030,101 @@ export default function Home() {
 
         if (supabase && !authUser.isOfflineMode && navigator.onLine) {
           try {
+            const lastRemoteSyncAt = readLastRemoteSyncAt(authUser);
+            const hasLocalDeletes = deletedRecipeIds.size > 0 || deletedCostItemIds.size > 0 || deletedTempLogIds.size > 0;
+            const shouldFullRefresh = shouldUseFullRemoteRefresh(lastRemoteSyncAt) || hasLocalDeletes;
+            const remoteOptions = shouldFullRefresh ? {} : { since: lastRemoteSyncAt };
+            const syncStartedAt = new Date().toISOString();
             const [
               remoteRecipes,
               remoteCostItems,
               remoteTempLogs,
               remoteAnnouncements,
               remoteAnnouncementReads,
+              remoteDeletedItems,
             ] = await Promise.all([
-              loadSupabaseRecipes(authUser),
-              loadSupabaseCostItems(),
-              loadSupabaseTempLogs(),
+              loadSupabaseRecipes(authUser, remoteOptions),
+              loadSupabaseCostItems(authUser, remoteOptions),
+              loadSupabaseTempLogs(authUser, remoteOptions),
               loadSupabaseAnnouncements(),
               loadSupabaseAnnouncementReads(authUser),
+              loadSupabaseDeletedItems(authUser, remoteOptions),
             ]);
+            const remoteDeletedByType = getDeletedIdsByType(remoteDeletedItems);
+            const remoteDeletedRecipeIds = remoteDeletedByType[REMOTE_ITEM_TYPES.recipes] || new Set();
+            const remoteDeletedCostItemIds = remoteDeletedByType[REMOTE_ITEM_TYPES.costItems] || new Set();
+            const remoteDeletedTempLogIds = remoteDeletedByType[REMOTE_ITEM_TYPES.tempLogs] || new Set();
+            const localRecipes = removeItemsByIds(userData.recipes, remoteDeletedRecipeIds, normalizeRecipeId);
+            const localCostItems = removeItemsByIds(userData.costItems, remoteDeletedCostItemIds, normalizeCostItemId);
+            const localTempLogs = removeItemsByIds(userData.tempLogs, remoteDeletedTempLogIds, normalizeTempLogId);
+            nextRecipes = localRecipes;
+            nextCostItems = localCostItems;
+            nextTempLogs = localTempLogs;
 
             setAnnouncements(remoteAnnouncements);
             setAnnouncementReads(remoteAnnouncementReads);
 
             if (remoteRecipes.length > 0) {
-              nextRecipes = mergeLocalAndRemoteItems(userData.recipes, remoteRecipes, normalizeRecipeId, deletedRecipeIds, { remoteMissingDeletesSeen: true });
+              nextRecipes = mergeLocalAndRemoteItems(localRecipes, remoteRecipes, normalizeRecipeId, deletedRecipeIds, { remoteMissingDeletesSeen: shouldFullRefresh });
               if (hasMeaningfulDiff(nextRecipes, remoteRecipes)) {
-                await syncSupabaseRecipes(authUser, remoteRecipes, nextRecipes);
+                if (shouldFullRefresh) {
+                  await syncSupabaseRecipes(authUser, remoteRecipes, nextRecipes);
+                } else {
+                  await upsertSupabaseRecipeItems(authUser, getPendingLocalItems(nextRecipes));
+                }
               }
-            } else if (userData.recipes.length > 0) {
-              nextRecipes = userData.recipes.filter(recipe => !hasRemoteVersion(recipe));
+            } else if (localRecipes.length > 0) {
+              nextRecipes = shouldFullRefresh
+                ? localRecipes.filter(recipe => !hasRemoteVersion(recipe))
+                : localRecipes;
               if (nextRecipes.length > 0) {
-                await syncSupabaseRecipes(authUser, [], nextRecipes);
+                await upsertSupabaseRecipeItems(authUser, shouldFullRefresh ? nextRecipes : getPendingLocalItems(nextRecipes));
               }
             }
 
             if (remoteCostItems.length > 0) {
-              nextCostItems = mergeLocalAndRemoteItems(userData.costItems, remoteCostItems, normalizeCostItemId, deletedCostItemIds, { remoteMissingDeletesSeen: true });
+              nextCostItems = mergeLocalAndRemoteItems(localCostItems, remoteCostItems, normalizeCostItemId, deletedCostItemIds, { remoteMissingDeletesSeen: shouldFullRefresh });
               if (hasMeaningfulDiff(nextCostItems, remoteCostItems)) {
-                await syncSupabaseCostItems(authUser, remoteCostItems, nextCostItems);
+                if (shouldFullRefresh) {
+                  await syncSupabaseCostItems(authUser, remoteCostItems, nextCostItems);
+                } else {
+                  await upsertSupabaseCostItemRows(authUser, getPendingLocalItems(nextCostItems));
+                }
               }
-            } else if (userData.costItems.length > 0) {
-              nextCostItems = userData.costItems.filter(item => !hasRemoteVersion(item));
+            } else if (localCostItems.length > 0) {
+              nextCostItems = shouldFullRefresh
+                ? localCostItems.filter(item => !hasRemoteVersion(item))
+                : localCostItems;
               if (nextCostItems.length > 0) {
-                await syncSupabaseCostItems(authUser, [], nextCostItems);
+                await upsertSupabaseCostItemRows(authUser, shouldFullRefresh ? nextCostItems : getPendingLocalItems(nextCostItems));
               }
             }
 
             if (remoteTempLogs.length > 0) {
-              nextTempLogs = mergeLocalAndRemoteItems(userData.tempLogs, remoteTempLogs, normalizeTempLogId, deletedTempLogIds, { remoteMissingDeletesSeen: true });
+              nextTempLogs = mergeLocalAndRemoteItems(localTempLogs, remoteTempLogs, normalizeTempLogId, deletedTempLogIds, { remoteMissingDeletesSeen: shouldFullRefresh });
               if (hasMeaningfulDiff(nextTempLogs, remoteTempLogs)) {
-                await syncSupabaseTempLogs(authUser, remoteTempLogs, nextTempLogs);
+                if (shouldFullRefresh) {
+                  await syncSupabaseTempLogs(authUser, remoteTempLogs, nextTempLogs);
+                } else {
+                  await upsertSupabaseTempLogRows(authUser, getPendingLocalItems(nextTempLogs));
+                }
               }
-            } else if (userData.tempLogs.length > 0) {
-              nextTempLogs = userData.tempLogs.filter(log => !hasRemoteVersion(log));
+            } else if (localTempLogs.length > 0) {
+              nextTempLogs = shouldFullRefresh
+                ? localTempLogs.filter(log => !hasRemoteVersion(log))
+                : localTempLogs;
               if (nextTempLogs.length > 0) {
-                await syncSupabaseTempLogs(authUser, [], nextTempLogs);
+                await upsertSupabaseTempLogRows(authUser, shouldFullRefresh ? nextTempLogs : getPendingLocalItems(nextTempLogs));
               }
             }
 
+            await Promise.all([
+              deleteSupabaseItemsByIds(authUser, "recipes", REMOTE_ITEM_TYPES.recipes, deletedRecipeIds),
+              deleteSupabaseItemsByIds(authUser, "cost_items", REMOTE_ITEM_TYPES.costItems, deletedCostItemIds),
+              deleteSupabaseItemsByIds(authUser, "temp_logs", REMOTE_ITEM_TYPES.tempLogs, deletedTempLogIds),
+            ]);
+
+            writeLastRemoteSyncAt(authUser, syncStartedAt);
             clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
             clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
             clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
@@ -965,7 +1183,11 @@ export default function Home() {
     const persistRecipes = async () => {
       try {
         await syncSupabaseRecipes(authUser, previousRecipes, nextRecipes);
-        if (!isCancelled) recipesSnapshotRef.current = nextRecipes;
+        if (!isCancelled) {
+          recipesSnapshotRef.current = nextRecipes;
+          clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
+          writeLastRemoteSyncAt(authUser, new Date().toISOString());
+        }
       } catch (error) {
         console.warn("Supabase 레시피 저장 중 오류가 발생했습니다.", error?.message || error);
       }
@@ -988,7 +1210,11 @@ export default function Home() {
     const persistCostItems = async () => {
       try {
         await syncSupabaseCostItems(authUser, previousCostItems, nextCostItems);
-        if (!isCancelled) costItemsSnapshotRef.current = nextCostItems;
+        if (!isCancelled) {
+          costItemsSnapshotRef.current = nextCostItems;
+          clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
+          writeLastRemoteSyncAt(authUser, new Date().toISOString());
+        }
       } catch (error) {
         console.warn("Supabase 재료비 저장 중 오류가 발생했습니다.", error?.message || error);
       }
@@ -1011,7 +1237,11 @@ export default function Home() {
     const persistTempLogs = async () => {
       try {
         await syncSupabaseTempLogs(authUser, previousTempLogs, nextTempLogs);
-        if (!isCancelled) tempLogsSnapshotRef.current = nextTempLogs;
+        if (!isCancelled) {
+          tempLogsSnapshotRef.current = nextTempLogs;
+          clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
+          writeLastRemoteSyncAt(authUser, new Date().toISOString());
+        }
       } catch (error) {
         console.warn("Supabase 온도/pH 저장 중 오류가 발생했습니다.", error?.message || error);
       }
@@ -1030,54 +1260,75 @@ export default function Home() {
     refreshInFlightRef.current = true;
 
     try {
+      const lastRemoteSyncAt = readLastRemoteSyncAt(authUser);
+      const deletedRecipeIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
+      const deletedCostItemIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
+      const deletedTempLogIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
+      const hasLocalDeletes = deletedRecipeIds.size > 0 || deletedCostItemIds.size > 0 || deletedTempLogIds.size > 0;
+      const shouldFullRefresh = shouldUseFullRemoteRefresh(lastRemoteSyncAt) || hasLocalDeletes;
+      const remoteOptions = shouldFullRefresh ? {} : { since: lastRemoteSyncAt };
+      const syncStartedAt = new Date().toISOString();
       const [
         remoteRecipes,
         remoteCostItems,
         remoteTempLogs,
         remoteAnnouncements,
         remoteAnnouncementReads,
+        remoteDeletedItems,
       ] = await Promise.all([
-        loadSupabaseRecipes(authUser),
-        loadSupabaseCostItems(),
-        loadSupabaseTempLogs(),
+        loadSupabaseRecipes(authUser, remoteOptions),
+        loadSupabaseCostItems(authUser, remoteOptions),
+        loadSupabaseTempLogs(authUser, remoteOptions),
         loadSupabaseAnnouncements(),
         loadSupabaseAnnouncementReads(authUser),
+        loadSupabaseDeletedItems(authUser, remoteOptions),
       ]);
 
-      const deletedRecipeIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
-      const deletedCostItemIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
-      const deletedTempLogIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
-      const remoteDeletedRecipeIds = getMissingRemoteIds(recipesSnapshotRef.current, remoteRecipes, normalizeRecipeId);
-      const remoteDeletedCostItemIds = getMissingRemoteIds(costItemsSnapshotRef.current, remoteCostItems, normalizeCostItemId);
-      const remoteDeletedTempLogIds = getMissingRemoteIds(tempLogsSnapshotRef.current, remoteTempLogs, normalizeTempLogId);
+      const remoteDeletedByType = getDeletedIdsByType(remoteDeletedItems);
+      const remoteDeletedRecipeIds = shouldFullRefresh
+        ? getMissingRemoteIds(recipesSnapshotRef.current, remoteRecipes, normalizeRecipeId)
+        : (remoteDeletedByType[REMOTE_ITEM_TYPES.recipes] || new Set());
+      const remoteDeletedCostItemIds = shouldFullRefresh
+        ? getMissingRemoteIds(costItemsSnapshotRef.current, remoteCostItems, normalizeCostItemId)
+        : (remoteDeletedByType[REMOTE_ITEM_TYPES.costItems] || new Set());
+      const remoteDeletedTempLogIds = shouldFullRefresh
+        ? getMissingRemoteIds(tempLogsSnapshotRef.current, remoteTempLogs, normalizeTempLogId)
+        : (remoteDeletedByType[REMOTE_ITEM_TYPES.tempLogs] || new Set());
 
-      recipesSnapshotRef.current = remoteRecipes;
-      costItemsSnapshotRef.current = remoteCostItems;
-      tempLogsSnapshotRef.current = remoteTempLogs;
+      recipesSnapshotRef.current = shouldFullRefresh
+        ? remoteRecipes
+        : mergeRemoteSnapshot(recipesSnapshotRef.current, remoteRecipes, remoteDeletedRecipeIds, normalizeRecipeId);
+      costItemsSnapshotRef.current = shouldFullRefresh
+        ? remoteCostItems
+        : mergeRemoteSnapshot(costItemsSnapshotRef.current, remoteCostItems, remoteDeletedCostItemIds, normalizeCostItemId);
+      tempLogsSnapshotRef.current = shouldFullRefresh
+        ? remoteTempLogs
+        : mergeRemoteSnapshot(tempLogsSnapshotRef.current, remoteTempLogs, remoteDeletedTempLogIds, normalizeTempLogId);
 
       setRecipes(prev => mergeLocalAndRemoteItems(
         removeItemsByIds(prev, remoteDeletedRecipeIds, normalizeRecipeId),
         remoteRecipes,
         normalizeRecipeId,
         deletedRecipeIds,
-        { remoteMissingDeletesSeen: true },
+        { remoteMissingDeletesSeen: shouldFullRefresh },
       ));
       setCostItems(prev => mergeLocalAndRemoteItems(
         removeItemsByIds(prev, remoteDeletedCostItemIds, normalizeCostItemId),
         remoteCostItems,
         normalizeCostItemId,
         deletedCostItemIds,
-        { remoteMissingDeletesSeen: true },
+        { remoteMissingDeletesSeen: shouldFullRefresh },
       ));
       setTempLogs(prev => mergeLocalAndRemoteItems(
         removeItemsByIds(prev, remoteDeletedTempLogIds, normalizeTempLogId),
         remoteTempLogs,
         normalizeTempLogId,
         deletedTempLogIds,
-        { remoteMissingDeletesSeen: true },
+        { remoteMissingDeletesSeen: shouldFullRefresh },
       ));
       setAnnouncements(remoteAnnouncements);
       setAnnouncementReads(remoteAnnouncementReads);
+      writeLastRemoteSyncAt(authUser, syncStartedAt);
     } catch (error) {
       console.warn("Supabase 최신 데이터를 다시 읽지 못했습니다.", error?.message || error);
     } finally {
