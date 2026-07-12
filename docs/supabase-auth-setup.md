@@ -19,11 +19,7 @@ Official Supabase references:
    `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
 5. In Supabase `Authentication > URL Configuration`, set the production site URL and add any local/deployment redirect URLs you use.
 6. Run [supabase-auth-setup.sql](/Users/hayoungkim/levain-lab/bakery-app/docs/supabase-auth-setup.sql) in Supabase SQL Editor.
-7. In `Authentication > Hooks`, configure a SQL hook:
-   - Hook: `Before User Created`
-   - Type: `Postgres`
-   - Schema: `public`
-   - Function: `hook_restrict_login_to_allowlist`
+7. If a previous `Before User Created` hook is configured for `hook_restrict_login_to_allowlist`, you can remove it. The SQL function is also kept permissive so public login works even if the hook remains attached.
 8. Add env values:
 
 ```env
@@ -56,31 +52,31 @@ Keep `Automatically expose new tables` disabled. All exposed tables must keep RL
 - `user`
 - `null`
 
-Use Supabase Table Editor or SQL to change a user's role after the user has signed in once and the profile row exists. The initial role comes from `public.auth_allowlist.role`.
+New Google login users are created with the `user` role by default. Emails in `public.auth_allowlist` can override that role, mainly to keep selected accounts as `admin`.
 
-The Auth Hook allows only emails in `public.auth_allowlist` to create an account. The app also keeps a secondary gate: only `admin` and `user` roles can enter the product UI. A `null` role is treated as not invited and the app signs the session out with `초대된 사람만 로그인 가능합니다`.
+The app gate still requires `admin` or `user` roles before entering the product UI. The public-launch SQL backfills existing Auth users to `user` unless an allowlist row gives them `admin`.
 
-The profile RLS policy also requires `admin` or `user` access before a user can read their own profile through the Data API. This keeps previously-created users with a `null` role from reading app profile data after they are removed from the allowlist.
+The profile RLS policy also requires `admin` or `user` access before a user can read their own profile through the Data API.
 
-## Allowlist
+## Role Overrides
 
-Only emails in `public.auth_allowlist` can create an account. Add a user:
+`public.auth_allowlist` is retained as a role override table. It no longer blocks public signups. Add or keep an admin:
 
 ```sql
 insert into public.auth_allowlist (email, role)
-values ('newuser@example.com', 'user')
+values ('admin@example.com', 'admin')
 on conflict (email) do update
 set role = excluded.role;
 ```
 
-Remove a user:
+Remove an override:
 
 ```sql
 delete from public.auth_allowlist
-where email = 'newuser@example.com';
+where email = 'admin@example.com';
 ```
 
-The `Before User Created` hook blocks new unauthorized accounts before they are created. If an unauthorized account already exists from before the hook was enabled, remove or disable it in `Authentication > Users`.
+Removing an override turns that account back into a normal `user`, unless doing so would remove the last admin.
 
 Admins can also manage `public.auth_allowlist` from the app's Admin page. The table is safe to expose through the Data API only with the admin-only RLS policies from [supabase-auth-setup.sql](/Users/hayoungkim/levain-lab/bakery-app/docs/supabase-auth-setup.sql).
 

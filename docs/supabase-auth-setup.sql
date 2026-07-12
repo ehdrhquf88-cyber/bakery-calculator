@@ -741,7 +741,7 @@ begin
     new.email,
     coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name'),
     coalesce(new.raw_user_meta_data ->> 'avatar_url', new.raw_user_meta_data ->> 'picture'),
-    allowlist_role
+    coalesce(allowlist_role, 'user'::public.app_role)
   )
   on conflict (id) do update
   set
@@ -813,7 +813,7 @@ as $$
 begin
   if tg_op = 'DELETE' then
     update public.profiles
-    set role = null
+    set role = 'user'::public.app_role
     where lower(email) = lower(old.email);
 
     return old;
@@ -821,7 +821,7 @@ begin
 
   if tg_op = 'UPDATE' and lower(old.email) <> lower(new.email) then
     update public.profiles
-    set role = null
+    set role = 'user'::public.app_role
     where lower(email) = lower(old.email);
   end if;
 
@@ -831,7 +831,7 @@ begin
     users.email,
     coalesce(users.raw_user_meta_data ->> 'full_name', users.raw_user_meta_data ->> 'name'),
     coalesce(users.raw_user_meta_data ->> 'avatar_url', users.raw_user_meta_data ->> 'picture'),
-    new.role
+    coalesce(new.role, 'user'::public.app_role)
   from auth.users
   where lower(users.email) = lower(new.email)
   on conflict (id) do update
@@ -860,29 +860,10 @@ language plpgsql
 security invoker
 set search_path = ''
 as $$
-declare
-  user_email text;
-  is_allowed boolean;
 begin
-  user_email := lower(event -> 'user' ->> 'email');
-
-  select exists (
-    select 1
-    from public.auth_allowlist
-    where lower(email) = user_email
-  )
-  into is_allowed;
-
-  if is_allowed then
-    return '{}'::jsonb;
-  end if;
-
-  return jsonb_build_object(
-    'error', jsonb_build_object(
-      'message', '초대된 사람만 로그인 가능합니다',
-      'http_code', 403
-    )
-  );
+  -- Public launch: allow every Google-authenticated user to create an account.
+  -- Keep this permissive so login still works if the Auth Hook remains configured.
+  return '{}'::jsonb;
 end;
 $$;
 
@@ -894,14 +875,15 @@ revoke execute
   on function public.hook_restrict_login_to_allowlist
   from authenticated, anon, public;
 
--- Backfill existing Auth users and keep profile roles aligned with the current allowlist.
+-- Backfill existing Auth users. The allowlist is now a role override list:
+-- admin rows stay admin, all other users default to user.
 insert into public.profiles (id, email, full_name, avatar_url, role)
 select
   users.id,
   users.email,
   coalesce(users.raw_user_meta_data ->> 'full_name', users.raw_user_meta_data ->> 'name'),
   coalesce(users.raw_user_meta_data ->> 'avatar_url', users.raw_user_meta_data ->> 'picture'),
-  allowlist.role
+  coalesce(allowlist.role, 'user'::public.app_role)
 from auth.users
 left join public.auth_allowlist as allowlist
   on lower(allowlist.email) = lower(users.email)
@@ -911,6 +893,10 @@ set
   full_name = excluded.full_name,
   avatar_url = excluded.avatar_url,
   role = excluded.role;
+
+update public.profiles
+set role = 'user'::public.app_role
+where role is null;
 
 -- Supabase Cron cleanup for temporary deletion sync records.
 -- Keeps deleted_items long enough for inactive devices to sync, then removes old tombstones.
