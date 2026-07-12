@@ -17,7 +17,7 @@ const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
 const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
 const BROWSER_SESSION_STORAGE_KEY = "bakery_browser_session_active";
-const LEGAL_CONSENT_STORAGE_KEY = "bakery_legal_consent_v1";
+const LEGAL_CONSENT_STORAGE_NAME = "bakery_legal_consent_v1";
 const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
 const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
@@ -2715,14 +2715,14 @@ function LoginScreen({ t, isOnline, offlineLoginUsers, onGoogleSignIn, onOffline
   const canStartWithGoogle = hasAcceptedLegal || (termsAccepted && privacyAccepted);
 
   useEffect(() => {
-    setHasAcceptedLegal(localStorage.getItem(LEGAL_CONSENT_STORAGE_KEY) === "accepted");
+    setHasAcceptedLegal(localStorage.getItem(LEGAL_CONSENT_STORAGE_NAME) === "accepted");
   }, []);
 
   const submitGoogleSignIn = () => {
     if (!canStartWithGoogle) return;
 
     if (!hasAcceptedLegal) {
-      localStorage.setItem(LEGAL_CONSENT_STORAGE_KEY, "accepted");
+      localStorage.setItem(LEGAL_CONSENT_STORAGE_NAME, "accepted");
       setHasAcceptedLegal(true);
     }
 
