@@ -16,6 +16,7 @@ const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
 const ADMIN_UNLOCK_STORAGE_PREFIX = "bakery_admin_unlocked";
 const BROWSER_SESSION_STORAGE_KEY = "bakery_browser_session_active";
+const LEGAL_CONSENT_STORAGE_KEY = "bakery_legal_consent_v1";
 const OFFLINE_USERS_STORAGE_KEY = "bakery_offline_users";
 const OFFLINE_LEGACY_USER_STORAGE_KEY = "bakery_offline_user";
 const OFFLINE_ALLOWED_VIEWS = ["calc", "db", "cost_db", "temp_db"];
@@ -2445,8 +2446,27 @@ function LeaveCheckModal({ message, t, hideLeaveCheck, setHideLeaveCheck, onCanc
 function LoginScreen({ t, isOnline, offlineLoginUsers, onGoogleSignIn, onOfflineSignIn, authError }) {
   const [isUnlockingOffline, setIsUnlockingOffline] = useState(false);
   const [selectedOfflineUserId, setSelectedOfflineUserId] = useState(offlineLoginUsers[0]?.id || "");
+  const [hasAcceptedLegal, setHasAcceptedLegal] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const canUseOfflineAccess = !isOnline && offlineLoginUsers.length > 0;
   const selectedOfflineUser = offlineLoginUsers.find(user => user.id === selectedOfflineUserId) || offlineLoginUsers[0];
+  const canStartWithGoogle = hasAcceptedLegal || (termsAccepted && privacyAccepted);
+
+  useEffect(() => {
+    setHasAcceptedLegal(localStorage.getItem(LEGAL_CONSENT_STORAGE_KEY) === "accepted");
+  }, []);
+
+  const submitGoogleSignIn = () => {
+    if (!canStartWithGoogle) return;
+
+    if (!hasAcceptedLegal) {
+      localStorage.setItem(LEGAL_CONSENT_STORAGE_KEY, "accepted");
+      setHasAcceptedLegal(true);
+    }
+
+    onGoogleSignIn();
+  };
 
   const submitOfflineAccess = async (event) => {
     event.preventDefault();
@@ -2482,11 +2502,44 @@ function LoginScreen({ t, isOnline, offlineLoginUsers, onGoogleSignIn, onOffline
             <>
               <button
                 type="button"
-                onClick={onGoogleSignIn}
-                className="w-full rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white transition-colors hover:bg-gray-800"
+                onClick={submitGoogleSignIn}
+                disabled={!canStartWithGoogle}
+                className="w-full rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
               >
                 {t("googleStart")}
               </button>
+              {!hasAcceptedLegal && (
+                <div className="mt-4 space-y-3 rounded-xl border border-black/10 bg-white/70 p-4">
+                  <label className="flex items-start gap-3 text-xs font-bold leading-5 text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={termsAccepted}
+                      onChange={event => setTermsAccepted(event.target.checked)}
+                      className="mt-1 h-4 w-4 accent-black"
+                    />
+                    <span>
+                      <a href="/terms" className="font-black text-black underline underline-offset-4">
+                        {t("termsOfService")}
+                      </a>
+                      {t("termsConsentSuffix")}
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 text-xs font-bold leading-5 text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={privacyAccepted}
+                      onChange={event => setPrivacyAccepted(event.target.checked)}
+                      className="mt-1 h-4 w-4 accent-black"
+                    />
+                    <span>
+                      <a href="/privacy" className="font-black text-black underline underline-offset-4">
+                        {t("privacyPolicy")}
+                      </a>
+                      {t("privacyConsentSuffix")}
+                    </span>
+                  </label>
+                </div>
+              )}
               {canUseOfflineAccess && (
                 <form onSubmit={submitOfflineAccess} className="mt-4 rounded-xl border border-black/10 bg-white/70 p-4">
                   <p className="whitespace-pre-line text-xs font-bold leading-5 text-gray-500">{t("offlineStartPrompt")}</p>
