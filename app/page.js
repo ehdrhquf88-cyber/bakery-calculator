@@ -2775,12 +2775,20 @@ function LoginScreen({ t, isOnline, offlineLoginUsers, onGoogleSignIn, onOffline
                 </form>
               )}
               {authError && <p className="mt-3 text-xs font-bold text-red-600">{authError}</p>}
-              <a
-                href="/privacy"
-                className="mt-4 inline-flex text-xs font-black uppercase tracking-tight text-black underline underline-offset-4"
-              >
-                {t("privacyPolicy")}
-              </a>
+              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
+                <a
+                  href="/terms"
+                  className="inline-flex text-xs font-black uppercase tracking-tight text-black underline underline-offset-4"
+                >
+                  {t("termsOfService")}
+                </a>
+                <a
+                  href="/privacy"
+                  className="inline-flex text-xs font-black uppercase tracking-tight text-black underline underline-offset-4"
+                >
+                  {t("privacyPolicy")}
+                </a>
+              </div>
             </>
           ) : (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
