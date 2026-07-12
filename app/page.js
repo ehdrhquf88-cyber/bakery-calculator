@@ -11,7 +11,7 @@ import TempPhDB from "./components/TempPhDB";
 import { DEFAULT_LANGUAGE, LANGUAGES, getTranslator } from "./i18n";
 import { SUPABASE_AUTH_STORAGE_KEY, isSupabaseConfigured, supabase } from "./lib/supabaseClient";
 
-const INVITE_ONLY_MESSAGE = "초대된 사람만 로그인 가능합니다";
+const INVITE_ONLY_MESSAGE = "로그인 권한 정보를 확인하지 못했습니다. 다시 시도해 주세요.";
 const AUTH_PROFILE_ERROR_MESSAGE = "권한 정보를 확인하지 못했습니다. 다시 로그인해 주세요.";
 const APP_ACCESS_ROLES = ["admin", "user"];
 const PROFILE_ROLES = ["admin", "user", ""];
