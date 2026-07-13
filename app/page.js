@@ -1866,12 +1866,12 @@ function AdminPanel({ t, onAnnouncementsChange }) {
     } else {
       await supabase
         .from("profiles")
-        .update({ role: null })
+        .update({ role: "user" })
         .eq("email", email);
 
       setAllowlist(prev => prev.filter(invite => invite.email !== email));
       setProfiles(prev => prev.map(profile => (
-        profile.email === email ? { ...profile, role: null } : profile
+        profile.email === email ? { ...profile, role: "user" } : profile
       )));
     }
   };
