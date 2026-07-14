@@ -912,7 +912,7 @@ function SafetyCheckButton({ checked, label, onClick }) {
       className={`flex min-h-14 w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-black transition-all ${
         checked
           ? "border-black bg-black text-white shadow-md"
-          : "border-gray-200 bg-white text-black hover:border-black"
+          : "border-gray-200 bg-[#f7f6f3] text-black hover:border-black"
       }`}
       aria-pressed={checked}
     >
