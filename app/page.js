@@ -884,6 +884,8 @@ export default function Home() {
   const [pendingView, setPendingView] = useState(null);
   const [pendingCalcAction, setPendingCalcAction] = useState(null);
   const [leaveCheckStep, setLeaveCheckStep] = useState(null);
+  const [leaveCheckSteps, setLeaveCheckSteps] = useState([]);
+  const [calcMissingLeaveChecks, setCalcMissingLeaveChecks] = useState([]);
   const [hideLeaveCheck, setHideLeaveCheck] = useState(false);
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
   const [isAdminUnlockOpen, setIsAdminUnlockOpen] = useState(false);
@@ -1488,17 +1490,21 @@ export default function Home() {
     setPendingView(null);
     setPendingCalcAction(null);
     setLeaveCheckStep(null);
+    setLeaveCheckSteps([]);
     setHideLeaveCheck(false);
   };
 
-  const requestCalcSafetyCheck = (afterConfirm) => {
-    if (skipCalcLeaveCheck) {
+  const requestCalcSafetyCheck = (afterConfirm, checks = calcMissingLeaveChecks) => {
+    const nextChecks = checks.filter(Boolean);
+
+    if (skipCalcLeaveCheck || nextChecks.length === 0) {
       afterConfirm();
       return;
     }
 
     setPendingCalcAction(() => afterConfirm);
-    setLeaveCheckStep("salt");
+    setLeaveCheckSteps(nextChecks);
+    setLeaveCheckStep(nextChecks[0]);
     setHideLeaveCheck(false);
   };
 
@@ -1531,8 +1537,8 @@ export default function Home() {
       }
     }
 
-    if (view === "calc" && nextView !== "calc" && !skipCalcLeaveCheck) {
-      requestCalcSafetyCheck(enterView);
+    if (view === "calc" && nextView !== "calc" && calcMissingLeaveChecks.length > 0 && !skipCalcLeaveCheck) {
+      requestCalcSafetyCheck(enterView, calcMissingLeaveChecks);
       setPendingView(nextView);
       return;
     }
@@ -1627,8 +1633,18 @@ export default function Home() {
   const confirmLeaveCheck = () => {
     saveLeaveCheckPreference();
 
-    if (leaveCheckStep === "salt") {
-      setLeaveCheckStep("yeast");
+    if (hideLeaveCheck) {
+      if (pendingCalcAction) pendingCalcAction();
+      else if (pendingView) setView(pendingView);
+      closeLeaveCheck();
+      return;
+    }
+
+    const currentStepIndex = leaveCheckSteps.indexOf(leaveCheckStep);
+    const nextStep = leaveCheckSteps[currentStepIndex + 1];
+
+    if (nextStep) {
+      setLeaveCheckStep(nextStep);
       return;
     }
 
@@ -1691,7 +1707,7 @@ export default function Home() {
       </nav>
 
       <div className="py-4 md:py-8 print:py-0">
-        {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} stateStorageKey={calculatorStateStorageKey} />}
+        {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} onSafetyCheckStateChange={setCalcMissingLeaveChecks} skipSafetyCheck={skipCalcLeaveCheck} stateStorageKey={calculatorStateStorageKey} />}
         {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "videos" && <BreadVideos t={t} />}
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}

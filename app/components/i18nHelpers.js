@@ -14,6 +14,7 @@ export const COST_CATEGORY_LABEL_KEYS = {
   "과일/필링": "fruitFillingCategory",
   "초콜릿": "chocolateCategory",
   "소금": "typeSalt",
+  "이스트": "typeYeast",
   "첨가물": "additiveCategory",
   "기타": "typeOther",
 };
@@ -23,6 +24,7 @@ export const INGREDIENT_TYPE_LABEL_KEYS = {
   "수분": "typeWater",
   "사전반죽": "typePreferment",
   "소금": "typeSalt",
+  "이스트": "typeYeast",
   "기타": "typeOther",
 };
 

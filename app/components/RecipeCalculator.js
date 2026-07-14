@@ -33,6 +33,10 @@ const createAutoCalcRow = () => ({ grams: "", count: "" });
 const createPercentCalcState = () => ({ basis: "flour", value: "", customAmount: "" });
 const DEFAULT_PRINT_SECTIONS = { summary: true, prefermentYield: true, cost: true };
 const DEFAULT_PRINT_MULTIPLIERS = ["1", "", "", ""];
+const SAFETY_CHECKS = {
+  salt: "소금",
+  yeast: "이스트",
+};
 
 function readCalculatorState(storageKey) {
   if (!storageKey || typeof window === "undefined") return {};
@@ -60,7 +64,7 @@ function getRecipeCalculatorState(restoredState, recipeId) {
   return restoredState.calculatorByRecipeId?.[recipeId] || {};
 }
 
-export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [], tempLogs, setTempLogs, requestSafetyCheck, stateStorageKey }) {
+export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [], tempLogs, setTempLogs, requestSafetyCheck, onSafetyCheckStateChange, skipSafetyCheck = false, stateStorageKey }) {
   const [restoredState] = useState(() => readCalculatorState(stateStorageKey));
   const restoredRecipeState = getRecipeCalculatorState(restoredState, restoredState.selectedRecipeId || "");
   const [category, setCategory] = useState(restoredState.category || "하드계열");
@@ -77,6 +81,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const calculatorByRecipeIdRef = useRef(restoredState.calculatorByRecipeId || {});
   const [autoCalcByRecipeId, setAutoCalcByRecipeId] = useState(restoredState.autoCalcByRecipeId || {});
   const [percentCalcByRecipeId, setPercentCalcByRecipeId] = useState(restoredState.percentCalcByRecipeId || {});
+  const [confirmedSafetyChecks, setConfirmedSafetyChecks] = useState({ salt: false, yeast: false });
 
   // 프린트 배수 모달 상태 추가
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -100,6 +105,26 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   }, [costItemById, costItemByName]);
   const preFerments = useMemo(() => {
     return currentRecipe ? currentRecipe.ingredients.filter(ing => ing.type === "사전반죽") : [];
+  }, [currentRecipe]);
+  const requiredSafetyChecks = useMemo(() => {
+    if (!currentRecipe || skipSafetyCheck) return [];
+
+    return Object.entries(SAFETY_CHECKS)
+      .filter(([, ingredientType]) => currentRecipe.ingredients.some(ing => ing.type === ingredientType))
+      .map(([checkKey]) => checkKey);
+  }, [currentRecipe, skipSafetyCheck]);
+  const missingSafetyChecks = useMemo(() => {
+    return requiredSafetyChecks.filter(checkKey => !confirmedSafetyChecks[checkKey]);
+  }, [confirmedSafetyChecks, requiredSafetyChecks]);
+  const safetyCheckSignature = useMemo(() => {
+    if (!currentRecipe) return "";
+
+    return [
+      currentRecipe.id,
+      ...currentRecipe.ingredients
+        .filter(ing => Object.values(SAFETY_CHECKS).includes(ing.type))
+        .map(ing => `${ing.type}:${ing.name || ""}:${ing.percent || ""}`),
+    ].join("|");
   }, [currentRecipe]);
   const autoCalcRecipeKey = activeSelectedRecipeId || "";
   const autoCalcRows = useMemo(() => {
@@ -164,6 +189,14 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     stateStorageKey,
     totalDough,
   ]);
+
+  useEffect(() => {
+    setConfirmedSafetyChecks({ salt: false, yeast: false });
+  }, [safetyCheckSignature]);
+
+  useEffect(() => {
+    onSafetyCheckStateChange?.(missingSafetyChecks);
+  }, [missingSafetyChecks, onSafetyCheckStateChange]);
 
   const syncWeightsToTotalPercent = useCallback((nextTotalPercent) => {
     if (nextTotalPercent <= 0) {
@@ -384,12 +417,28 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const handleRecipeSelectionChange = (recipeId) => {
     if (recipeId === selectedRecipeId) return;
 
-    if (selectedRecipeId && recipeId && requestSafetyCheck) {
-      requestSafetyCheck(() => resetRecipeSelection(recipeId));
+    if (selectedRecipeId && missingSafetyChecks.length > 0 && requestSafetyCheck) {
+      requestSafetyCheck(() => resetRecipeSelection(recipeId), missingSafetyChecks);
       return;
     }
 
     resetRecipeSelection(recipeId);
+  };
+
+  const handleCategoryChange = (nextCategory) => {
+    if (nextCategory === category) return;
+
+    const applyCategoryChange = () => {
+      setCategory(nextCategory);
+      resetRecipeSelection("");
+    };
+
+    if (selectedRecipeId && missingSafetyChecks.length > 0 && requestSafetyCheck) {
+      requestSafetyCheck(applyCategoryChange, missingSafetyChecks);
+      return;
+    }
+
+    applyCategoryChange();
   };
 
   const updateAutoCalcRow = (rowIndex, field, value) => {
@@ -503,7 +552,7 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
           
           <div className="grid grid-cols-2 gap-4 mb-8 text-sm print:mb-4 print:gap-2">
             <InputField label={t("productCategory")}>
-              <select value={category} onChange={(e) => { setCategory(e.target.value); resetRecipeSelection(""); }} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
+              <select value={category} onChange={(e) => handleCategoryChange(e.target.value)} className="bg-transparent border-b border-black font-bold outline-none w-full pb-1 print:border-none print:pointer-events-none">
                 <option value="하드계열">{t("hardCategory")}</option>
                 <option value="소프트계열">{t("softCategory")}</option>
                 <option value="사전반죽">{t("prefermentCategory")}</option>
@@ -619,6 +668,25 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
               </tbody>
             </table>
           </div>
+
+          {currentRecipe && requiredSafetyChecks.length > 0 && (
+            <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 print:hidden">
+              {requiredSafetyChecks.includes("salt") && (
+                <SafetyCheckButton
+                  checked={confirmedSafetyChecks.salt}
+                  label={t("saltCheck")}
+                  onClick={() => setConfirmedSafetyChecks(prev => ({ ...prev, salt: !prev.salt }))}
+                />
+              )}
+              {requiredSafetyChecks.includes("yeast") && (
+                <SafetyCheckButton
+                  checked={confirmedSafetyChecks.yeast}
+                  label={t("yeastCheck")}
+                  onClick={() => setConfirmedSafetyChecks(prev => ({ ...prev, yeast: !prev.yeast }))}
+                />
+              )}
+            </div>
+          )}
         </section>
 
         <div className="space-y-6 order-2 print:block print:space-y-4">
@@ -835,6 +903,28 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
 }
 
 // 다중 배수 입력 모달 컴포넌트 추가
+
+function SafetyCheckButton({ checked, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex min-h-14 w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-black transition-all ${
+        checked
+          ? "border-black bg-black text-white shadow-md"
+          : "border-gray-200 bg-[#f7f6f3] text-black hover:border-black"
+      }`}
+      aria-pressed={checked}
+    >
+      <span>{label}</span>
+      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs ${
+        checked ? "border-white bg-white text-black" : "border-gray-300 bg-[#f7f6f3] text-gray-400"
+      }`}>
+        {checked ? "✓" : ""}
+      </span>
+    </button>
+  );
+}
 
 function PrintOptionsModal({ multipliers, setMultipliers, printSections, setPrintSections, onClose, onPrint, t }) {
   const handleInputChange = (index, value) => {

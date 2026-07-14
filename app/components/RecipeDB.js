@@ -226,7 +226,7 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
 
             return (
               <div key={i} className="grid grid-cols-2 md:grid-cols-[120px_1fr_80px_100px_40px] gap-2 md:gap-4 items-center bg-white p-3 md:p-4 rounded-xl shadow-sm">
-                <select value={ing.type} onChange={e => updateIng(i, "type", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold"><option value="밀">{t("typeFlour")}</option><option value="수분">{t("typeWater")}</option><option value="사전반죽">{t("typePreferment")}</option><option value="소금">{t("typeSalt")}</option><option value="기타">{t("typeOther")}</option></select>
+                <select value={ing.type} onChange={e => updateIng(i, "type", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs font-bold"><option value="밀">{t("typeFlour")}</option><option value="수분">{t("typeWater")}</option><option value="사전반죽">{t("typePreferment")}</option><option value="소금">{t("typeSalt")}</option><option value="이스트">{t("typeYeast")}</option><option value="기타">{t("typeOther")}</option></select>
                 <IngredientNameInput
                   t={t}
                   value={ing.name}

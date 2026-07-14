@@ -268,6 +268,7 @@ function CostModal({ t, initialData, onSave, onClose }) {
               <option value="과일/필링">{t("fruitFillingCategory")}</option>
               <option value="초콜릿">{t("chocolateCategory")}</option>
               <option value="소금">{t("typeSalt")}</option>
+              <option value="이스트">{t("typeYeast")}</option>
               <option value="첨가물">{t("additiveCategory")}</option>
               <option value="기타">{t("typeOther")}</option>
             </select>
