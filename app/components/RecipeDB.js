@@ -4,6 +4,11 @@ import { InputField } from "./common";
 import { RECIPE_CATEGORY_LABEL_KEYS, labelFromMap } from "./i18nHelpers";
 
 const RECIPE_CATEGORIES = ["하드계열", "소프트계열", "사전반죽"];
+const parseDecimal = (value) => parseFloat(String(value).replace(',', '.')) || 0;
+const formatPercentValue = (value) => {
+  if (!Number.isFinite(value)) return "";
+  return value.toFixed(2).replace(/\.?0+$/, "");
+};
 
 export default function RecipeDB({ t, recipes, setRecipes, costItems, setCostItems }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -122,6 +127,14 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
   const [category, setCategory] = useState(initialData?.category || "하드계열");
   const [productName, setProductName] = useState(initialData?.productName || "");
   const [ingredients, setIngredients] = useState(initialData?.ingredients || [{ type: "밀", name: "", percent: "", cost: "" }]);
+  const [inputMode, setInputMode] = useState("percent");
+  const isGramMode = inputMode === "gram";
+  const flourInputTotal = useMemo(() => {
+    if (!isGramMode) return 0;
+    return ingredients.reduce((sum, ing) => (
+      ing.type === "밀" ? sum + parseDecimal(ing.percent) : sum
+    ), 0);
+  }, [ingredients, isGramMode]);
   const updateIng = (i, f, v) => setIngredients(ingredients.map((ing, idx) => {
     if (idx !== i) return ing;
 
@@ -147,15 +160,24 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
   const saveRecipe = async () => {
     const knownItems = [...costItems];
     const newCostItems = [];
+    const gramBase = isGramMode ? flourInputTotal : 0;
+
+    if (isGramMode && gramBase <= 0) {
+      alert(t("gramModeFlourRequired"));
+      return;
+    }
 
     const nextIngredients = ingredients.map((ing) => {
       const trimmedName = ing.name.trim();
-      if (!trimmedName) return ing;
+      const nextPercent = isGramMode ? formatPercentValue((parseDecimal(ing.percent) / gramBase) * 100) : ing.percent;
+      const ingredientWithPercent = { ...ing, percent: nextPercent };
+
+      if (!trimmedName) return ingredientWithPercent;
 
       const linkedItem = knownItems.find(item => item.id === ing.ingredientId);
       if (linkedItem) {
         return {
-          ...ing,
+          ...ingredientWithPercent,
           name: linkedItem.name,
           cost: linkedItem.cost,
           costUnit: linkedItem.unit,
@@ -165,7 +187,7 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
       const exactItem = knownItems.find(item => item.name.trim().toLowerCase() === trimmedName.toLowerCase());
       if (exactItem) {
         return {
-          ...ing,
+          ...ingredientWithPercent,
           ingredientId: exactItem.id,
           name: exactItem.name,
           cost: exactItem.cost,
@@ -189,7 +211,7 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
       newCostItems.push(newCostItem);
 
       return {
-        ...ing,
+        ...ingredientWithPercent,
         ingredientId: newCostItem.id,
         name: trimmedName,
         cost: "",
@@ -218,6 +240,28 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
           <InputField label={t("category")}><select value={category} onChange={e => setCategory(e.target.value)} className="w-full h-10 bg-transparent border-b-2 border-black py-2 outline-none font-bold leading-normal"><option value="하드계열">{t("hardCategory")}</option><option value="소프트계열">{t("softCategory")}</option><option value="사전반죽">{t("prefermentCategory")}</option></select></InputField>
           <InputField label={t("productName")}><input value={productName} onChange={e => setProductName(e.target.value)} className="w-full bg-transparent border-b-2 border-black py-2 outline-none font-bold" /></InputField>
         </div>
+        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/70 bg-white/45 p-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t("recipeInputMode")}</div>
+            <div className="text-xs font-bold text-gray-500">{isGramMode ? t("gramModeDescription") : t("percentModeDescription")}</div>
+          </div>
+          <div className="grid grid-cols-2 gap-1 rounded-full bg-[#f7f6f3] p-1">
+            <button
+              type="button"
+              onClick={() => setInputMode("percent")}
+              className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-tight ${inputMode === "percent" ? "bg-black text-white shadow-sm" : "text-gray-500"}`}
+            >
+              {t("percentMode")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputMode("gram")}
+              className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-tight ${inputMode === "gram" ? "bg-black text-white shadow-sm" : "text-gray-500"}`}
+            >
+              {t("gramMode")}
+            </button>
+          </div>
+        </div>
         <div className="space-y-3">
           {ingredients.map((ing, i) => {
             const linkedCostItem = costItems.find(item => item.id === ing.ingredientId);
@@ -235,7 +279,7 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
                   onChange={(value) => updateIng(i, "name", value)}
                   onSelect={(item) => selectCostItem(i, item)}
                 />
-                <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder="%" type="text" inputMode="decimal" />
+                <input value={ing.percent} onChange={e => updateIng(i, "percent", e.target.value)} className="bg-gray-50 p-2 rounded-lg text-xs text-right font-mono font-bold" placeholder={isGramMode ? "g" : "%"} type="text" inputMode="decimal" />
                 <input
                   value={displayCost ? `${displayCost}${t("won")} / g` : ""}
                   readOnly
@@ -250,6 +294,24 @@ function RecipeModal({ t, initialData, costItems, onSave, onClose }) {
           })}
           <button onClick={() => setIngredients([...ingredients, { type: "밀", name: "", percent: "", cost: "" }])} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 font-black uppercase tracking-widest">{t("addIngredient")}</button>
         </div>
+        {isGramMode && (
+          <div className="mt-4 rounded-2xl border border-dashed border-gray-200 bg-white/60 p-4 text-xs font-bold text-gray-500">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="font-black uppercase tracking-tight">{t("gramModeFlourBase")}</span>
+              <span className="font-mono font-black text-black">{flourInputTotal.toLocaleString()}g</span>
+            </div>
+            <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+              {ingredients.map((ing, index) => (
+                <div key={`${ing.name}-${index}`} className="flex justify-between gap-2 border-b border-black/5 py-1">
+                  <span className="truncate">{ing.name || t("unspecified")}</span>
+                  <span className="font-mono text-gray-400">
+                    {flourInputTotal > 0 ? `${formatPercentValue((parseDecimal(ing.percent) / flourInputTotal) * 100)}%` : "-"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="mt-10 flex gap-3">
           <button onClick={onClose} className="flex-1 bg-white border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-tighter">{t("close")}</button>
           <button onClick={saveRecipe} className="flex-1 bg-black text-white py-4 rounded-xl font-bold uppercase tracking-tighter">{t("saveRecipe")}</button>
