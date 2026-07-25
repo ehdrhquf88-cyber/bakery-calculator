@@ -963,11 +963,6 @@ export default function Home() {
           return;
         }
 
-        if (!hasActiveBrowserSession() && !isAuthRedirectRequest() && hasStoredAuthSession()) {
-          clearStoredAuthSession();
-          await supabase?.auth.signOut({ scope: "local" }).catch(() => {});
-        }
-
         markBrowserSessionActive();
 
         if (supabase) {
