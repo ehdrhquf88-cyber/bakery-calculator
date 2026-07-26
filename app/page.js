@@ -1006,7 +1006,7 @@ async function loadWorkspaceInvites(activeWorkspace) {
   return data || [];
 }
 
-function WorkspaceStatusBar({ t, activeWorkspace, onOpenSettings }) {
+function WorkspaceStatusBar({ t, activeWorkspace }) {
   if (!activeWorkspace) return null;
 
   const isSharedWorkspace = activeWorkspace.type === WORKSPACE_TYPES.shared;
@@ -1014,20 +1014,12 @@ function WorkspaceStatusBar({ t, activeWorkspace, onOpenSettings }) {
 
   return (
     <div className="border-b border-gray-200 bg-[#f7f6f3]/95 px-4 py-2 print:hidden">
-      <button
-        type="button"
-        onClick={onOpenSettings}
-        className="mx-auto flex w-full max-w-5xl items-center gap-2 rounded-lg px-2 py-1 text-left text-xs font-black text-gray-400 transition hover:bg-white/70 md:text-sm"
-      >
-        <span className="shrink-0 uppercase tracking-widest">{t("currentWorkspace")}</span>
+      <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-2 py-1 text-xs font-black text-gray-400 md:text-sm">
         <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-tight ${isSharedWorkspace ? "bg-black text-white" : "border border-gray-200 bg-white text-gray-600"}`}>
           {workspaceTypeLabel}
         </span>
         <span className="min-w-0 flex-1 truncate text-black">{activeWorkspace.name}</span>
-        <span className="hidden shrink-0 text-[10px] font-black uppercase tracking-widest text-gray-300 md:inline">
-          {t("workspaceStatusHint")}
-        </span>
-      </button>
+      </div>
     </div>
   );
 }
@@ -2061,7 +2053,6 @@ export default function Home() {
       <WorkspaceStatusBar
         t={t}
         activeWorkspace={activeWorkspace}
-        onOpenSettings={() => moveToView("settings")}
       />
 
       <div className="py-4 md:py-8 print:py-0">
