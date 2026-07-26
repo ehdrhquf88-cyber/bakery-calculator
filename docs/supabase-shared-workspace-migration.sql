@@ -482,6 +482,31 @@ $$;
 revoke execute on function public.deactivate_shared_workspace(uuid) from authenticated, anon, public;
 grant execute on function public.deactivate_shared_workspace(uuid) to authenticated;
 
+create or replace function public.delete_shared_workspace(target_workspace_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if (select auth.uid()) is null then
+    raise exception 'Authentication is required.';
+  end if;
+
+  delete from public.workspaces
+  where id = target_workspace_id
+    and type = 'shared'::public.workspace_type
+    and owner_user_id = (select auth.uid());
+
+  if not found then
+    raise exception 'Shared workspace owner permission is required.';
+  end if;
+end;
+$$;
+
+revoke execute on function public.delete_shared_workspace(uuid) from authenticated, anon, public;
+grant execute on function public.delete_shared_workspace(uuid) to authenticated;
+
 insert into public.workspaces (type, name, owner_user_id)
 select 'personal'::public.workspace_type, '개인 페이지', users.id
 from auth.users as users
