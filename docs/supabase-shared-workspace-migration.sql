@@ -76,6 +76,9 @@ on public.workspace_members(user_id);
 create index if not exists workspace_email_invites_workspace_id_idx
 on public.workspace_email_invites(workspace_id);
 
+create index if not exists workspace_email_invites_created_by_idx
+on public.workspace_email_invites(created_by);
+
 alter table public.recipes
   add column if not exists workspace_id uuid null references public.workspaces(id) on delete cascade;
 
@@ -523,6 +526,10 @@ where deleted_items.workspace_id is null
 alter table public.deleted_items
   drop constraint if exists deleted_items_pkey;
 
+alter table public.deleted_items
+  add constraint deleted_items_pkey
+  primary key (workspace_id, user_id, item_type, item_id);
+
 drop policy if exists "Workspace members can view workspaces" on public.workspaces;
 create policy "Workspace members can view workspaces"
 on public.workspaces
@@ -556,12 +563,27 @@ to authenticated
 using ((select private.is_workspace_member(workspace_id)));
 
 drop policy if exists "Workspace managers can manage members" on public.workspace_members;
-create policy "Workspace managers can manage members"
+drop policy if exists "Workspace managers can insert members" on public.workspace_members;
+drop policy if exists "Workspace managers can update members" on public.workspace_members;
+drop policy if exists "Workspace managers can delete members" on public.workspace_members;
+create policy "Workspace managers can insert members"
 on public.workspace_members
-for all
+for insert
+to authenticated
+with check ((select private.can_manage_workspace(workspace_id)));
+
+create policy "Workspace managers can update members"
+on public.workspace_members
+for update
 to authenticated
 using ((select private.can_manage_workspace(workspace_id)))
 with check ((select private.can_manage_workspace(workspace_id)));
+
+create policy "Workspace managers can delete members"
+on public.workspace_members
+for delete
+to authenticated
+using ((select private.can_manage_workspace(workspace_id)));
 
 drop policy if exists "Workspace members can view invites" on public.workspace_email_invites;
 drop policy if exists "Workspace managers can view invites" on public.workspace_email_invites;
@@ -572,12 +594,27 @@ to authenticated
 using ((select private.can_manage_workspace(workspace_id)));
 
 drop policy if exists "Workspace managers can manage invites" on public.workspace_email_invites;
-create policy "Workspace managers can manage invites"
+drop policy if exists "Workspace managers can insert invites" on public.workspace_email_invites;
+drop policy if exists "Workspace managers can update invites" on public.workspace_email_invites;
+drop policy if exists "Workspace managers can delete invites" on public.workspace_email_invites;
+create policy "Workspace managers can insert invites"
 on public.workspace_email_invites
-for all
+for insert
+to authenticated
+with check ((select private.can_manage_workspace(workspace_id)));
+
+create policy "Workspace managers can update invites"
+on public.workspace_email_invites
+for update
 to authenticated
 using ((select private.can_manage_workspace(workspace_id)))
 with check ((select private.can_manage_workspace(workspace_id)));
+
+create policy "Workspace managers can delete invites"
+on public.workspace_email_invites
+for delete
+to authenticated
+using ((select private.can_manage_workspace(workspace_id)));
 
 drop policy if exists "Users can view their own recipes" on public.recipes;
 create policy "Users can view their own recipes"
