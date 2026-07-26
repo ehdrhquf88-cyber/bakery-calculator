@@ -402,8 +402,7 @@ begin
   select id, workspace_id, email
   into target_invite
   from public.workspace_email_invites
-  where id = invite_id
-    and revoked_at is null;
+  where id = invite_id;
 
   if target_invite.id is null then
     return;
@@ -414,7 +413,7 @@ begin
   end if;
 
   update public.workspace_email_invites
-  set revoked_at = now()
+  set revoked_at = coalesce(revoked_at, now())
   where id = target_invite.id;
 
   update public.workspace_members
@@ -429,6 +428,19 @@ $$;
 
 revoke execute on function public.revoke_workspace_invite(bigint) from authenticated, anon, public;
 grant execute on function public.revoke_workspace_invite(bigint) to authenticated;
+
+-- Repair already-revoked invite rows from earlier migration attempts:
+-- a revoked email should not remain an active workspace member.
+update public.workspace_members as members
+set
+  is_active = false,
+  removed_at = coalesce(members.removed_at, invites.revoked_at, now())
+from public.workspace_email_invites as invites
+where members.workspace_id = invites.workspace_id
+  and lower(members.email) = lower(invites.email)
+  and members.role <> 'owner'::public.workspace_role
+  and members.is_active = true
+  and invites.revoked_at is not null;
 
 create or replace function public.deactivate_shared_workspace(target_workspace_id uuid)
 returns void

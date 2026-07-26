@@ -1201,6 +1201,9 @@ export default function Home() {
           || nextWorkspaces[0]
           || getFallbackPersonalWorkspace(authUser);
 
+        if (selectionKey && nextActiveWorkspace?.id) {
+          localStorage.setItem(selectionKey, nextActiveWorkspace.id);
+        }
         setWorkspaces(nextWorkspaces);
         setActiveWorkspaceId(nextActiveWorkspace?.id || "");
         setWorkspacesLoaded(true);
@@ -1737,10 +1740,39 @@ export default function Home() {
       || nextWorkspaces[0]
       || getFallbackPersonalWorkspace(authUser);
 
+    const selectionKey = getWorkspaceSelectionStorageKey(authUser);
+    if (selectionKey && nextActiveWorkspace?.id) {
+      localStorage.setItem(selectionKey, nextActiveWorkspace.id);
+    }
     setWorkspaces(nextWorkspaces);
     setActiveWorkspaceId(nextActiveWorkspace?.id || "");
     setWorkspacesLoaded(true);
   }, [activeWorkspaceId, authUser]);
+
+  useEffect(() => {
+    if (!isLoaded || !authUser || authUser.isOfflineMode || !isOnline || !supabase) return undefined;
+
+    const refreshWorkspaceMembership = () => {
+      if (document.visibilityState === "hidden") return;
+      reloadWorkspaces().catch(error => {
+        console.warn("워크스페이스 멤버십을 다시 확인하지 못했습니다.", error?.message || error);
+      });
+    };
+
+    window.addEventListener("focus", refreshWorkspaceMembership);
+    window.addEventListener("online", refreshWorkspaceMembership);
+    document.addEventListener("visibilitychange", refreshWorkspaceMembership);
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible") refreshWorkspaceMembership();
+    }, REMOTE_REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.removeEventListener("focus", refreshWorkspaceMembership);
+      window.removeEventListener("online", refreshWorkspaceMembership);
+      document.removeEventListener("visibilitychange", refreshWorkspaceMembership);
+      window.clearInterval(refreshInterval);
+    };
+  }, [authUser, isLoaded, isOnline, reloadWorkspaces]);
 
   const changeWorkspace = (workspaceId) => {
     const nextWorkspace = workspaces.find(workspace => workspace.id === workspaceId);
@@ -2919,17 +2951,23 @@ function SettingsPanel({
                 </p>
               )}
             </div>
-            <select
-              value={activeWorkspaceId}
-              onChange={event => onWorkspaceChange?.(event.target.value)}
-              className="h-11 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-3 text-sm font-black outline-none md:w-56"
-            >
-              {workspaces.map(workspace => (
-                <option key={workspace.id} value={workspace.id}>
-                  {getWorkspaceDisplayName(t, workspace)}
-                </option>
-              ))}
-            </select>
+            {workspaces.length > 1 ? (
+              <select
+                value={activeWorkspaceId}
+                onChange={event => onWorkspaceChange?.(event.target.value)}
+                className="h-11 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-3 text-sm font-black outline-none md:w-56"
+              >
+                {workspaces.map(workspace => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {getWorkspaceDisplayName(t, workspace)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="flex h-11 w-full items-center rounded-xl border border-gray-200 bg-[#f7f6f3] px-3 text-sm font-black md:w-56">
+                {getWorkspaceDisplayName(t, activeWorkspace)}
+              </div>
+            )}
           </div>
 
           {!hasNonPersonalWorkspace && (
