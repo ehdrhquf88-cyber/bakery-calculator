@@ -1832,7 +1832,11 @@ export default function Home() {
       return true;
     } catch (error) {
       console.warn("공유 페이지 이메일을 등록하지 못했습니다.", error?.message || error);
-      setWorkspaceError(error?.message || t("workspaceSaveFailed"));
+      const isAlreadyRegisteredElsewhere =
+        error?.code === "23505" ||
+        error?.message?.includes("workspace_email_invites_active_email_idx") ||
+        error?.details?.includes("workspace_email_invites_active_email_idx");
+      setWorkspaceError(isAlreadyRegisteredElsewhere ? t("workspaceInviteAlreadyUsed") : (error?.message || t("workspaceSaveFailed")));
       return false;
     }
   };
