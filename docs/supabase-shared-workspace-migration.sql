@@ -442,45 +442,7 @@ where members.workspace_id = invites.workspace_id
   and members.is_active = true
   and invites.revoked_at is not null;
 
-create or replace function public.deactivate_shared_workspace(target_workspace_id uuid)
-returns void
-language plpgsql
-security definer
-set search_path = ''
-as $$
-begin
-  if (select auth.uid()) is null then
-    raise exception 'Authentication is required.';
-  end if;
-
-  update public.workspaces
-  set
-    is_active = false,
-    updated_at = now()
-  where id = target_workspace_id
-    and type = 'shared'::public.workspace_type
-    and owner_user_id = (select auth.uid())
-    and is_active = true;
-
-  if not found then
-    raise exception 'Shared workspace owner permission is required.';
-  end if;
-
-  update public.workspace_members
-  set
-    is_active = false,
-    removed_at = now()
-  where workspace_id = target_workspace_id;
-
-  update public.workspace_email_invites
-  set revoked_at = now()
-  where workspace_id = target_workspace_id
-    and revoked_at is null;
-end;
-$$;
-
-revoke execute on function public.deactivate_shared_workspace(uuid) from authenticated, anon, public;
-grant execute on function public.deactivate_shared_workspace(uuid) to authenticated;
+drop function if exists public.deactivate_shared_workspace(uuid);
 
 create or replace function public.delete_shared_workspace(target_workspace_id uuid)
 returns void
