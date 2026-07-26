@@ -386,6 +386,90 @@ $$;
 revoke execute on function public.accept_workspace_invites_for_current_user() from authenticated, anon, public;
 grant execute on function public.accept_workspace_invites_for_current_user() to authenticated;
 
+create or replace function public.revoke_workspace_invite(invite_id bigint)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  target_invite record;
+begin
+  if (select auth.uid()) is null then
+    raise exception 'Authentication is required.';
+  end if;
+
+  select id, workspace_id, email
+  into target_invite
+  from public.workspace_email_invites
+  where id = invite_id
+    and revoked_at is null;
+
+  if target_invite.id is null then
+    return;
+  end if;
+
+  if not (select private.can_manage_workspace(target_invite.workspace_id)) then
+    raise exception 'Workspace management permission is required.';
+  end if;
+
+  update public.workspace_email_invites
+  set revoked_at = now()
+  where id = target_invite.id;
+
+  update public.workspace_members
+  set
+    is_active = false,
+    removed_at = now()
+  where workspace_id = target_invite.workspace_id
+    and lower(email) = lower(target_invite.email)
+    and role <> 'owner'::public.workspace_role;
+end;
+$$;
+
+revoke execute on function public.revoke_workspace_invite(bigint) from authenticated, anon, public;
+grant execute on function public.revoke_workspace_invite(bigint) to authenticated;
+
+create or replace function public.deactivate_shared_workspace(target_workspace_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if (select auth.uid()) is null then
+    raise exception 'Authentication is required.';
+  end if;
+
+  update public.workspaces
+  set
+    is_active = false,
+    updated_at = now()
+  where id = target_workspace_id
+    and type = 'shared'::public.workspace_type
+    and owner_user_id = (select auth.uid())
+    and is_active = true;
+
+  if not found then
+    raise exception 'Shared workspace owner permission is required.';
+  end if;
+
+  update public.workspace_members
+  set
+    is_active = false,
+    removed_at = now()
+  where workspace_id = target_workspace_id;
+
+  update public.workspace_email_invites
+  set revoked_at = now()
+  where workspace_id = target_workspace_id
+    and revoked_at is null;
+end;
+$$;
+
+revoke execute on function public.deactivate_shared_workspace(uuid) from authenticated, anon, public;
+grant execute on function public.deactivate_shared_workspace(uuid) to authenticated;
+
 insert into public.workspaces (type, name, owner_user_id)
 select 'personal'::public.workspace_type, '개인 페이지', users.id
 from auth.users as users
@@ -481,6 +565,7 @@ using ((select private.can_manage_workspace(workspace_id)))
 with check ((select private.can_manage_workspace(workspace_id)));
 
 drop policy if exists "Workspace members can view invites" on public.workspace_email_invites;
+drop policy if exists "Workspace managers can view invites" on public.workspace_email_invites;
 create policy "Workspace managers can view invites"
 on public.workspace_email_invites
 for select

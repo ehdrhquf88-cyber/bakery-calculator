@@ -1810,15 +1810,31 @@ export default function Home() {
 
     try {
       setWorkspaceError("");
-      const { error } = await supabase
-        .from("workspace_email_invites")
-        .update({ revoked_at: new Date().toISOString() })
-        .eq("id", inviteId);
+      const { error } = await supabase.rpc("revoke_workspace_invite", { invite_id: inviteId });
       if (error) throw error;
       setWorkspaceInvites(await loadWorkspaceInvites(activeWorkspace));
     } catch (error) {
       console.warn("공유 페이지 이메일 등록을 취소하지 못했습니다.", error?.message || error);
       setWorkspaceError(error?.message || t("workspaceSaveFailed"));
+    }
+  };
+
+  const deactivateSharedWorkspace = async () => {
+    if (!supabase || !activeWorkspace || activeWorkspace.type !== WORKSPACE_TYPES.shared || authUser?.isOfflineMode || !navigator.onLine) return false;
+    if (!confirm(t("deleteSharedWorkspaceConfirm"))) return false;
+
+    try {
+      setWorkspaceError("");
+      const { error } = await supabase.rpc("deactivate_shared_workspace", { target_workspace_id: activeWorkspace.id });
+      if (error) throw error;
+      const personalWorkspace = workspaces.find(workspace => workspace.type === WORKSPACE_TYPES.personal);
+      await reloadWorkspaces(personalWorkspace?.id || "");
+      setWorkspaceInvites([]);
+      return true;
+    } catch (error) {
+      console.warn("공유 페이지를 삭제하지 못했습니다.", error?.message || error);
+      setWorkspaceError(error?.message || t("workspaceSaveFailed"));
+      return false;
     }
   };
 
@@ -2089,6 +2105,7 @@ export default function Home() {
             onCreateSharedWorkspace={createSharedWorkspace}
             onAddWorkspaceInvite={addWorkspaceInvite}
             onRevokeWorkspaceInvite={revokeWorkspaceInvite}
+            onDeactivateSharedWorkspace={deactivateSharedWorkspace}
           />
         )}
       </div>
@@ -2677,6 +2694,7 @@ function SettingsPanel({
   onCreateSharedWorkspace,
   onAddWorkspaceInvite,
   onRevokeWorkspaceInvite,
+  onDeactivateSharedWorkspace,
 }) {
   const [isRecipeExportOpen, setIsRecipeExportOpen] = useState(false);
   const [sharedWorkspaceName, setSharedWorkspaceName] = useState("");
@@ -2686,6 +2704,7 @@ function SettingsPanel({
   const readAnnouncementIds = useMemo(() => new Set(announcementReads.map(read => Number(read.announcement_id))), [announcementReads]);
   const hasNonPersonalWorkspace = useMemo(() => workspaces.some(workspace => workspace.type !== WORKSPACE_TYPES.personal), [workspaces]);
   const canManageActiveWorkspace = activeWorkspace?.type === WORKSPACE_TYPES.shared && (activeWorkspace.isOwner || activeWorkspace.role === "admin");
+  const canDeactivateActiveWorkspace = activeWorkspace?.type === WORKSPACE_TYPES.shared && activeWorkspace.isOwner;
   const sortedRecipes = useMemo(() => sortRecipesForBackup(recipes, t), [recipes, t]);
   const recipeCategories = useMemo(() => {
     return Array.from(new Set(sortedRecipes.map(recipe => recipe.category || "")));
@@ -2736,6 +2755,12 @@ function SettingsPanel({
     setIsWorkspaceSaving(true);
     const didAdd = await onAddWorkspaceInvite(workspaceInviteEmail);
     if (didAdd) setWorkspaceInviteEmail("");
+    setIsWorkspaceSaving(false);
+  };
+  const deactivateSharedWorkspace = async () => {
+    if (!onDeactivateSharedWorkspace) return;
+    setIsWorkspaceSaving(true);
+    await onDeactivateSharedWorkspace();
     setIsWorkspaceSaving(false);
   };
 
@@ -2971,6 +2996,21 @@ function SettingsPanel({
                   ))
                 )}
               </div>
+            </div>
+          )}
+
+          {canDeactivateActiveWorkspace && (
+            <div className="rounded-xl border border-red-100 bg-red-50 p-4">
+              <div className="text-sm font-black tracking-tight text-red-700">{t("deleteSharedWorkspace")}</div>
+              <p className="mt-1 text-xs font-bold leading-5 text-red-400">{t("deleteSharedWorkspaceDescription")}</p>
+              <button
+                type="button"
+                onClick={deactivateSharedWorkspace}
+                disabled={isWorkspaceSaving}
+                className="mt-3 rounded-xl bg-red-600 px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {isWorkspaceSaving ? t("saving") : t("deleteSharedWorkspace")}
+              </button>
             </div>
           )}
 
