@@ -481,14 +481,11 @@ using ((select private.can_manage_workspace(workspace_id)))
 with check ((select private.can_manage_workspace(workspace_id)));
 
 drop policy if exists "Workspace members can view invites" on public.workspace_email_invites;
-create policy "Workspace members can view invites"
+create policy "Workspace managers can view invites"
 on public.workspace_email_invites
 for select
 to authenticated
-using (
-  lower(email) = lower((select email from auth.users where id = (select auth.uid())))
-  or (select private.can_manage_workspace(workspace_id))
-);
+using ((select private.can_manage_workspace(workspace_id)));
 
 drop policy if exists "Workspace managers can manage invites" on public.workspace_email_invites;
 create policy "Workspace managers can manage invites"
