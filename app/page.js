@@ -1018,10 +1018,16 @@ function WorkspaceStatusBar({ t, activeWorkspace }) {
         <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-tight ${isSharedWorkspace ? "bg-black text-white" : "border border-gray-200 bg-white text-gray-600"}`}>
           {workspaceTypeLabel}
         </span>
-        <span className="min-w-0 flex-1 truncate text-black">{activeWorkspace.name}</span>
+        {isSharedWorkspace && <span className="min-w-0 flex-1 truncate text-black">{activeWorkspace.name}</span>}
       </div>
     </div>
   );
+}
+
+function getWorkspaceDisplayName(t, workspace) {
+  if (!workspace) return "";
+  if (workspace.type === WORKSPACE_TYPES.personal) return t("personalWorkspace");
+  return `${t("sharedWorkspace")} · ${workspace.name}`;
 }
 
 export default function Home() {
@@ -2884,7 +2890,7 @@ function SettingsPanel({
               <h2 className="mt-1 text-xl font-black tracking-tighter">{t("workspaceDescription")}</h2>
               {activeWorkspace && (
                 <p className="mt-2 text-xs font-bold text-gray-400">
-                  {t("currentWorkspace")}: {activeWorkspace.name}
+                  {t("currentWorkspace")}: {getWorkspaceDisplayName(t, activeWorkspace)}
                 </p>
               )}
             </div>
@@ -2895,7 +2901,7 @@ function SettingsPanel({
             >
               {workspaces.map(workspace => (
                 <option key={workspace.id} value={workspace.id}>
-                  {workspace.type === WORKSPACE_TYPES.shared ? t("sharedWorkspace") : t("personalWorkspace")} · {workspace.name}
+                  {getWorkspaceDisplayName(t, workspace)}
                 </option>
               ))}
             </select>
