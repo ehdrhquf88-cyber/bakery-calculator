@@ -27,6 +27,7 @@ const REMOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const REMOTE_DELETION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const LAST_REMOTE_SYNC_STORAGE_PREFIX = "bakery_last_remote_sync";
 const CALCULATOR_STATE_STORAGE_PREFIX = "bakery_recipe_calculator_state";
+const WORKSPACE_INVITE_NOTICE_STORAGE_PREFIX = "bakery_workspace_invite_notice";
 const RECIPE_CATEGORY_ORDER = ["하드계열", "소프트계열", "사전반죽"];
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
@@ -38,6 +39,8 @@ const WORKSPACE_TYPES = {
   personal: "personal",
   shared: "shared",
 };
+const SHARED_WORKSPACE_MAX_PARTICIPANTS = 5;
+const SHARED_WORKSPACE_MAX_INVITES = SHARED_WORKSPACE_MAX_PARTICIPANTS - 1;
 const REMOTE_ITEM_TYPES = {
   recipes: "recipe",
   costItems: "cost_item",
@@ -62,6 +65,20 @@ function getWorkspaceStorageId(authUser, workspace) {
 
 function getWorkspaceSelectionStorageKey(authUser) {
   return authUser?.id ? `${WORKSPACE_STORAGE_KEY_PREFIX}:${authUser.id}` : "";
+}
+
+function getWorkspaceInviteNoticeStorageKey(authUser, workspace) {
+  return authUser?.id && workspace?.id ? `${WORKSPACE_INVITE_NOTICE_STORAGE_PREFIX}:${authUser.id}:${workspace.id}` : "";
+}
+
+function hasSeenWorkspaceInviteNotice(authUser, workspace) {
+  const storageKey = getWorkspaceInviteNoticeStorageKey(authUser, workspace);
+  return storageKey ? localStorage.getItem(storageKey) === "true" : true;
+}
+
+function markWorkspaceInviteNoticeSeen(authUser, workspace) {
+  const storageKey = getWorkspaceInviteNoticeStorageKey(authUser, workspace);
+  if (storageKey) localStorage.setItem(storageKey, "true");
 }
 
 function getUserDataOwnerId(authUser, workspace) {
@@ -1060,6 +1077,7 @@ export default function Home() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
   const [workspaceInvites, setWorkspaceInvites] = useState([]);
   const [workspaceError, setWorkspaceError] = useState("");
+  const [workspaceInviteNotice, setWorkspaceInviteNotice] = useState(null);
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
@@ -1109,6 +1127,7 @@ export default function Home() {
     setWorkspacesLoaded(false);
     setActiveWorkspaceId("");
     setWorkspaceError("");
+    setWorkspaceInviteNotice(null);
     setIsAdminUnlocked(false);
     localStorage.removeItem("bakery_auth_user");
   }, [authUser]);
@@ -1185,6 +1204,7 @@ export default function Home() {
         setActiveWorkspaceId("");
         setWorkspacesLoaded(false);
         setWorkspaceError("");
+        setWorkspaceInviteNotice(null);
         return;
       }
 
@@ -1207,6 +1227,14 @@ export default function Home() {
         setWorkspaces(nextWorkspaces);
         setActiveWorkspaceId(nextActiveWorkspace?.id || "");
         setWorkspacesLoaded(true);
+        const unseenInvitedWorkspace = nextWorkspaces.find(workspace => (
+          workspace.type === WORKSPACE_TYPES.shared
+          && !workspace.isOwner
+          && !hasSeenWorkspaceInviteNotice(authUser, workspace)
+        ));
+        if (unseenInvitedWorkspace) {
+          setWorkspaceInviteNotice(unseenInvitedWorkspace);
+        }
       } catch (error) {
         console.warn("워크스페이스 정보를 읽지 못해 개인 페이지로 계속합니다.", error?.message || error);
         if (!isMounted) return;
@@ -1747,6 +1775,14 @@ export default function Home() {
     setWorkspaces(nextWorkspaces);
     setActiveWorkspaceId(nextActiveWorkspace?.id || "");
     setWorkspacesLoaded(true);
+    const unseenInvitedWorkspace = nextWorkspaces.find(workspace => (
+      workspace.type === WORKSPACE_TYPES.shared
+      && !workspace.isOwner
+      && !hasSeenWorkspaceInviteNotice(authUser, workspace)
+    ));
+    if (unseenInvitedWorkspace) {
+      setWorkspaceInviteNotice(unseenInvitedWorkspace);
+    }
   }, [activeWorkspaceId, authUser]);
 
   useEffect(() => {
@@ -1781,6 +1817,13 @@ export default function Home() {
     const selectionKey = getWorkspaceSelectionStorageKey(authUser);
     if (selectionKey) localStorage.setItem(selectionKey, nextWorkspace.id);
     setActiveWorkspaceId(nextWorkspace.id);
+  };
+
+  const confirmWorkspaceInviteNotice = () => {
+    if (workspaceInviteNotice) {
+      markWorkspaceInviteNoticeSeen(authUser, workspaceInviteNotice);
+    }
+    setWorkspaceInviteNotice(null);
   };
 
   const createSharedWorkspace = async (workspaceName) => {
@@ -1836,7 +1879,16 @@ export default function Home() {
         error?.code === "23505" ||
         error?.message?.includes("workspace_email_invites_active_email_idx") ||
         error?.details?.includes("workspace_email_invites_active_email_idx");
-      setWorkspaceError(isAlreadyRegisteredElsewhere ? t("workspaceInviteAlreadyUsed") : (error?.message || t("workspaceSaveFailed")));
+      const isMemberLimitExceeded =
+        error?.message?.includes("Shared workspace member limit exceeded") ||
+        error?.details?.includes("Shared workspace member limit exceeded");
+      setWorkspaceError(
+        isAlreadyRegisteredElsewhere
+          ? t("workspaceInviteAlreadyUsed")
+          : isMemberLimitExceeded
+            ? t("workspaceInviteLimitReached")
+            : (error?.message || t("workspaceSaveFailed"))
+      );
       return false;
     }
   };
@@ -2164,6 +2216,13 @@ export default function Home() {
           setHideLeaveCheck={setHideLeaveCheck}
           onCancel={closeLeaveCheck}
           onConfirm={confirmLeaveCheck}
+        />
+      )}
+      {workspaceInviteNotice && (
+        <WorkspaceInviteNoticeModal
+          t={t}
+          workspace={workspaceInviteNotice}
+          onConfirm={confirmWorkspaceInviteNotice}
         />
       )}
       <ServiceWorkerUpdater t={t} />
@@ -2741,6 +2800,10 @@ function SettingsPanel({
   const hasNonPersonalWorkspace = useMemo(() => workspaces.some(workspace => workspace.type !== WORKSPACE_TYPES.personal), [workspaces]);
   const canManageActiveWorkspace = activeWorkspace?.type === WORKSPACE_TYPES.shared && (activeWorkspace.isOwner || activeWorkspace.role === "admin");
   const canDeactivateActiveWorkspace = activeWorkspace?.type === WORKSPACE_TYPES.shared && activeWorkspace.isOwner;
+  const activeWorkspaceInviteCount = useMemo(() => {
+    return new Set(workspaceInvites.map(invite => String(invite.email || "").trim().toLowerCase()).filter(Boolean)).size;
+  }, [workspaceInvites]);
+  const isWorkspaceInviteLimitReached = activeWorkspaceInviteCount >= SHARED_WORKSPACE_MAX_INVITES;
   const sortedRecipes = useMemo(() => sortRecipesForBackup(recipes, t), [recipes, t]);
   const recipeCategories = useMemo(() => {
     return Array.from(new Set(sortedRecipes.map(recipe => recipe.category || "")));
@@ -2999,24 +3062,36 @@ function SettingsPanel({
 
           {canManageActiveWorkspace && (
             <div className="rounded-xl border border-gray-100 bg-[#f7f6f3] p-4">
-              <div className="text-sm font-black tracking-tight">{t("workspaceMembers")}</div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-black tracking-tight">{t("workspaceMembers")}</div>
+                <div className="text-xs font-black text-gray-400">
+                  {t("workspaceInviteCount")
+                    .replace("{count}", activeWorkspaceInviteCount)
+                    .replace("{max}", SHARED_WORKSPACE_MAX_INVITES)}
+                </div>
+              </div>
               <p className="mt-1 text-xs font-bold leading-5 text-gray-400">{t("workspaceMembersDescription")}</p>
+              <p className="mt-1 text-xs font-bold leading-5 text-gray-400">{t("workspaceInviteLimitDescription")}</p>
               <div className="mt-3 flex flex-col gap-2 md:flex-row">
                 <input
                   value={workspaceInviteEmail}
                   onChange={event => setWorkspaceInviteEmail(event.target.value)}
                   placeholder={t("workspaceInviteEmailPlaceholder")}
+                  disabled={isWorkspaceInviteLimitReached || isWorkspaceSaving}
                   className="min-h-11 flex-1 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold outline-none focus:border-black"
                 />
                 <button
                   type="button"
                   onClick={addWorkspaceInvite}
-                  disabled={isWorkspaceSaving}
+                  disabled={isWorkspaceSaving || isWorkspaceInviteLimitReached}
                   className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
                 >
                   {t("add")}
                 </button>
               </div>
+              {isWorkspaceInviteLimitReached && (
+                <p className="mt-2 text-xs font-black text-red-500">{t("workspaceInviteLimitReachedShort")}</p>
+              )}
               <div className="mt-4 space-y-2">
                 {workspaceInvites.length === 0 ? (
                   <p className="text-xs font-bold text-gray-400">{t("noWorkspaceInvites")}</p>
@@ -3285,6 +3360,30 @@ function RecipeBackupPrintDocument({ recipes, t }) {
           </table>
         </article>
       ))}
+    </div>
+  );
+}
+
+function WorkspaceInviteNoticeModal({ t, workspace, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-sm p-4 print:hidden">
+      <section className="w-full max-w-md rounded-2xl border border-black/10 bg-white p-6 text-black shadow-2xl">
+        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t("sharedWorkspace")}</div>
+        <h2 className="mt-1 text-2xl font-black tracking-tighter">{t("workspaceInviteNoticeTitle")}</h2>
+        {workspace?.name && (
+          <p className="mt-2 rounded-xl bg-[#f7f6f3] px-3 py-2 text-sm font-black tracking-tight">
+            {workspace.name}
+          </p>
+        )}
+        <p className="mt-4 whitespace-pre-wrap text-sm font-bold leading-6 text-gray-500">{t("workspaceInviteNoticeBody")}</p>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="mt-6 w-full rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white"
+        >
+          {t("confirm")}
+        </button>
+      </section>
     </div>
   );
 }

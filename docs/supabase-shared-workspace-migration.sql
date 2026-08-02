@@ -204,6 +204,76 @@ create trigger on_workspace_members_prevent_multiple_non_personal
 before insert or update on public.workspace_members
 for each row execute function private.prevent_multiple_non_personal_workspaces();
 
+create or replace function private.enforce_shared_workspace_member_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  workspace_type public.workspace_type;
+  normalized_email text;
+  participant_count integer;
+begin
+  if new.revoked_at is not null then
+    return new;
+  end if;
+
+  normalized_email := lower(trim(coalesce(new.email, '')));
+
+  if normalized_email = '' then
+    return new;
+  end if;
+
+  select type
+  into workspace_type
+  from public.workspaces
+  where id = new.workspace_id
+  for update;
+
+  if workspace_type is distinct from 'shared'::public.workspace_type then
+    return new;
+  end if;
+
+  with participant_emails as (
+    select lower(trim(email)) as email
+    from public.workspace_members
+    where workspace_id = new.workspace_id
+      and is_active = true
+      and nullif(trim(email), '') is not null
+
+    union
+
+    select lower(trim(email)) as email
+    from public.workspace_email_invites
+    where workspace_id = new.workspace_id
+      and revoked_at is null
+      and id <> coalesce(new.id, -1)
+      and nullif(trim(email), '') is not null
+
+    union
+
+    select normalized_email as email
+  )
+  select count(*)
+  into participant_count
+  from participant_emails;
+
+  if participant_count > 5 then
+    raise exception 'Shared workspace member limit exceeded.';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function private.enforce_shared_workspace_member_limit() from public, anon, authenticated;
+
+drop trigger if exists on_workspace_email_invites_enforce_member_limit on public.workspace_email_invites;
+create trigger on_workspace_email_invites_enforce_member_limit
+before insert or update on public.workspace_email_invites
+for each row execute function private.enforce_shared_workspace_member_limit();
+
 create or replace function public.ensure_personal_workspace()
 returns uuid
 language plpgsql
