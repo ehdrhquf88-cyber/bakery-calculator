@@ -27,35 +27,87 @@ const REMOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const REMOTE_DELETION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const LAST_REMOTE_SYNC_STORAGE_PREFIX = "bakery_last_remote_sync";
 const CALCULATOR_STATE_STORAGE_PREFIX = "bakery_recipe_calculator_state";
+const WORKSPACE_INVITE_NOTICE_STORAGE_PREFIX = "bakery_workspace_invite_notice";
 const RECIPE_CATEGORY_ORDER = ["하드계열", "소프트계열", "사전반죽"];
 const USER_DATA_STORAGE_KEYS = {
   recipes: "bakery_recipes",
   costItems: "bakery_cost_items",
   tempLogs: "bakery_temp_ph",
 };
+const WORKSPACE_STORAGE_KEY_PREFIX = "bakery_active_workspace";
+const WORKSPACE_TYPES = {
+  personal: "personal",
+  shared: "shared",
+};
+const SHARED_WORKSPACE_MAX_PARTICIPANTS = 5;
+const SHARED_WORKSPACE_MAX_INVITES = SHARED_WORKSPACE_MAX_PARTICIPANTS - 1;
 const REMOTE_ITEM_TYPES = {
   recipes: "recipe",
   costItems: "cost_item",
   tempLogs: "temp_log",
 };
 
-function getCalculatorStateStorageKey(authUser) {
-  return authUser?.id ? `${CALCULATOR_STATE_STORAGE_PREFIX}:${authUser.id}` : "";
+function getFallbackPersonalWorkspace(authUser) {
+  return authUser?.id ? {
+    id: `personal:${authUser.id}`,
+    type: WORKSPACE_TYPES.personal,
+    name: "개인 페이지",
+    role: "owner",
+    isOwner: true,
+    isFallback: true,
+  } : null;
 }
 
-function getUserDataStorageKey(baseKey, authUser) {
+function getWorkspaceStorageId(authUser, workspace) {
+  if (workspace?.id) return workspace.id;
+  return getFallbackPersonalWorkspace(authUser)?.id || authUser?.id || authUser?.email || "anonymous";
+}
+
+function getWorkspaceSelectionStorageKey(authUser) {
+  return authUser?.id ? `${WORKSPACE_STORAGE_KEY_PREFIX}:${authUser.id}` : "";
+}
+
+function getWorkspaceInviteNoticeStorageKey(authUser, workspace) {
+  return authUser?.id && workspace?.id ? `${WORKSPACE_INVITE_NOTICE_STORAGE_PREFIX}:${authUser.id}:${workspace.id}` : "";
+}
+
+function hasSeenWorkspaceInviteNotice(authUser, workspace) {
+  const storageKey = getWorkspaceInviteNoticeStorageKey(authUser, workspace);
+  return storageKey ? localStorage.getItem(storageKey) === "true" : true;
+}
+
+function markWorkspaceInviteNoticeSeen(authUser, workspace) {
+  const storageKey = getWorkspaceInviteNoticeStorageKey(authUser, workspace);
+  if (storageKey) localStorage.setItem(storageKey, "true");
+}
+
+function getUserDataOwnerId(authUser, workspace) {
+  if (!authUser?.id) return null;
+  return `${authUser.id}:${getWorkspaceStorageId(authUser, workspace)}`;
+}
+
+function getCalculatorStateStorageKey(authUser, workspace) {
+  const workspaceId = getWorkspaceStorageId(authUser, workspace);
+  return authUser?.id ? `${CALCULATOR_STATE_STORAGE_PREFIX}:${authUser.id}:${workspaceId}` : "";
+}
+
+function getUserDataStorageKey(baseKey, authUser, workspace) {
+  return `${baseKey}:${authUser.id || authUser.email}:${getWorkspaceStorageId(authUser, workspace)}`;
+}
+
+function getLegacyUserDataStorageKey(baseKey, authUser) {
   return `${baseKey}:${authUser.id || authUser.email}`;
 }
 
-function getDeletedUserDataStorageKey(baseKey, authUser) {
-  return `${getUserDataStorageKey(baseKey, authUser)}:deleted`;
+function getDeletedUserDataStorageKey(baseKey, authUser, workspace) {
+  return `${getUserDataStorageKey(baseKey, authUser, workspace)}:deleted`;
 }
 
-function getLastRemoteSyncStorageKey(authUser) {
-  return `${LAST_REMOTE_SYNC_STORAGE_PREFIX}:${authUser.id || authUser.email}`;
+function getLastRemoteSyncStorageKey(authUser, workspace) {
+  return `${LAST_REMOTE_SYNC_STORAGE_PREFIX}:${authUser.id || authUser.email}:${getWorkspaceStorageId(authUser, workspace)}`;
 }
 
-function loadUserData(authUser) {
+function loadUserData(authUser, workspace) {
   const nextData = {
     recipes: [],
     costItems: [],
@@ -64,9 +116,10 @@ function loadUserData(authUser) {
   const legacyKeysToRemove = [];
 
   Object.entries(USER_DATA_STORAGE_KEYS).forEach(([name, baseKey]) => {
-    const userKey = getUserDataStorageKey(baseKey, authUser);
+    const userKey = getUserDataStorageKey(baseKey, authUser, workspace);
     const userValue = localStorage.getItem(userKey);
-    const legacyValue = localStorage.getItem(baseKey);
+    const legacyUserKey = getLegacyUserDataStorageKey(baseKey, authUser);
+    const legacyValue = localStorage.getItem(legacyUserKey) || localStorage.getItem(baseKey);
 
     if (userValue) {
       nextData[name] = JSON.parse(userValue);
@@ -76,7 +129,7 @@ function loadUserData(authUser) {
     if (legacyValue) {
       nextData[name] = JSON.parse(legacyValue);
       localStorage.setItem(userKey, legacyValue);
-      legacyKeysToRemove.push(baseKey);
+      legacyKeysToRemove.push(legacyUserKey, baseKey);
     }
   });
 
@@ -84,34 +137,34 @@ function loadUserData(authUser) {
   return nextData;
 }
 
-function saveUserData(authUser, recipes, costItems, tempLogs) {
-  localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.recipes, authUser), JSON.stringify(recipes));
-  localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.costItems, authUser), JSON.stringify(costItems));
-  localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.tempLogs, authUser), JSON.stringify(tempLogs));
+function saveUserData(authUser, workspace, recipes, costItems, tempLogs) {
+  localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.recipes, authUser, workspace), JSON.stringify(recipes));
+  localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.costItems, authUser, workspace), JSON.stringify(costItems));
+  localStorage.setItem(getUserDataStorageKey(USER_DATA_STORAGE_KEYS.tempLogs, authUser, workspace), JSON.stringify(tempLogs));
 }
 
-function clearUserData(authUser) {
+function clearUserData(authUser, workspace) {
   if (!authUser) return;
 
   Object.values(USER_DATA_STORAGE_KEYS).forEach(baseKey => {
-    localStorage.removeItem(getUserDataStorageKey(baseKey, authUser));
-    localStorage.removeItem(getDeletedUserDataStorageKey(baseKey, authUser));
+    localStorage.removeItem(getUserDataStorageKey(baseKey, authUser, workspace));
+    localStorage.removeItem(getDeletedUserDataStorageKey(baseKey, authUser, workspace));
   });
-  localStorage.removeItem(getLastRemoteSyncStorageKey(authUser));
+  localStorage.removeItem(getLastRemoteSyncStorageKey(authUser, workspace));
 }
 
-function readLastRemoteSyncAt(authUser) {
+function readLastRemoteSyncAt(authUser, workspace) {
   try {
-    const value = localStorage.getItem(getLastRemoteSyncStorageKey(authUser));
+    const value = localStorage.getItem(getLastRemoteSyncStorageKey(authUser, workspace));
     return Number.isFinite(Date.parse(value || "")) ? value : "";
   } catch {
     return "";
   }
 }
 
-function writeLastRemoteSyncAt(authUser, syncedAt) {
+function writeLastRemoteSyncAt(authUser, workspace, syncedAt) {
   if (!authUser || !syncedAt) return;
-  localStorage.setItem(getLastRemoteSyncStorageKey(authUser), syncedAt);
+  localStorage.setItem(getLastRemoteSyncStorageKey(authUser, workspace), syncedAt);
 }
 
 function shouldUseFullRemoteRefresh(lastSyncedAt) {
@@ -120,8 +173,8 @@ function shouldUseFullRemoteRefresh(lastSyncedAt) {
   return Date.now() - syncedTime > REMOTE_DELETION_RETENTION_MS;
 }
 
-function clearCalculatorState(authUser) {
-  const storageKey = getCalculatorStateStorageKey(authUser);
+function clearCalculatorState(authUser, workspace) {
+  const storageKey = getCalculatorStateStorageKey(authUser, workspace);
   if (!storageKey) return;
 
   try {
@@ -132,29 +185,29 @@ function clearCalculatorState(authUser) {
   }
 }
 
-function readDeletedUserDataIds(authUser, baseKey) {
+function readDeletedUserDataIds(authUser, workspace, baseKey) {
   try {
-    const storedIds = localStorage.getItem(getDeletedUserDataStorageKey(baseKey, authUser));
+    const storedIds = localStorage.getItem(getDeletedUserDataStorageKey(baseKey, authUser, workspace));
     return new Set(storedIds ? JSON.parse(storedIds).map(Number) : []);
   } catch {
     return new Set();
   }
 }
 
-function writeDeletedUserDataIds(authUser, baseKey, ids) {
-  localStorage.setItem(getDeletedUserDataStorageKey(baseKey, authUser), JSON.stringify([...ids]));
+function writeDeletedUserDataIds(authUser, workspace, baseKey, ids) {
+  localStorage.setItem(getDeletedUserDataStorageKey(baseKey, authUser, workspace), JSON.stringify([...ids]));
 }
 
-function recordDeletedUserDataIds(authUser, baseKey, ids) {
+function recordDeletedUserDataIds(authUser, workspace, baseKey, ids) {
   if (!authUser || ids.length === 0) return;
 
-  const deletedIds = readDeletedUserDataIds(authUser, baseKey);
+  const deletedIds = readDeletedUserDataIds(authUser, workspace, baseKey);
   ids.forEach(id => deletedIds.add(Number(id)));
-  writeDeletedUserDataIds(authUser, baseKey, deletedIds);
+  writeDeletedUserDataIds(authUser, workspace, baseKey, deletedIds);
 }
 
-function clearDeletedUserDataIds(authUser, baseKey) {
-  localStorage.removeItem(getDeletedUserDataStorageKey(baseKey, authUser));
+function clearDeletedUserDataIds(authUser, workspace, baseKey) {
+  localStorage.removeItem(getDeletedUserDataStorageKey(baseKey, authUser, workspace));
 }
 
 function normalizeOfflineUser(user) {
@@ -338,17 +391,20 @@ function mergeLocalAndRemoteItems(localItems, remoteItems, normalizeId, deletedI
   }).filter(Boolean);
 }
 
-function recipeToSupabaseRow(authUser, recipe) {
+function recipeToSupabaseRow(authUser, workspace, recipe) {
   const id = normalizeRecipeId(recipe);
   const recipeData = { ...stripSyncMetadata(recipe), id };
 
-  return {
+  const row = {
     user_id: authUser.id,
     id,
     recipe_data: recipeData,
     is_public: false,
     published_at: null,
   };
+
+  if (!workspace?.isFallback) row.workspace_id = workspace.id;
+  return row;
 }
 
 function recipeFromSupabaseRow(row) {
@@ -367,15 +423,18 @@ function normalizeCostItemId(item) {
   return Number.isFinite(numericId) ? numericId : Date.now();
 }
 
-function costItemToSupabaseRow(authUser, item) {
+function costItemToSupabaseRow(authUser, workspace, item) {
   const id = normalizeCostItemId(item);
   const itemData = { ...stripSyncMetadata(item), id };
 
-  return {
+  const row = {
     user_id: authUser.id,
     id,
     item_data: itemData,
   };
+
+  if (!workspace?.isFallback) row.workspace_id = workspace.id;
+  return row;
 }
 
 function costItemFromSupabaseRow(row) {
@@ -391,15 +450,18 @@ function normalizeTempLogId(log) {
   return Number.isFinite(numericId) ? numericId : Date.now();
 }
 
-function tempLogToSupabaseRow(authUser, log) {
+function tempLogToSupabaseRow(authUser, workspace, log) {
   const id = normalizeTempLogId(log);
   const logData = { ...stripSyncMetadata(log), id };
 
-  return {
+  const row = {
     user_id: authUser.id,
     id,
     log_data: logData,
   };
+
+  if (!workspace?.isFallback) row.workspace_id = workspace.id;
+  return row;
 }
 
 function tempLogFromSupabaseRow(row) {
@@ -410,14 +472,17 @@ function tempLogFromSupabaseRow(row) {
   };
 }
 
-async function loadSupabaseRecipes(authUser, options = {}) {
+async function loadSupabaseRecipes(authUser, workspace, options = {}) {
   if (!supabase) return [];
 
   let query = supabase
     .from("recipes")
-    .select("user_id, id, recipe_data, is_public, published_at, created_at, updated_at")
-    .eq("user_id", authUser.id)
+    .select("user_id, workspace_id, id, recipe_data, is_public, published_at, created_at, updated_at")
     .order("updated_at", { ascending: false });
+
+  query = workspace?.isFallback
+    ? query.eq("user_id", authUser.id)
+    : query.eq("workspace_id", workspace.id);
 
   if (options.since) {
     query = query.gt("updated_at", options.since);
@@ -462,14 +527,17 @@ async function loadSupabaseAnnouncementReads(authUser) {
   return data || [];
 }
 
-async function loadSupabaseCostItems(authUser, options = {}) {
+async function loadSupabaseCostItems(authUser, workspace, options = {}) {
   if (!supabase) return [];
 
   let query = supabase
     .from("cost_items")
-    .select("id, item_data, created_at, updated_at")
-    .eq("user_id", authUser.id)
+    .select("user_id, workspace_id, id, item_data, created_at, updated_at")
     .order("updated_at", { ascending: false });
+
+  query = workspace?.isFallback
+    ? query.eq("user_id", authUser.id)
+    : query.eq("workspace_id", workspace.id);
 
   if (options.since) {
     query = query.gt("updated_at", options.since);
@@ -481,14 +549,17 @@ async function loadSupabaseCostItems(authUser, options = {}) {
   return (data || []).map(costItemFromSupabaseRow);
 }
 
-async function loadSupabaseTempLogs(authUser, options = {}) {
+async function loadSupabaseTempLogs(authUser, workspace, options = {}) {
   if (!supabase) return [];
 
   let query = supabase
     .from("temp_logs")
-    .select("id, log_data, created_at, updated_at")
-    .eq("user_id", authUser.id)
+    .select("user_id, workspace_id, id, log_data, created_at, updated_at")
     .order("updated_at", { ascending: false });
+
+  query = workspace?.isFallback
+    ? query.eq("user_id", authUser.id)
+    : query.eq("workspace_id", workspace.id);
 
   if (options.since) {
     query = query.gt("updated_at", options.since);
@@ -500,14 +571,17 @@ async function loadSupabaseTempLogs(authUser, options = {}) {
   return (data || []).map(tempLogFromSupabaseRow);
 }
 
-async function loadSupabaseDeletedItems(authUser, options = {}) {
+async function loadSupabaseDeletedItems(authUser, workspace, options = {}) {
   if (!supabase || !authUser) return [];
 
   let query = supabase
     .from("deleted_items")
-    .select("item_type, item_id, deleted_at")
-    .eq("user_id", authUser.id)
+    .select("workspace_id, item_type, item_id, deleted_at")
     .order("deleted_at", { ascending: false });
+
+  query = workspace?.isFallback
+    ? query.eq("user_id", authUser.id)
+    : query.eq("workspace_id", workspace.id);
 
   if (options.since) {
     query = query.gt("deleted_at", options.since);
@@ -518,12 +592,13 @@ async function loadSupabaseDeletedItems(authUser, options = {}) {
   return data || [];
 }
 
-async function recordSupabaseDeletedItems(authUser, itemType, itemIds) {
+async function recordSupabaseDeletedItems(authUser, workspace, itemType, itemIds) {
   if (!supabase || !authUser || !itemIds?.length) return;
 
   const deletedAt = new Date().toISOString();
   const rows = itemIds.map(id => ({
     user_id: authUser.id,
+    ...(workspace?.isFallback ? {} : { workspace_id: workspace.id }),
     item_type: itemType,
     item_id: Number(id),
     deleted_at: deletedAt,
@@ -531,7 +606,7 @@ async function recordSupabaseDeletedItems(authUser, itemType, itemIds) {
 
   const { error } = await supabase
     .from("deleted_items")
-    .upsert(rows, { onConflict: "user_id,item_type,item_id" });
+    .upsert(rows, { onConflict: workspace?.isFallback ? "user_id,item_type,item_id" : "workspace_id,item_type,item_id" });
 
   if (error) throw error;
 }
@@ -544,55 +619,60 @@ function getPendingLocalItems(items) {
   });
 }
 
-async function upsertSupabaseRecipeItems(authUser, items) {
-  const rows = (items || []).map(recipe => recipeToSupabaseRow(authUser, recipe));
+async function upsertSupabaseRecipeItems(authUser, workspace, items) {
+  const rows = (items || []).map(recipe => recipeToSupabaseRow(authUser, workspace, recipe));
   if (rows.length === 0) return;
 
   const { error } = await supabase
     .from("recipes")
-    .upsert(rows, { onConflict: "user_id,id" });
+    .upsert(rows, { onConflict: workspace?.isFallback ? "user_id,id" : "workspace_id,id" });
 
   if (error) throw error;
 }
 
-async function upsertSupabaseCostItemRows(authUser, items) {
-  const rows = (items || []).map(item => costItemToSupabaseRow(authUser, item));
+async function upsertSupabaseCostItemRows(authUser, workspace, items) {
+  const rows = (items || []).map(item => costItemToSupabaseRow(authUser, workspace, item));
   if (rows.length === 0) return;
 
   const { error } = await supabase
     .from("cost_items")
-    .upsert(rows, { onConflict: "user_id,id" });
+    .upsert(rows, { onConflict: workspace?.isFallback ? "user_id,id" : "workspace_id,id" });
 
   if (error) throw error;
 }
 
-async function upsertSupabaseTempLogRows(authUser, items) {
-  const rows = (items || []).map(log => tempLogToSupabaseRow(authUser, log));
+async function upsertSupabaseTempLogRows(authUser, workspace, items) {
+  const rows = (items || []).map(log => tempLogToSupabaseRow(authUser, workspace, log));
   if (rows.length === 0) return;
 
   const { error } = await supabase
     .from("temp_logs")
-    .upsert(rows, { onConflict: "user_id,id" });
+    .upsert(rows, { onConflict: workspace?.isFallback ? "user_id,id" : "workspace_id,id" });
 
   if (error) throw error;
 }
 
-async function deleteSupabaseItemsByIds(authUser, tableName, itemType, itemIds) {
+async function deleteSupabaseItemsByIds(authUser, workspace, tableName, itemType, itemIds) {
   const ids = [...(itemIds || [])].map(Number).filter(Number.isFinite);
   if (!supabase || !authUser || ids.length === 0) return;
 
-  await recordSupabaseDeletedItems(authUser, itemType, ids);
+  await recordSupabaseDeletedItems(authUser, workspace, itemType, ids);
 
-  const { error } = await supabase
+  let query = supabase
     .from(tableName)
     .delete()
-    .eq("user_id", authUser.id)
     .in("id", ids);
+
+  query = workspace?.isFallback
+    ? query.eq("user_id", authUser.id)
+    : query.eq("workspace_id", workspace.id);
+
+  const { error } = await query;
 
   if (error) throw error;
 }
 
-async function syncSupabaseRecipes(authUser, previousRecipes, nextRecipes) {
+async function syncSupabaseRecipes(authUser, workspace, previousRecipes, nextRecipes) {
   if (!supabase || !authUser) return;
 
   const previousById = new Map((previousRecipes || []).map(recipe => [normalizeRecipeId(recipe), recipe]));
@@ -604,30 +684,35 @@ async function syncSupabaseRecipes(authUser, previousRecipes, nextRecipes) {
       const previousRecipe = previousById.get(normalizeRecipeId(recipe));
       return !previousRecipe || hasMeaningfulDiff(previousRecipe, recipe);
     })
-    .map(recipe => recipeToSupabaseRow(authUser, recipe));
+    .map(recipe => recipeToSupabaseRow(authUser, workspace, recipe));
 
   if (rows.length > 0) {
     const { error } = await supabase
       .from("recipes")
-      .upsert(rows, { onConflict: "user_id,id" });
+      .upsert(rows, { onConflict: workspace?.isFallback ? "user_id,id" : "workspace_id,id" });
 
     if (error) throw error;
   }
 
   if (removedIds.length > 0) {
-    await recordSupabaseDeletedItems(authUser, REMOTE_ITEM_TYPES.recipes, removedIds);
+    await recordSupabaseDeletedItems(authUser, workspace, REMOTE_ITEM_TYPES.recipes, removedIds);
 
-    const { error } = await supabase
+    let query = supabase
       .from("recipes")
       .delete()
-      .eq("user_id", authUser.id)
       .in("id", removedIds);
+
+    query = workspace?.isFallback
+      ? query.eq("user_id", authUser.id)
+      : query.eq("workspace_id", workspace.id);
+
+    const { error } = await query;
 
     if (error) throw error;
   }
 }
 
-async function syncSupabaseCostItems(authUser, previousCostItems, nextCostItems) {
+async function syncSupabaseCostItems(authUser, workspace, previousCostItems, nextCostItems) {
   if (!supabase || !authUser) return;
 
   const previousById = new Map((previousCostItems || []).map(item => [normalizeCostItemId(item), item]));
@@ -639,30 +724,35 @@ async function syncSupabaseCostItems(authUser, previousCostItems, nextCostItems)
       const previousItem = previousById.get(normalizeCostItemId(item));
       return !previousItem || hasMeaningfulDiff(previousItem, item);
     })
-    .map(item => costItemToSupabaseRow(authUser, item));
+    .map(item => costItemToSupabaseRow(authUser, workspace, item));
 
   if (rows.length > 0) {
     const { error } = await supabase
       .from("cost_items")
-      .upsert(rows, { onConflict: "user_id,id" });
+      .upsert(rows, { onConflict: workspace?.isFallback ? "user_id,id" : "workspace_id,id" });
 
     if (error) throw error;
   }
 
   if (removedIds.length > 0) {
-    await recordSupabaseDeletedItems(authUser, REMOTE_ITEM_TYPES.costItems, removedIds);
+    await recordSupabaseDeletedItems(authUser, workspace, REMOTE_ITEM_TYPES.costItems, removedIds);
 
-    const { error } = await supabase
+    let query = supabase
       .from("cost_items")
       .delete()
-      .eq("user_id", authUser.id)
       .in("id", removedIds);
+
+    query = workspace?.isFallback
+      ? query.eq("user_id", authUser.id)
+      : query.eq("workspace_id", workspace.id);
+
+    const { error } = await query;
 
     if (error) throw error;
   }
 }
 
-async function syncSupabaseTempLogs(authUser, previousTempLogs, nextTempLogs) {
+async function syncSupabaseTempLogs(authUser, workspace, previousTempLogs, nextTempLogs) {
   if (!supabase || !authUser) return;
 
   const previousById = new Map((previousTempLogs || []).map(log => [normalizeTempLogId(log), log]));
@@ -674,24 +764,29 @@ async function syncSupabaseTempLogs(authUser, previousTempLogs, nextTempLogs) {
       const previousLog = previousById.get(normalizeTempLogId(log));
       return !previousLog || hasMeaningfulDiff(previousLog, log);
     })
-    .map(log => tempLogToSupabaseRow(authUser, log));
+    .map(log => tempLogToSupabaseRow(authUser, workspace, log));
 
   if (rows.length > 0) {
     const { error } = await supabase
       .from("temp_logs")
-      .upsert(rows, { onConflict: "user_id,id" });
+      .upsert(rows, { onConflict: workspace?.isFallback ? "user_id,id" : "workspace_id,id" });
 
     if (error) throw error;
   }
 
   if (removedIds.length > 0) {
-    await recordSupabaseDeletedItems(authUser, REMOTE_ITEM_TYPES.tempLogs, removedIds);
+    await recordSupabaseDeletedItems(authUser, workspace, REMOTE_ITEM_TYPES.tempLogs, removedIds);
 
-    const { error } = await supabase
+    let query = supabase
       .from("temp_logs")
       .delete()
-      .eq("user_id", authUser.id)
       .in("id", removedIds);
+
+    query = workspace?.isFallback
+      ? query.eq("user_id", authUser.id)
+      : query.eq("workspace_id", workspace.id);
+
+    const { error } = await query;
 
     if (error) throw error;
   }
@@ -869,6 +964,89 @@ async function getSupabaseAuthUser(session) {
   };
 }
 
+function normalizeWorkspaceMembership(row) {
+  const workspace = Array.isArray(row?.workspaces) ? row.workspaces[0] : row?.workspaces;
+  if (!workspace?.id || workspace.is_active === false) return null;
+
+  return {
+    id: workspace.id,
+    type: workspace.type || WORKSPACE_TYPES.personal,
+    name: workspace.name || (workspace.type === WORKSPACE_TYPES.shared ? "공유 페이지" : "개인 페이지"),
+    ownerUserId: workspace.owner_user_id || "",
+    role: row.role || "member",
+    isOwner: row.role === "owner" || workspace.owner_user_id === row.user_id,
+    isFallback: false,
+  };
+}
+
+async function loadWorkspaceContext(authUser) {
+  if (!supabase || !authUser || authUser.isOfflineMode || !navigator.onLine) {
+    return [getFallbackPersonalWorkspace(authUser)].filter(Boolean);
+  }
+
+  await supabase.rpc("ensure_personal_workspace");
+  await supabase.rpc("accept_workspace_invites_for_current_user");
+
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .select("workspace_id, user_id, role, is_active, workspaces(id, type, name, owner_user_id, is_active, created_at)")
+    .eq("user_id", authUser.id)
+    .eq("is_active", true);
+
+  if (error) throw error;
+
+  const normalized = (data || [])
+    .map(normalizeWorkspaceMembership)
+    .filter(Boolean)
+    .sort((first, second) => {
+      if (first.type === second.type) return first.name.localeCompare(second.name, "ko");
+      if (first.type === WORKSPACE_TYPES.personal) return -1;
+      if (second.type === WORKSPACE_TYPES.personal) return 1;
+      return first.type.localeCompare(second.type);
+    });
+
+  return normalized.length > 0 ? normalized : [getFallbackPersonalWorkspace(authUser)].filter(Boolean);
+}
+
+async function loadWorkspaceInvites(activeWorkspace) {
+  if (!supabase || !activeWorkspace?.id || activeWorkspace.isFallback || activeWorkspace.type === WORKSPACE_TYPES.personal) return [];
+  if (!activeWorkspace.isOwner && activeWorkspace.role !== "admin") return [];
+
+  const { data, error } = await supabase
+    .from("workspace_email_invites")
+    .select("id, email, role, created_at, revoked_at")
+    .eq("workspace_id", activeWorkspace.id)
+    .is("revoked_at", null)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+function WorkspaceStatusBar({ t, activeWorkspace }) {
+  if (!activeWorkspace) return null;
+
+  const isSharedWorkspace = activeWorkspace.type === WORKSPACE_TYPES.shared;
+  const workspaceTypeLabel = isSharedWorkspace ? t("sharedWorkspace") : t("personalWorkspace");
+
+  return (
+    <div className="border-b border-gray-200 bg-[#f7f6f3]/95 px-4 py-2 print:hidden">
+      <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-2 py-1 text-xs font-black text-gray-400 md:text-sm">
+        <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-tight ${isSharedWorkspace ? "bg-black text-white" : "border border-gray-200 bg-white text-gray-600"}`}>
+          {workspaceTypeLabel}
+        </span>
+        {isSharedWorkspace && <span className="min-w-0 flex-1 truncate text-black">{activeWorkspace.name}</span>}
+      </div>
+    </div>
+  );
+}
+
+function getWorkspaceDisplayName(t, workspace) {
+  if (!workspace) return "";
+  if (workspace.type === WORKSPACE_TYPES.personal) return t("personalWorkspace");
+  return `${t("sharedWorkspace")} · ${workspace.name}`;
+}
+
 export default function Home() {
   const [view, setView] = useState("calc");
   const [recipes, setRecipes] = useState([]);
@@ -894,11 +1072,24 @@ export default function Home() {
   const [authError, setAuthError] = useState("");
   const [isOnline, setIsOnline] = useState(true);
   const [offlineLoginUsers, setOfflineLoginUsers] = useState([]);
+  const [workspaces, setWorkspaces] = useState([]);
+  const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
+  const [workspaceInvites, setWorkspaceInvites] = useState([]);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const [workspaceInviteNotice, setWorkspaceInviteNotice] = useState(null);
   const recipesSnapshotRef = useRef([]);
   const costItemsSnapshotRef = useRef([]);
   const tempLogsSnapshotRef = useRef([]);
   const refreshInFlightRef = useRef(false);
-  const calculatorStateStorageKey = getCalculatorStateStorageKey(authUser);
+  const activeWorkspace = useMemo(() => {
+    if (!authUser) return null;
+    return workspaces.find(workspace => workspace.id === activeWorkspaceId)
+      || workspaces[0]
+      || getFallbackPersonalWorkspace(authUser);
+  }, [activeWorkspaceId, authUser, workspaces]);
+  const dataScopeOwnerId = useMemo(() => getUserDataOwnerId(authUser, activeWorkspace), [activeWorkspace, authUser]);
+  const calculatorStateStorageKey = getCalculatorStateStorageKey(authUser, activeWorkspace);
   const t = getTranslator(language);
   const isAdmin = authUser?.role === "admin";
   const unreadAnnouncementCount = useMemo(() => {
@@ -931,6 +1122,12 @@ export default function Home() {
     setOfflineLoginUsers([]);
     setUserDataLoaded(false);
     setUserDataOwnerId(null);
+    setWorkspaces([]);
+    setWorkspaceInvites([]);
+    setWorkspacesLoaded(false);
+    setActiveWorkspaceId("");
+    setWorkspaceError("");
+    setWorkspaceInviteNotice(null);
     setIsAdminUnlocked(false);
     localStorage.removeItem("bakery_auth_user");
   }, [authUser]);
@@ -996,6 +1193,67 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const loadWorkspaces = async () => {
+      if (!isLoaded) return;
+
+      if (!authUser) {
+        setWorkspaces([]);
+        setWorkspaceInvites([]);
+        setActiveWorkspaceId("");
+        setWorkspacesLoaded(false);
+        setWorkspaceError("");
+        setWorkspaceInviteNotice(null);
+        return;
+      }
+
+      setWorkspacesLoaded(false);
+      setWorkspaceError("");
+
+      try {
+        const nextWorkspaces = await loadWorkspaceContext(authUser);
+        if (!isMounted) return;
+
+        const selectionKey = getWorkspaceSelectionStorageKey(authUser);
+        const savedWorkspaceId = selectionKey ? localStorage.getItem(selectionKey) : "";
+        const nextActiveWorkspace = nextWorkspaces.find(workspace => workspace.id === savedWorkspaceId)
+          || nextWorkspaces[0]
+          || getFallbackPersonalWorkspace(authUser);
+
+        if (selectionKey && nextActiveWorkspace?.id) {
+          localStorage.setItem(selectionKey, nextActiveWorkspace.id);
+        }
+        setWorkspaces(nextWorkspaces);
+        setActiveWorkspaceId(nextActiveWorkspace?.id || "");
+        setWorkspacesLoaded(true);
+        const unseenInvitedWorkspace = nextWorkspaces.find(workspace => (
+          workspace.type === WORKSPACE_TYPES.shared
+          && !workspace.isOwner
+          && !hasSeenWorkspaceInviteNotice(authUser, workspace)
+        ));
+        if (unseenInvitedWorkspace) {
+          setWorkspaceInviteNotice(unseenInvitedWorkspace);
+        }
+      } catch (error) {
+        console.warn("워크스페이스 정보를 읽지 못해 개인 페이지로 계속합니다.", error?.message || error);
+        if (!isMounted) return;
+        const fallbackWorkspace = getFallbackPersonalWorkspace(authUser);
+        setWorkspaces(fallbackWorkspace ? [fallbackWorkspace] : []);
+        setActiveWorkspaceId(fallbackWorkspace?.id || "");
+        setWorkspacesLoaded(true);
+        setWorkspaceError(error?.message || "");
+      }
+    };
+
+    loadWorkspaces();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authUser, isLoaded]);
+
+  useEffect(() => {
     if (!isLoaded) return;
 
     let isMounted = true;
@@ -1016,19 +1274,22 @@ export default function Home() {
         return;
       }
 
+      if (!workspacesLoaded || !activeWorkspace) return;
+
       try {
         setUserDataLoaded(false);
-        const userData = loadUserData(authUser);
+        const scopeOwnerId = getUserDataOwnerId(authUser, activeWorkspace);
+        const userData = loadUserData(authUser, activeWorkspace);
         let nextRecipes = userData.recipes;
         let nextCostItems = userData.costItems;
         let nextTempLogs = userData.tempLogs;
-        const deletedRecipeIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
-        const deletedCostItemIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
-        const deletedTempLogIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
+        const deletedRecipeIds = readDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.recipes);
+        const deletedCostItemIds = readDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.costItems);
+        const deletedTempLogIds = readDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.tempLogs);
 
         if (supabase && !authUser.isOfflineMode && navigator.onLine) {
           try {
-            const lastRemoteSyncAt = readLastRemoteSyncAt(authUser);
+            const lastRemoteSyncAt = readLastRemoteSyncAt(authUser, activeWorkspace);
             const hasLocalDeletes = deletedRecipeIds.size > 0 || deletedCostItemIds.size > 0 || deletedTempLogIds.size > 0;
             const shouldFullRefresh = shouldUseFullRemoteRefresh(lastRemoteSyncAt) || hasLocalDeletes;
             const remoteOptions = shouldFullRefresh ? {} : { since: lastRemoteSyncAt };
@@ -1041,12 +1302,12 @@ export default function Home() {
               remoteAnnouncementReads,
               remoteDeletedItems,
             ] = await Promise.all([
-              loadSupabaseRecipes(authUser, remoteOptions),
-              loadSupabaseCostItems(authUser, remoteOptions),
-              loadSupabaseTempLogs(authUser, remoteOptions),
+              loadSupabaseRecipes(authUser, activeWorkspace, remoteOptions),
+              loadSupabaseCostItems(authUser, activeWorkspace, remoteOptions),
+              loadSupabaseTempLogs(authUser, activeWorkspace, remoteOptions),
               loadSupabaseAnnouncements(),
               loadSupabaseAnnouncementReads(authUser),
-              loadSupabaseDeletedItems(authUser, remoteOptions),
+              loadSupabaseDeletedItems(authUser, activeWorkspace, remoteOptions),
             ]);
             const remoteDeletedByType = getDeletedIdsByType(remoteDeletedItems);
             const remoteDeletedRecipeIds = remoteDeletedByType[REMOTE_ITEM_TYPES.recipes] || new Set();
@@ -1066,9 +1327,9 @@ export default function Home() {
               nextRecipes = mergeLocalAndRemoteItems(localRecipes, remoteRecipes, normalizeRecipeId, deletedRecipeIds, { remoteMissingDeletesSeen: shouldFullRefresh });
               if (hasMeaningfulDiff(nextRecipes, remoteRecipes)) {
                 if (shouldFullRefresh) {
-                  await syncSupabaseRecipes(authUser, remoteRecipes, nextRecipes);
+                  await syncSupabaseRecipes(authUser, activeWorkspace, remoteRecipes, nextRecipes);
                 } else {
-                  await upsertSupabaseRecipeItems(authUser, getPendingLocalItems(nextRecipes));
+                  await upsertSupabaseRecipeItems(authUser, activeWorkspace, getPendingLocalItems(nextRecipes));
                 }
               }
             } else if (localRecipes.length > 0) {
@@ -1076,7 +1337,7 @@ export default function Home() {
                 ? localRecipes.filter(recipe => !hasRemoteVersion(recipe))
                 : localRecipes;
               if (nextRecipes.length > 0) {
-                await upsertSupabaseRecipeItems(authUser, shouldFullRefresh ? nextRecipes : getPendingLocalItems(nextRecipes));
+                await upsertSupabaseRecipeItems(authUser, activeWorkspace, shouldFullRefresh ? nextRecipes : getPendingLocalItems(nextRecipes));
               }
             }
 
@@ -1084,9 +1345,9 @@ export default function Home() {
               nextCostItems = mergeLocalAndRemoteItems(localCostItems, remoteCostItems, normalizeCostItemId, deletedCostItemIds, { remoteMissingDeletesSeen: shouldFullRefresh });
               if (hasMeaningfulDiff(nextCostItems, remoteCostItems)) {
                 if (shouldFullRefresh) {
-                  await syncSupabaseCostItems(authUser, remoteCostItems, nextCostItems);
+                  await syncSupabaseCostItems(authUser, activeWorkspace, remoteCostItems, nextCostItems);
                 } else {
-                  await upsertSupabaseCostItemRows(authUser, getPendingLocalItems(nextCostItems));
+                  await upsertSupabaseCostItemRows(authUser, activeWorkspace, getPendingLocalItems(nextCostItems));
                 }
               }
             } else if (localCostItems.length > 0) {
@@ -1094,7 +1355,7 @@ export default function Home() {
                 ? localCostItems.filter(item => !hasRemoteVersion(item))
                 : localCostItems;
               if (nextCostItems.length > 0) {
-                await upsertSupabaseCostItemRows(authUser, shouldFullRefresh ? nextCostItems : getPendingLocalItems(nextCostItems));
+                await upsertSupabaseCostItemRows(authUser, activeWorkspace, shouldFullRefresh ? nextCostItems : getPendingLocalItems(nextCostItems));
               }
             }
 
@@ -1102,9 +1363,9 @@ export default function Home() {
               nextTempLogs = mergeLocalAndRemoteItems(localTempLogs, remoteTempLogs, normalizeTempLogId, deletedTempLogIds, { remoteMissingDeletesSeen: shouldFullRefresh });
               if (hasMeaningfulDiff(nextTempLogs, remoteTempLogs)) {
                 if (shouldFullRefresh) {
-                  await syncSupabaseTempLogs(authUser, remoteTempLogs, nextTempLogs);
+                  await syncSupabaseTempLogs(authUser, activeWorkspace, remoteTempLogs, nextTempLogs);
                 } else {
-                  await upsertSupabaseTempLogRows(authUser, getPendingLocalItems(nextTempLogs));
+                  await upsertSupabaseTempLogRows(authUser, activeWorkspace, getPendingLocalItems(nextTempLogs));
                 }
               }
             } else if (localTempLogs.length > 0) {
@@ -1112,20 +1373,20 @@ export default function Home() {
                 ? localTempLogs.filter(log => !hasRemoteVersion(log))
                 : localTempLogs;
               if (nextTempLogs.length > 0) {
-                await upsertSupabaseTempLogRows(authUser, shouldFullRefresh ? nextTempLogs : getPendingLocalItems(nextTempLogs));
+                await upsertSupabaseTempLogRows(authUser, activeWorkspace, shouldFullRefresh ? nextTempLogs : getPendingLocalItems(nextTempLogs));
               }
             }
 
             await Promise.all([
-              deleteSupabaseItemsByIds(authUser, "recipes", REMOTE_ITEM_TYPES.recipes, deletedRecipeIds),
-              deleteSupabaseItemsByIds(authUser, "cost_items", REMOTE_ITEM_TYPES.costItems, deletedCostItemIds),
-              deleteSupabaseItemsByIds(authUser, "temp_logs", REMOTE_ITEM_TYPES.tempLogs, deletedTempLogIds),
+              deleteSupabaseItemsByIds(authUser, activeWorkspace, "recipes", REMOTE_ITEM_TYPES.recipes, deletedRecipeIds),
+              deleteSupabaseItemsByIds(authUser, activeWorkspace, "cost_items", REMOTE_ITEM_TYPES.costItems, deletedCostItemIds),
+              deleteSupabaseItemsByIds(authUser, activeWorkspace, "temp_logs", REMOTE_ITEM_TYPES.tempLogs, deletedTempLogIds),
             ]);
 
-            writeLastRemoteSyncAt(authUser, syncStartedAt);
-            clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
-            clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
-            clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
+            writeLastRemoteSyncAt(authUser, activeWorkspace, syncStartedAt);
+            clearDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.recipes);
+            clearDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.costItems);
+            clearDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.tempLogs);
           } catch (error) {
             console.warn("Supabase 데이터 테이블을 사용할 수 없어 로컬 데이터로 계속합니다.", error?.message || error);
           }
@@ -1138,7 +1399,7 @@ export default function Home() {
         setRecipes(nextRecipes);
         setCostItems(nextCostItems);
         setTempLogs(nextTempLogs);
-        setUserDataOwnerId(authUser.id);
+        setUserDataOwnerId(scopeOwnerId);
         setUserDataLoaded(true);
       } catch (e) {
         if (!isMounted) return;
@@ -1148,7 +1409,7 @@ export default function Home() {
         setAnnouncementReads([]);
         setCostItems([]);
         setTempLogs([]);
-        setUserDataOwnerId(authUser.id);
+        setUserDataOwnerId(getUserDataOwnerId(authUser, activeWorkspace));
         setUserDataLoaded(true);
       }
     };
@@ -1158,21 +1419,21 @@ export default function Home() {
     return () => {
       isMounted = false;
     };
-  }, [authUser, isLoaded]);
+  }, [activeWorkspace, authUser, isLoaded, workspacesLoaded]);
 
   // 로컬스토리지 저장
   useEffect(() => {
-    if (isLoaded && authUser && userDataLoaded && userDataOwnerId === authUser.id) {
+    if (isLoaded && authUser && activeWorkspace && userDataLoaded && userDataOwnerId === dataScopeOwnerId) {
       try {
-        saveUserData(authUser, recipes, costItems, tempLogs);
+        saveUserData(authUser, activeWorkspace, recipes, costItems, tempLogs);
       } catch (e) {
         console.error("로컬스토리지 데이터 저장 중 오류가 발생했습니다.", e);
       }
     }
-  }, [recipes, costItems, tempLogs, authUser, userDataLoaded, userDataOwnerId, isLoaded]);
+  }, [activeWorkspace, recipes, costItems, tempLogs, authUser, userDataLoaded, userDataOwnerId, dataScopeOwnerId, isLoaded]);
 
   useEffect(() => {
-    if (!isLoaded || !authUser || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+    if (!isLoaded || !authUser || !activeWorkspace || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== dataScopeOwnerId || !supabase) return undefined;
 
     let isCancelled = false;
     const previousRecipes = recipesSnapshotRef.current;
@@ -1180,11 +1441,11 @@ export default function Home() {
 
     const persistRecipes = async () => {
       try {
-        await syncSupabaseRecipes(authUser, previousRecipes, nextRecipes);
+        await syncSupabaseRecipes(authUser, activeWorkspace, previousRecipes, nextRecipes);
         if (!isCancelled) {
           recipesSnapshotRef.current = nextRecipes;
-          clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
-          writeLastRemoteSyncAt(authUser, new Date().toISOString());
+          clearDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.recipes);
+          writeLastRemoteSyncAt(authUser, activeWorkspace, new Date().toISOString());
         }
       } catch (error) {
         console.warn("Supabase 레시피 저장 중 오류가 발생했습니다.", error?.message || error);
@@ -1196,10 +1457,10 @@ export default function Home() {
     return () => {
       isCancelled = true;
     };
-  }, [recipes, authUser, userDataLoaded, userDataOwnerId, isLoaded, isOnline]);
+  }, [activeWorkspace, recipes, authUser, userDataLoaded, userDataOwnerId, dataScopeOwnerId, isLoaded, isOnline]);
 
   useEffect(() => {
-    if (!isLoaded || !authUser || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+    if (!isLoaded || !authUser || !activeWorkspace || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== dataScopeOwnerId || !supabase) return undefined;
 
     let isCancelled = false;
     const previousCostItems = costItemsSnapshotRef.current;
@@ -1207,11 +1468,11 @@ export default function Home() {
 
     const persistCostItems = async () => {
       try {
-        await syncSupabaseCostItems(authUser, previousCostItems, nextCostItems);
+        await syncSupabaseCostItems(authUser, activeWorkspace, previousCostItems, nextCostItems);
         if (!isCancelled) {
           costItemsSnapshotRef.current = nextCostItems;
-          clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
-          writeLastRemoteSyncAt(authUser, new Date().toISOString());
+          clearDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.costItems);
+          writeLastRemoteSyncAt(authUser, activeWorkspace, new Date().toISOString());
         }
       } catch (error) {
         console.warn("Supabase 재료비 저장 중 오류가 발생했습니다.", error?.message || error);
@@ -1223,10 +1484,10 @@ export default function Home() {
     return () => {
       isCancelled = true;
     };
-  }, [costItems, authUser, userDataLoaded, userDataOwnerId, isLoaded, isOnline]);
+  }, [activeWorkspace, costItems, authUser, userDataLoaded, userDataOwnerId, dataScopeOwnerId, isLoaded, isOnline]);
 
   useEffect(() => {
-    if (!isLoaded || !authUser || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+    if (!isLoaded || !authUser || !activeWorkspace || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== dataScopeOwnerId || !supabase) return undefined;
 
     let isCancelled = false;
     const previousTempLogs = tempLogsSnapshotRef.current;
@@ -1234,11 +1495,11 @@ export default function Home() {
 
     const persistTempLogs = async () => {
       try {
-        await syncSupabaseTempLogs(authUser, previousTempLogs, nextTempLogs);
+        await syncSupabaseTempLogs(authUser, activeWorkspace, previousTempLogs, nextTempLogs);
         if (!isCancelled) {
           tempLogsSnapshotRef.current = nextTempLogs;
-          clearDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
-          writeLastRemoteSyncAt(authUser, new Date().toISOString());
+          clearDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.tempLogs);
+          writeLastRemoteSyncAt(authUser, activeWorkspace, new Date().toISOString());
         }
       } catch (error) {
         console.warn("Supabase 온도/pH 저장 중 오류가 발생했습니다.", error?.message || error);
@@ -1250,18 +1511,18 @@ export default function Home() {
     return () => {
       isCancelled = true;
     };
-  }, [tempLogs, authUser, userDataLoaded, userDataOwnerId, isLoaded, isOnline]);
+  }, [activeWorkspace, tempLogs, authUser, userDataLoaded, userDataOwnerId, dataScopeOwnerId, isLoaded, isOnline]);
 
   const refreshUserDataFromSupabase = useCallback(async () => {
-    if (!isLoaded || !authUser || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase || refreshInFlightRef.current) return;
+    if (!isLoaded || !authUser || !activeWorkspace || authUser.isOfflineMode || !isOnline || !userDataLoaded || userDataOwnerId !== dataScopeOwnerId || !supabase || refreshInFlightRef.current) return;
 
     refreshInFlightRef.current = true;
 
     try {
-      const lastRemoteSyncAt = readLastRemoteSyncAt(authUser);
-      const deletedRecipeIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes);
-      const deletedCostItemIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems);
-      const deletedTempLogIds = readDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs);
+      const lastRemoteSyncAt = readLastRemoteSyncAt(authUser, activeWorkspace);
+      const deletedRecipeIds = readDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.recipes);
+      const deletedCostItemIds = readDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.costItems);
+      const deletedTempLogIds = readDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.tempLogs);
       const hasLocalDeletes = deletedRecipeIds.size > 0 || deletedCostItemIds.size > 0 || deletedTempLogIds.size > 0;
       const shouldFullRefresh = shouldUseFullRemoteRefresh(lastRemoteSyncAt) || hasLocalDeletes;
       const remoteOptions = shouldFullRefresh ? {} : { since: lastRemoteSyncAt };
@@ -1274,12 +1535,12 @@ export default function Home() {
         remoteAnnouncementReads,
         remoteDeletedItems,
       ] = await Promise.all([
-        loadSupabaseRecipes(authUser, remoteOptions),
-        loadSupabaseCostItems(authUser, remoteOptions),
-        loadSupabaseTempLogs(authUser, remoteOptions),
+        loadSupabaseRecipes(authUser, activeWorkspace, remoteOptions),
+        loadSupabaseCostItems(authUser, activeWorkspace, remoteOptions),
+        loadSupabaseTempLogs(authUser, activeWorkspace, remoteOptions),
         loadSupabaseAnnouncements(),
         loadSupabaseAnnouncementReads(authUser),
-        loadSupabaseDeletedItems(authUser, remoteOptions),
+        loadSupabaseDeletedItems(authUser, activeWorkspace, remoteOptions),
       ]);
 
       const remoteDeletedByType = getDeletedIdsByType(remoteDeletedItems);
@@ -1326,16 +1587,16 @@ export default function Home() {
       ));
       setAnnouncements(remoteAnnouncements);
       setAnnouncementReads(remoteAnnouncementReads);
-      writeLastRemoteSyncAt(authUser, syncStartedAt);
+      writeLastRemoteSyncAt(authUser, activeWorkspace, syncStartedAt);
     } catch (error) {
       console.warn("Supabase 최신 데이터를 다시 읽지 못했습니다.", error?.message || error);
     } finally {
       refreshInFlightRef.current = false;
     }
-  }, [authUser, isLoaded, isOnline, userDataLoaded, userDataOwnerId]);
+  }, [activeWorkspace, authUser, dataScopeOwnerId, isLoaded, isOnline, userDataLoaded, userDataOwnerId]);
 
   useEffect(() => {
-    if (!isLoaded || !authUser || authUser.isOfflineMode || !userDataLoaded || userDataOwnerId !== authUser.id || !supabase) return undefined;
+    if (!isLoaded || !authUser || !activeWorkspace || authUser.isOfflineMode || !userDataLoaded || userDataOwnerId !== dataScopeOwnerId || !supabase) return undefined;
 
     const refreshWhenActive = () => {
       if (document.visibilityState === "hidden") return;
@@ -1355,7 +1616,7 @@ export default function Home() {
       document.removeEventListener("visibilitychange", refreshWhenActive);
       window.clearInterval(refreshInterval);
     };
-  }, [authUser, isLoaded, refreshUserDataFromSupabase, userDataLoaded, userDataOwnerId]);
+  }, [activeWorkspace, authUser, dataScopeOwnerId, isLoaded, refreshUserDataFromSupabase, userDataLoaded, userDataOwnerId]);
 
   const updateRecipes = useCallback((nextRecipesOrUpdater) => {
     setRecipes(prev => {
@@ -1366,11 +1627,11 @@ export default function Home() {
       const removedIds = prev
         .map(recipe => normalizeRecipeId(recipe))
         .filter(id => !nextIds.has(id));
-      recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.recipes, removedIds);
+      recordDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.recipes, removedIds);
 
       return markChangedLocalItems(prev, nextRecipes, normalizeRecipeId);
     });
-  }, [authUser]);
+  }, [activeWorkspace, authUser]);
 
   const markAnnouncementsAsRead = useCallback(async (announcementIds) => {
     if (!supabase || !authUser || authUser.isOfflineMode || !navigator.onLine || announcementIds.length === 0) return;
@@ -1417,11 +1678,11 @@ export default function Home() {
       const removedIds = prev
         .map(item => normalizeCostItemId(item))
         .filter(id => !nextIds.has(id));
-      recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.costItems, removedIds);
+      recordDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.costItems, removedIds);
 
       return markChangedLocalItems(prev, nextCostItems, normalizeCostItemId);
     });
-  }, [authUser]);
+  }, [activeWorkspace, authUser]);
 
   const updateTempLogs = useCallback((nextTempLogsOrUpdater) => {
     setTempLogs(prev => {
@@ -1432,11 +1693,11 @@ export default function Home() {
       const removedIds = prev
         .map(log => normalizeTempLogId(log))
         .filter(id => !nextIds.has(id));
-      recordDeletedUserDataIds(authUser, USER_DATA_STORAGE_KEYS.tempLogs, removedIds);
+      recordDeletedUserDataIds(authUser, activeWorkspace, USER_DATA_STORAGE_KEYS.tempLogs, removedIds);
 
       return markChangedLocalItems(prev, nextTempLogs, normalizeTempLogId);
     });
-  }, [authUser]);
+  }, [activeWorkspace, authUser]);
 
   useEffect(() => {
     if (!supabase) return undefined;
@@ -1471,6 +1732,199 @@ export default function Home() {
       data.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadInvites = async () => {
+      if (!activeWorkspace || !workspacesLoaded) {
+        setWorkspaceInvites([]);
+        return;
+      }
+
+      try {
+        const invites = await loadWorkspaceInvites(activeWorkspace);
+        if (isMounted) setWorkspaceInvites(invites);
+      } catch (error) {
+        console.warn("워크스페이스 초대 목록을 읽지 못했습니다.", error?.message || error);
+        if (isMounted) setWorkspaceInvites([]);
+      }
+    };
+
+    loadInvites();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeWorkspace, workspacesLoaded]);
+
+  const reloadWorkspaces = useCallback(async (preferredWorkspaceId = "") => {
+    if (!authUser) return;
+
+    setWorkspaceError("");
+    const nextWorkspaces = await loadWorkspaceContext(authUser);
+    const nextActiveWorkspace = nextWorkspaces.find(workspace => workspace.id === preferredWorkspaceId)
+      || nextWorkspaces.find(workspace => workspace.id === activeWorkspaceId)
+      || nextWorkspaces[0]
+      || getFallbackPersonalWorkspace(authUser);
+
+    const selectionKey = getWorkspaceSelectionStorageKey(authUser);
+    if (selectionKey && nextActiveWorkspace?.id) {
+      localStorage.setItem(selectionKey, nextActiveWorkspace.id);
+    }
+    setWorkspaces(nextWorkspaces);
+    setActiveWorkspaceId(nextActiveWorkspace?.id || "");
+    setWorkspacesLoaded(true);
+    const unseenInvitedWorkspace = nextWorkspaces.find(workspace => (
+      workspace.type === WORKSPACE_TYPES.shared
+      && !workspace.isOwner
+      && !hasSeenWorkspaceInviteNotice(authUser, workspace)
+    ));
+    if (unseenInvitedWorkspace) {
+      setWorkspaceInviteNotice(unseenInvitedWorkspace);
+    }
+  }, [activeWorkspaceId, authUser]);
+
+  useEffect(() => {
+    if (!isLoaded || !authUser || authUser.isOfflineMode || !isOnline || !supabase) return undefined;
+
+    const refreshWorkspaceMembership = () => {
+      if (document.visibilityState === "hidden") return;
+      reloadWorkspaces().catch(error => {
+        console.warn("워크스페이스 멤버십을 다시 확인하지 못했습니다.", error?.message || error);
+      });
+    };
+
+    window.addEventListener("focus", refreshWorkspaceMembership);
+    window.addEventListener("online", refreshWorkspaceMembership);
+    document.addEventListener("visibilitychange", refreshWorkspaceMembership);
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible") refreshWorkspaceMembership();
+    }, REMOTE_REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.removeEventListener("focus", refreshWorkspaceMembership);
+      window.removeEventListener("online", refreshWorkspaceMembership);
+      document.removeEventListener("visibilitychange", refreshWorkspaceMembership);
+      window.clearInterval(refreshInterval);
+    };
+  }, [authUser, isLoaded, isOnline, reloadWorkspaces]);
+
+  const changeWorkspace = (workspaceId) => {
+    const nextWorkspace = workspaces.find(workspace => workspace.id === workspaceId);
+    if (!nextWorkspace || nextWorkspace.id === activeWorkspaceId) return;
+
+    const selectionKey = getWorkspaceSelectionStorageKey(authUser);
+    if (selectionKey) localStorage.setItem(selectionKey, nextWorkspace.id);
+    setActiveWorkspaceId(nextWorkspace.id);
+  };
+
+  const confirmWorkspaceInviteNotice = () => {
+    if (workspaceInviteNotice) {
+      markWorkspaceInviteNoticeSeen(authUser, workspaceInviteNotice);
+    }
+    setWorkspaceInviteNotice(null);
+  };
+
+  const createSharedWorkspace = async (workspaceName) => {
+    const normalizedName = workspaceName.trim();
+    if (!normalizedName) {
+      setWorkspaceError(t("workspaceNameRequired"));
+      return false;
+    }
+    if (!supabase || authUser?.isOfflineMode || !navigator.onLine) {
+      setWorkspaceError(t("workspaceOnlineRequired"));
+      return false;
+    }
+
+    try {
+      setWorkspaceError("");
+      const { data, error } = await supabase.rpc("create_shared_workspace", { workspace_name: normalizedName });
+      if (error) throw error;
+      await reloadWorkspaces(data);
+      return true;
+    } catch (error) {
+      console.warn("공유 페이지를 만들지 못했습니다.", error?.message || error);
+      setWorkspaceError(error?.message || t("workspaceSaveFailed"));
+      return false;
+    }
+  };
+
+  const addWorkspaceInvite = async (email) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !activeWorkspace || activeWorkspace.type !== WORKSPACE_TYPES.shared) {
+      setWorkspaceError(t("workspaceInviteEmailRequired"));
+      return false;
+    }
+    if (!supabase || authUser?.isOfflineMode || !navigator.onLine) {
+      setWorkspaceError(t("workspaceOnlineRequired"));
+      return false;
+    }
+
+    try {
+      setWorkspaceError("");
+      const { error } = await supabase
+        .from("workspace_email_invites")
+        .insert({
+          workspace_id: activeWorkspace.id,
+          email: normalizedEmail,
+          role: "member",
+        });
+      if (error) throw error;
+      setWorkspaceInvites(await loadWorkspaceInvites(activeWorkspace));
+      return true;
+    } catch (error) {
+      console.warn("공유 페이지 이메일을 등록하지 못했습니다.", error?.message || error);
+      const isAlreadyRegisteredElsewhere =
+        error?.code === "23505" ||
+        error?.message?.includes("workspace_email_invites_active_email_idx") ||
+        error?.details?.includes("workspace_email_invites_active_email_idx");
+      const isMemberLimitExceeded =
+        error?.message?.includes("Shared workspace member limit exceeded") ||
+        error?.details?.includes("Shared workspace member limit exceeded");
+      setWorkspaceError(
+        isAlreadyRegisteredElsewhere
+          ? t("workspaceInviteAlreadyUsed")
+          : isMemberLimitExceeded
+            ? t("workspaceInviteLimitReached")
+            : (error?.message || t("workspaceSaveFailed"))
+      );
+      return false;
+    }
+  };
+
+  const revokeWorkspaceInvite = async (inviteId) => {
+    if (!supabase || !activeWorkspace || authUser?.isOfflineMode || !navigator.onLine) return;
+
+    try {
+      setWorkspaceError("");
+      const { error } = await supabase.rpc("revoke_workspace_invite", { invite_id: inviteId });
+      if (error) throw error;
+      setWorkspaceInvites(await loadWorkspaceInvites(activeWorkspace));
+    } catch (error) {
+      console.warn("공유 페이지 이메일 등록을 취소하지 못했습니다.", error?.message || error);
+      setWorkspaceError(error?.message || t("workspaceSaveFailed"));
+    }
+  };
+
+  const deleteSharedWorkspace = async () => {
+    if (!supabase || !activeWorkspace || activeWorkspace.type !== WORKSPACE_TYPES.shared || authUser?.isOfflineMode || !navigator.onLine) return false;
+    if (!confirm(t("deleteSharedWorkspaceConfirm"))) return false;
+
+    try {
+      setWorkspaceError("");
+      const { error } = await supabase.rpc("delete_shared_workspace", { target_workspace_id: activeWorkspace.id });
+      if (error) throw error;
+      const personalWorkspace = workspaces.find(workspace => workspace.type === WORKSPACE_TYPES.personal);
+      await reloadWorkspaces(personalWorkspace?.id || "");
+      setWorkspaceInvites([]);
+      return true;
+    } catch (error) {
+      console.warn("공유 페이지를 완전 삭제하지 못했습니다.", error?.message || error);
+      setWorkspaceError(error?.message || t("workspaceSaveFailed"));
+      return false;
+    }
+  };
 
   const isLimitedOfflineMode = Boolean(authUser?.isOfflineMode || !isOnline);
   const canUseView = (nextView) => !isLimitedOfflineMode || OFFLINE_ALLOWED_VIEWS.includes(nextView);
@@ -1602,8 +2056,13 @@ export default function Home() {
     if (authUser?.id) {
       removeOfflineUser(authUser.id);
     }
-    clearCalculatorState(authUser);
-    clearUserData(authUser);
+    const workspacesToClear = workspaces.length > 0 ? workspaces : [activeWorkspace].filter(Boolean);
+    workspacesToClear.forEach(workspace => {
+      clearCalculatorState(authUser, workspace);
+      clearUserData(authUser, workspace);
+    });
+    const selectionKey = getWorkspaceSelectionStorageKey(authUser);
+    if (selectionKey) localStorage.removeItem(selectionKey);
     clearAuthenticatedAppState();
   };
 
@@ -1661,7 +2120,7 @@ export default function Home() {
       />
     );
   }
-  if (!userDataLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
+  if (!workspacesLoaded || !userDataLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
@@ -1701,6 +2160,11 @@ export default function Home() {
         </button>
       </nav>
 
+      <WorkspaceStatusBar
+        t={t}
+        activeWorkspace={activeWorkspace}
+      />
+
       <div className="py-4 md:py-8 print:py-0">
         {view === "calc" && <RecipeCalculator t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} tempLogs={tempLogs} setTempLogs={updateTempLogs} requestSafetyCheck={requestCalcSafetyCheck} onSafetyCheckStateChange={setCalcMissingLeaveChecks} skipSafetyCheck={skipCalcLeaveCheck} stateStorageKey={calculatorStateStorageKey} />}
         {view === "db" && <RecipeDB t={t} recipes={recipes} setRecipes={updateRecipes} costItems={costItems} setCostItems={updateCostItems} />}
@@ -1708,7 +2172,30 @@ export default function Home() {
         {view === "cost_db" && <CostDB t={t} costItems={costItems} setCostItems={updateCostItems} />}
         {view === "temp_db" && <TempPhDB t={t} recipes={recipes} tempLogs={tempLogs} setTempLogs={updateTempLogs} />}
         {view === "admin" && isAdmin && isAdminUnlocked && <AdminPanel t={t} onAnnouncementsChange={setAnnouncements} />}
-        {view === "settings" && <SettingsPanel t={t} language={language} onLanguageChange={changeLanguage} skipCalcLeaveCheck={skipCalcLeaveCheck} onRestoreCalcLeaveCheck={restoreCalcLeaveCheck} authUser={authUser} announcements={announcements} announcementReads={announcementReads} recipes={recipes} onSignOut={handleSignOut} />}
+        {view === "settings" && (
+          <SettingsPanel
+            t={t}
+            language={language}
+            onLanguageChange={changeLanguage}
+            skipCalcLeaveCheck={skipCalcLeaveCheck}
+            onRestoreCalcLeaveCheck={restoreCalcLeaveCheck}
+            authUser={authUser}
+            announcements={announcements}
+            announcementReads={announcementReads}
+            recipes={recipes}
+            onSignOut={handleSignOut}
+            workspaces={workspaces}
+            activeWorkspace={activeWorkspace}
+            activeWorkspaceId={activeWorkspaceId}
+            workspaceInvites={workspaceInvites}
+            workspaceError={workspaceError}
+            onWorkspaceChange={changeWorkspace}
+            onCreateSharedWorkspace={createSharedWorkspace}
+            onAddWorkspaceInvite={addWorkspaceInvite}
+            onRevokeWorkspaceInvite={revokeWorkspaceInvite}
+            onDeleteSharedWorkspace={deleteSharedWorkspace}
+          />
+        )}
       </div>
       {isAdminUnlockOpen && (
         <AdminUnlockModal
@@ -1729,6 +2216,13 @@ export default function Home() {
           setHideLeaveCheck={setHideLeaveCheck}
           onCancel={closeLeaveCheck}
           onConfirm={confirmLeaveCheck}
+        />
+      )}
+      {workspaceInviteNotice && (
+        <WorkspaceInviteNoticeModal
+          t={t}
+          workspace={workspaceInviteNotice}
+          onConfirm={confirmWorkspaceInviteNotice}
         />
       )}
       <ServiceWorkerUpdater t={t} />
@@ -2275,10 +2769,41 @@ function sortRecipesForBackup(recipes, t) {
   });
 }
 
-function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRestoreCalcLeaveCheck, authUser, announcements = [], announcementReads = [], recipes = [], onSignOut }) {
+function SettingsPanel({
+  t,
+  language,
+  onLanguageChange,
+  skipCalcLeaveCheck,
+  onRestoreCalcLeaveCheck,
+  authUser,
+  announcements = [],
+  announcementReads = [],
+  recipes = [],
+  onSignOut,
+  workspaces = [],
+  activeWorkspace,
+  activeWorkspaceId = "",
+  workspaceInvites = [],
+  workspaceError = "",
+  onWorkspaceChange,
+  onCreateSharedWorkspace,
+  onAddWorkspaceInvite,
+  onRevokeWorkspaceInvite,
+  onDeleteSharedWorkspace,
+}) {
   const [isRecipeExportOpen, setIsRecipeExportOpen] = useState(false);
+  const [sharedWorkspaceName, setSharedWorkspaceName] = useState("");
+  const [workspaceInviteEmail, setWorkspaceInviteEmail] = useState("");
+  const [isWorkspaceSaving, setIsWorkspaceSaving] = useState(false);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState(() => new Set(recipes.map(recipe => Number(recipe.id))));
   const readAnnouncementIds = useMemo(() => new Set(announcementReads.map(read => Number(read.announcement_id))), [announcementReads]);
+  const hasNonPersonalWorkspace = useMemo(() => workspaces.some(workspace => workspace.type !== WORKSPACE_TYPES.personal), [workspaces]);
+  const canManageActiveWorkspace = activeWorkspace?.type === WORKSPACE_TYPES.shared && (activeWorkspace.isOwner || activeWorkspace.role === "admin");
+  const canDeactivateActiveWorkspace = activeWorkspace?.type === WORKSPACE_TYPES.shared && activeWorkspace.isOwner;
+  const activeWorkspaceInviteCount = useMemo(() => {
+    return new Set(workspaceInvites.map(invite => String(invite.email || "").trim().toLowerCase()).filter(Boolean)).size;
+  }, [workspaceInvites]);
+  const isWorkspaceInviteLimitReached = activeWorkspaceInviteCount >= SHARED_WORKSPACE_MAX_INVITES;
   const sortedRecipes = useMemo(() => sortRecipesForBackup(recipes, t), [recipes, t]);
   const recipeCategories = useMemo(() => {
     return Array.from(new Set(sortedRecipes.map(recipe => recipe.category || "")));
@@ -2316,6 +2841,26 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
   const printRecipeBackup = () => {
     if (selectedRecipes.length === 0) return;
     setTimeout(() => window.print(), 100);
+  };
+  const createSharedWorkspace = async () => {
+    if (!onCreateSharedWorkspace) return;
+    setIsWorkspaceSaving(true);
+    const didCreate = await onCreateSharedWorkspace(sharedWorkspaceName);
+    if (didCreate) setSharedWorkspaceName("");
+    setIsWorkspaceSaving(false);
+  };
+  const addWorkspaceInvite = async () => {
+    if (!onAddWorkspaceInvite) return;
+    setIsWorkspaceSaving(true);
+    const didAdd = await onAddWorkspaceInvite(workspaceInviteEmail);
+    if (didAdd) setWorkspaceInviteEmail("");
+    setIsWorkspaceSaving(false);
+  };
+  const deleteSharedWorkspace = async () => {
+    if (!onDeleteSharedWorkspace) return;
+    setIsWorkspaceSaving(true);
+    await onDeleteSharedWorkspace();
+    setIsWorkspaceSaving(false);
   };
 
   return (
@@ -2457,6 +3002,137 @@ function SettingsPanel({ t, language, onLanguageChange, skipCalcLeaveCheck, onRe
                 </article>
               );
             })
+          )}
+        </div>
+      </section>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 shadow-sm mb-4 print:hidden">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("workspaceTitle")}</div>
+              <h2 className="mt-1 text-xl font-black tracking-tighter">{t("workspaceDescription")}</h2>
+              {activeWorkspace && (
+                <p className="mt-2 text-xs font-bold text-gray-400">
+                  {t("currentWorkspace")}: {getWorkspaceDisplayName(t, activeWorkspace)}
+                </p>
+              )}
+            </div>
+            {workspaces.length > 1 ? (
+              <select
+                value={activeWorkspaceId}
+                onChange={event => onWorkspaceChange?.(event.target.value)}
+                className="h-11 w-full rounded-xl border border-gray-200 bg-[#f7f6f3] px-3 text-sm font-black outline-none md:w-56"
+              >
+                {workspaces.map(workspace => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {getWorkspaceDisplayName(t, workspace)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="flex h-11 w-full items-center rounded-xl border border-gray-200 bg-[#f7f6f3] px-3 text-sm font-black md:w-56">
+                {getWorkspaceDisplayName(t, activeWorkspace)}
+              </div>
+            )}
+          </div>
+
+          {!hasNonPersonalWorkspace && (
+            <div className="rounded-xl border border-gray-100 bg-[#f7f6f3] p-4">
+              <div className="text-sm font-black tracking-tight">{t("createSharedWorkspace")}</div>
+              <p className="mt-1 text-xs font-bold leading-5 text-gray-400">{t("createSharedWorkspaceDescription")}</p>
+              <div className="mt-3 flex flex-col gap-2 md:flex-row">
+                <input
+                  value={sharedWorkspaceName}
+                  onChange={event => setSharedWorkspaceName(event.target.value)}
+                  placeholder={t("sharedWorkspaceNamePlaceholder")}
+                  className="min-h-11 flex-1 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold outline-none focus:border-black"
+                />
+                <button
+                  type="button"
+                  onClick={createSharedWorkspace}
+                  disabled={isWorkspaceSaving}
+                  className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {isWorkspaceSaving ? t("saving") : t("create")}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {canManageActiveWorkspace && (
+            <div className="rounded-xl border border-gray-100 bg-[#f7f6f3] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-black tracking-tight">{t("workspaceMembers")}</div>
+                <div className="text-xs font-black text-gray-400">
+                  {t("workspaceInviteCount")
+                    .replace("{count}", activeWorkspaceInviteCount)
+                    .replace("{max}", SHARED_WORKSPACE_MAX_INVITES)}
+                </div>
+              </div>
+              <p className="mt-1 text-xs font-bold leading-5 text-gray-400">{t("workspaceMembersDescription")}</p>
+              <p className="mt-1 text-xs font-bold leading-5 text-gray-400">{t("workspaceInviteLimitDescription")}</p>
+              <div className="mt-3 flex flex-col gap-2 md:flex-row">
+                <input
+                  value={workspaceInviteEmail}
+                  onChange={event => setWorkspaceInviteEmail(event.target.value)}
+                  placeholder={t("workspaceInviteEmailPlaceholder")}
+                  disabled={isWorkspaceInviteLimitReached || isWorkspaceSaving}
+                  className="min-h-11 flex-1 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold outline-none focus:border-black"
+                />
+                <button
+                  type="button"
+                  onClick={addWorkspaceInvite}
+                  disabled={isWorkspaceSaving || isWorkspaceInviteLimitReached}
+                  className="rounded-xl bg-black px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {t("add")}
+                </button>
+              </div>
+              {isWorkspaceInviteLimitReached && (
+                <p className="mt-2 text-xs font-black text-red-500">{t("workspaceInviteLimitReachedShort")}</p>
+              )}
+              <div className="mt-4 space-y-2">
+                {workspaceInvites.length === 0 ? (
+                  <p className="text-xs font-bold text-gray-400">{t("noWorkspaceInvites")}</p>
+                ) : (
+                  workspaceInvites.map(invite => (
+                    <div key={invite.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-black">{invite.email}</div>
+                        <div className="text-[10px] font-bold uppercase text-gray-400">{invite.role || "member"}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onRevokeWorkspaceInvite?.(invite.id)}
+                        className="shrink-0 rounded-lg border border-gray-200 px-3 py-2 text-xs font-black text-gray-500 hover:border-black hover:text-black"
+                      >
+                        {t("deleteInvite")}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {canDeactivateActiveWorkspace && (
+            <div className="rounded-xl border border-red-100 bg-red-50 p-4">
+              <div className="text-sm font-black tracking-tight text-red-700">{t("deleteSharedWorkspace")}</div>
+              <p className="mt-1 text-xs font-bold leading-5 text-red-400">{t("deleteSharedWorkspaceDescription")}</p>
+              <button
+                type="button"
+                onClick={deleteSharedWorkspace}
+                disabled={isWorkspaceSaving}
+                className="mt-3 rounded-xl bg-red-600 px-5 py-3 text-sm font-black uppercase tracking-tight text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {isWorkspaceSaving ? t("saving") : t("deleteSharedWorkspace")}
+              </button>
+            </div>
+          )}
+
+          {workspaceError && (
+            <p className="rounded-xl bg-red-50 px-4 py-3 text-xs font-black text-red-600">{workspaceError}</p>
           )}
         </div>
       </section>
@@ -2684,6 +3360,30 @@ function RecipeBackupPrintDocument({ recipes, t }) {
           </table>
         </article>
       ))}
+    </div>
+  );
+}
+
+function WorkspaceInviteNoticeModal({ t, workspace, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-sm p-4 print:hidden">
+      <section className="w-full max-w-md rounded-2xl border border-black/10 bg-white p-6 text-black shadow-2xl">
+        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t("sharedWorkspace")}</div>
+        <h2 className="mt-1 text-2xl font-black tracking-tighter">{t("workspaceInviteNoticeTitle")}</h2>
+        {workspace?.name && (
+          <p className="mt-2 rounded-xl bg-[#f7f6f3] px-3 py-2 text-sm font-black tracking-tight">
+            {workspace.name}
+          </p>
+        )}
+        <p className="mt-4 whitespace-pre-wrap text-sm font-bold leading-6 text-gray-500">{t("workspaceInviteNoticeBody")}</p>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="mt-6 w-full rounded-xl bg-black py-3 text-sm font-black uppercase tracking-tight text-white"
+        >
+          {t("confirm")}
+        </button>
+      </section>
     </div>
   );
 }
