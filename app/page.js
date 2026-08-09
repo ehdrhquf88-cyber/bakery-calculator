@@ -1071,9 +1071,9 @@ function LoadingIdentity({ t }) {
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
             <img
-              src="/icon-192x192.png"
+              src="/loading-icon-transparent.png"
               alt=""
-              className="h-12 w-12 rounded-2xl shadow-sm md:h-14 md:w-14"
+              className="h-14 w-14 md:h-16 md:w-16"
             />
           </div>
         </div>
