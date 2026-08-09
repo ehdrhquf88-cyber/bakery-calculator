@@ -1047,6 +1047,55 @@ function getWorkspaceDisplayName(t, workspace) {
   return `${t("sharedWorkspace")} · ${workspace.name}`;
 }
 
+function LoadingIdentity({ t }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#f7f6f3] px-6 text-black">
+      <div className="flex flex-col items-center gap-5" role="status" aria-live="polite">
+        <div className="relative h-36 w-36 md:h-40 md:w-40">
+          <svg
+            className="h-full w-full animate-[loadingIdentitySpin_10s_linear_infinite]"
+            viewBox="0 0 160 160"
+            aria-hidden="true"
+          >
+            <defs>
+              <path
+                id="loadingIdentityCircle"
+                d="M80,80 m-56,0 a56,56 0 1,1 112,0 a56,56 0 1,1 -112,0"
+              />
+            </defs>
+            <text className="fill-black text-[14px] font-black uppercase tracking-[0.08em]">
+              <textPath href="#loadingIdentityCircle" startOffset="0%">
+                {t("loadingIdentityText")}
+              </textPath>
+            </text>
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <img
+              src="/icon-192x192.png"
+              alt=""
+              className="h-12 w-12 rounded-2xl shadow-sm md:h-14 md:w-14"
+            />
+          </div>
+        </div>
+        <p className="text-sm font-black tracking-tight text-gray-500">{t("loadingStatus")}</p>
+      </div>
+      <style jsx global>{`
+        @keyframes loadingIdentitySpin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .animate-\\[loadingIdentitySpin_10s_linear_infinite\\] {
+            animation: none;
+          }
+        }
+      `}</style>
+    </main>
+  );
+}
+
 export default function Home() {
   const [view, setView] = useState("calc");
   const [recipes, setRecipes] = useState([]);
@@ -2107,7 +2156,7 @@ export default function Home() {
     closeLeaveCheck();
   };
 
-  if (!isLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
+  if (!isLoaded) return <LoadingIdentity t={t} />;
   if (!authUser) {
     return (
       <LoginScreen
@@ -2120,7 +2169,7 @@ export default function Home() {
       />
     );
   }
-  if (!workspacesLoaded || !userDataLoaded) return <div className="min-h-screen bg-[#f7f6f3]" />;
+  if (!workspacesLoaded || !userDataLoaded) return <LoadingIdentity t={t} />;
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
