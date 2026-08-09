@@ -100,6 +100,16 @@ create table if not exists public.announcement_reads (
   primary key (announcement_id, user_id)
 );
 
+create table if not exists public.deleted_items (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  item_type text not null,
+  item_id bigint not null,
+  deleted_at timestamptz not null default now(),
+  primary key (user_id, item_type, item_id),
+  constraint deleted_items_item_type_check
+    check (item_type in ('recipe', 'cost_item', 'temp_log'))
+);
+
 create index if not exists community_bookmarks_user_id_idx
 on public.community_bookmarks(user_id);
 
@@ -111,6 +121,9 @@ on public.announcements(created_by);
 
 create index if not exists announcement_reads_user_id_idx
 on public.announcement_reads(user_id);
+
+create index if not exists deleted_items_user_deleted_at_idx
+on public.deleted_items(user_id, deleted_at);
 
 alter table public.profiles
   add column if not exists display_name text null;
@@ -124,6 +137,7 @@ alter table public.community_bookmarks enable row level security;
 alter table public.community_saves enable row level security;
 alter table public.announcements enable row level security;
 alter table public.announcement_reads enable row level security;
+alter table public.deleted_items enable row level security;
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
@@ -157,6 +171,9 @@ grant select, insert, update, delete on public.announcements to authenticated;
 
 revoke all on public.announcement_reads from anon;
 grant select, insert, update on public.announcement_reads to authenticated;
+
+revoke all on public.deleted_items from anon;
+grant select, insert, update on public.deleted_items to authenticated;
 
 create or replace function private.is_admin()
 returns boolean
@@ -408,21 +425,20 @@ to authenticated
 using ((select private.is_admin()));
 
 drop policy if exists "Users can view their own profile" on public.profiles;
-create policy "Users can view their own profile"
+
+drop policy if exists "Admins can view all profiles" on public.profiles;
+drop policy if exists "Users can view allowed profiles" on public.profiles;
+create policy "Users can view allowed profiles"
 on public.profiles
 for select
 to authenticated
 using (
-  (select auth.uid()) = id
-  and (select private.has_app_access())
+  (select private.is_admin())
+  or (
+    (select auth.uid()) = id
+    and (select private.has_app_access())
+  )
 );
-
-drop policy if exists "Admins can view all profiles" on public.profiles;
-create policy "Admins can view all profiles"
-on public.profiles
-for select
-to authenticated
-using ((select private.is_admin()));
 
 drop policy if exists "Admins can update profiles" on public.profiles;
 create policy "Admins can update profiles"
@@ -578,6 +594,40 @@ with check (
   and (select private.has_app_access())
 );
 
+drop policy if exists "Users can view their own deleted items" on public.deleted_items;
+create policy "Users can view their own deleted items"
+on public.deleted_items
+for select
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can insert their own deleted items" on public.deleted_items;
+create policy "Users can insert their own deleted items"
+on public.deleted_items
+for insert
+to authenticated
+with check (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
+drop policy if exists "Users can update their own deleted items" on public.deleted_items;
+create policy "Users can update their own deleted items"
+on public.deleted_items
+for update
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+)
+with check (
+  user_id = (select auth.uid())
+  and (select private.has_app_access())
+);
+
 drop policy if exists "Users can view their own cost items" on public.cost_items;
 create policy "Users can view their own cost items"
 on public.cost_items
@@ -691,7 +741,7 @@ begin
     new.email,
     coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name'),
     coalesce(new.raw_user_meta_data ->> 'avatar_url', new.raw_user_meta_data ->> 'picture'),
-    allowlist_role
+    coalesce(allowlist_role, 'user'::public.app_role)
   )
   on conflict (id) do update
   set
@@ -763,7 +813,7 @@ as $$
 begin
   if tg_op = 'DELETE' then
     update public.profiles
-    set role = null
+    set role = 'user'::public.app_role
     where lower(email) = lower(old.email);
 
     return old;
@@ -771,7 +821,7 @@ begin
 
   if tg_op = 'UPDATE' and lower(old.email) <> lower(new.email) then
     update public.profiles
-    set role = null
+    set role = 'user'::public.app_role
     where lower(email) = lower(old.email);
   end if;
 
@@ -781,7 +831,7 @@ begin
     users.email,
     coalesce(users.raw_user_meta_data ->> 'full_name', users.raw_user_meta_data ->> 'name'),
     coalesce(users.raw_user_meta_data ->> 'avatar_url', users.raw_user_meta_data ->> 'picture'),
-    new.role
+    coalesce(new.role, 'user'::public.app_role)
   from auth.users
   where lower(users.email) = lower(new.email)
   on conflict (id) do update
@@ -810,29 +860,10 @@ language plpgsql
 security invoker
 set search_path = ''
 as $$
-declare
-  user_email text;
-  is_allowed boolean;
 begin
-  user_email := lower(event -> 'user' ->> 'email');
-
-  select exists (
-    select 1
-    from public.auth_allowlist
-    where lower(email) = user_email
-  )
-  into is_allowed;
-
-  if is_allowed then
-    return '{}'::jsonb;
-  end if;
-
-  return jsonb_build_object(
-    'error', jsonb_build_object(
-      'message', '초대된 사람만 로그인 가능합니다',
-      'http_code', 403
-    )
-  );
+  -- Public launch: allow every Google-authenticated user to create an account.
+  -- Keep this permissive so login still works if the Auth Hook remains configured.
+  return '{}'::jsonb;
 end;
 $$;
 
@@ -844,14 +875,15 @@ revoke execute
   on function public.hook_restrict_login_to_allowlist
   from authenticated, anon, public;
 
--- Backfill existing Auth users and keep profile roles aligned with the current allowlist.
+-- Backfill existing Auth users. The allowlist is now a role override list:
+-- admin rows stay admin, all other users default to user.
 insert into public.profiles (id, email, full_name, avatar_url, role)
 select
   users.id,
   users.email,
   coalesce(users.raw_user_meta_data ->> 'full_name', users.raw_user_meta_data ->> 'name'),
   coalesce(users.raw_user_meta_data ->> 'avatar_url', users.raw_user_meta_data ->> 'picture'),
-  allowlist.role
+  coalesce(allowlist.role, 'user'::public.app_role)
 from auth.users
 left join public.auth_allowlist as allowlist
   on lower(allowlist.email) = lower(users.email)
@@ -861,3 +893,17 @@ set
   full_name = excluded.full_name,
   avatar_url = excluded.avatar_url,
   role = excluded.role;
+
+update public.profiles
+set role = 'user'::public.app_role
+where role is null;
+
+-- Supabase Cron cleanup for temporary deletion sync records.
+-- Keeps deleted_items long enough for inactive devices to sync, then removes old tombstones.
+create extension if not exists pg_cron with schema extensions;
+
+select cron.schedule(
+  'cleanup-old-deleted-items',
+  '0 3 * * *',
+  $$ delete from public.deleted_items where deleted_at < now() - interval '30 days' $$
+);
