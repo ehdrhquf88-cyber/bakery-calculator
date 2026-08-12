@@ -44,7 +44,14 @@ function readCalculatorState(storageKey) {
 
   try {
     const storedState = window.localStorage.getItem(storageKey) || window.sessionStorage.getItem(storageKey);
-    return storedState ? JSON.parse(storedState) : {};
+    const parsedState = storedState ? JSON.parse(storedState) : {};
+
+    if (parsedState && typeof parsedState === "object") {
+      const { safetyChecksByRecipeId: _legacySafetyChecksByRecipeId, ...persistentState } = parsedState;
+      return persistentState;
+    }
+
+    return {};
   } catch {
     return {};
   }
@@ -54,10 +61,38 @@ function writeCalculatorState(storageKey, state) {
   if (!storageKey || typeof window === "undefined") return;
 
   try {
-    window.localStorage.setItem(storageKey, JSON.stringify(state));
+    const { safetyChecksByRecipeId: _legacySafetyChecksByRecipeId, ...persistentState } = state;
+    window.localStorage.setItem(storageKey, JSON.stringify(persistentState));
     window.sessionStorage.removeItem(storageKey);
   } catch {
     // Local storage is a convenience only; the calculator still works without it.
+  }
+}
+
+function getSafetyCheckStorageKey(storageKey) {
+  return storageKey ? `${storageKey}:safety-checks` : "";
+}
+
+function readSafetyCheckSessionState(storageKey) {
+  const safetyCheckStorageKey = getSafetyCheckStorageKey(storageKey);
+  if (!safetyCheckStorageKey || typeof window === "undefined") return null;
+
+  try {
+    const storedState = window.sessionStorage.getItem(safetyCheckStorageKey);
+    return storedState ? JSON.parse(storedState) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSafetyCheckSessionState(storageKey, state) {
+  const safetyCheckStorageKey = getSafetyCheckStorageKey(storageKey);
+  if (!safetyCheckStorageKey || typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.setItem(safetyCheckStorageKey, JSON.stringify(state));
+  } catch {
+    // Safety checks are a reminder only; the calculator still works without session storage.
   }
 }
 
@@ -82,7 +117,6 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
   const calculatorByRecipeIdRef = useRef(restoredState.calculatorByRecipeId || {});
   const [autoCalcByRecipeId, setAutoCalcByRecipeId] = useState(restoredState.autoCalcByRecipeId || {});
   const [percentCalcByRecipeId, setPercentCalcByRecipeId] = useState(restoredState.percentCalcByRecipeId || {});
-  const [safetyChecksByRecipeId, setSafetyChecksByRecipeId] = useState(restoredState.safetyChecksByRecipeId || {});
   const [confirmedSafetyChecks, setConfirmedSafetyChecks] = useState(DEFAULT_SAFETY_CHECK_STATE);
 
   // 프린트 배수 모달 상태 추가
@@ -170,7 +204,6 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
       calculatorByRecipeId: calculatorByRecipeIdRef.current,
       autoCalcByRecipeId,
       percentCalcByRecipeId,
-      safetyChecksByRecipeId,
       printMultipliers,
     });
   }, [
@@ -189,15 +222,18 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     activeSelectedRecipeId,
     currentRecipe,
     selectedRecipeId,
-    safetyChecksByRecipeId,
     stateStorageKey,
     totalDough,
   ]);
 
   useEffect(() => {
-    const savedSafetyCheckState = safetyChecksByRecipeId[activeSelectedRecipeId];
+    const savedSafetyCheckState = readSafetyCheckSessionState(stateStorageKey);
 
-    if (savedSafetyCheckState?.signature === safetyCheckSignature) {
+    if (
+      activeSelectedRecipeId &&
+      savedSafetyCheckState?.recipeId === activeSelectedRecipeId &&
+      savedSafetyCheckState?.signature === safetyCheckSignature
+    ) {
       setConfirmedSafetyChecks({
         ...DEFAULT_SAFETY_CHECK_STATE,
         ...savedSafetyCheckState.checks,
@@ -206,7 +242,12 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
     }
 
     setConfirmedSafetyChecks(DEFAULT_SAFETY_CHECK_STATE);
-  }, [activeSelectedRecipeId, safetyCheckSignature, safetyChecksByRecipeId]);
+    writeSafetyCheckSessionState(stateStorageKey, {
+      recipeId: activeSelectedRecipeId,
+      signature: safetyCheckSignature,
+      checks: DEFAULT_SAFETY_CHECK_STATE,
+    });
+  }, [activeSelectedRecipeId, safetyCheckSignature, stateStorageKey]);
 
   useEffect(() => {
     onSafetyCheckStateChange?.(missingSafetyChecks);
@@ -464,13 +505,11 @@ export default function RecipeCalculator({ t, recipes, setRecipes, costItems = [
         [checkKey]: !prev[checkKey],
       };
 
-      setSafetyChecksByRecipeId(previousByRecipeId => ({
-        ...previousByRecipeId,
-        [activeSelectedRecipeId]: {
-          signature: safetyCheckSignature,
-          checks: nextChecks,
-        },
-      }));
+      writeSafetyCheckSessionState(stateStorageKey, {
+        recipeId: activeSelectedRecipeId,
+        signature: safetyCheckSignature,
+        checks: nextChecks,
+      });
 
       return nextChecks;
     });
