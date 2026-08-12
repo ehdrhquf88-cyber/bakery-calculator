@@ -1049,8 +1049,8 @@ function getWorkspaceDisplayName(t, workspace) {
 
 function LoadingIdentity({ t, isLeaving = false }) {
   return (
-    <main className={`flex min-h-screen items-center justify-center bg-[#f7f6f3] px-6 text-black transition-opacity duration-[350ms] ease-out motion-reduce:transition-none ${isLeaving ? "opacity-0" : "opacity-100"}`}>
-      <div className="flex flex-col items-center gap-5" role="status" aria-live="polite">
+    <main className="flex min-h-screen items-center justify-center bg-[#f7f6f3] px-6 text-black">
+      <div className={`flex flex-col items-center gap-5 transition-opacity duration-[350ms] ease-out motion-reduce:transition-none ${isLeaving ? "opacity-0" : "opacity-100"}`} role="status" aria-live="polite">
         <div className="relative h-36 w-36 md:h-40 md:w-40">
           <svg
             className="h-full w-full animate-[loadingIdentitySpin_10s_linear_infinite]"
