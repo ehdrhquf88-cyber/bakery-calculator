@@ -1063,7 +1063,7 @@ function LoadingIdentity({ t }) {
                 d="M80,80 m-56,0 a56,56 0 1,1 112,0 a56,56 0 1,1 -112,0"
               />
             </defs>
-            <text className="fill-black text-[14px] font-black uppercase tracking-[0.08em]">
+            <text className="fill-black text-[13px] font-black tracking-[0.18em]">
               <textPath href="#loadingIdentityCircle" startOffset="0%">
                 {t("loadingIdentityText")}
               </textPath>
