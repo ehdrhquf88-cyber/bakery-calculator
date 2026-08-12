@@ -1047,10 +1047,10 @@ function getWorkspaceDisplayName(t, workspace) {
   return `${t("sharedWorkspace")} · ${workspace.name}`;
 }
 
-function LoadingIdentity({ t }) {
+function LoadingIdentity({ t, isLeaving = false }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f7f6f3] px-6 text-black">
-      <div className="flex flex-col items-center gap-5" role="status" aria-live="polite">
+      <div className={`flex flex-col items-center gap-5 transition-opacity duration-[350ms] ease-out motion-reduce:transition-none ${isLeaving ? "opacity-0" : "opacity-100"}`} role="status" aria-live="polite">
         <div className="relative h-36 w-36 md:h-40 md:w-40">
           <svg
             className="h-full w-full animate-[loadingIdentitySpin_10s_linear_infinite]"
@@ -1063,8 +1063,8 @@ function LoadingIdentity({ t }) {
                 d="M80,80 m-56,0 a56,56 0 1,1 112,0 a56,56 0 1,1 -112,0"
               />
             </defs>
-            <text className="fill-black text-[14px] font-black uppercase tracking-[0.08em]">
-              <textPath href="#loadingIdentityCircle" startOffset="0%">
+            <text className="fill-black text-[10px] font-black tracking-[0.06em]" xmlSpace="preserve">
+              <textPath href="#loadingIdentityCircle" startOffset="0%" xmlSpace="preserve">
                 {t("loadingIdentityText")}
               </textPath>
             </text>
@@ -1145,6 +1145,34 @@ export default function Home() {
     const readIds = new Set(announcementReads.map(read => Number(read.announcement_id)));
     return announcements.filter(announcement => announcement.is_active !== false && !readIds.has(Number(announcement.id))).length;
   }, [announcementReads, announcements]);
+  const isAppLoading = !isLoaded || (Boolean(authUser) && (!workspacesLoaded || !userDataLoaded));
+  const [shouldRenderLoadingIdentity, setShouldRenderLoadingIdentity] = useState(true);
+  const [isLoadingIdentityLeaving, setIsLoadingIdentityLeaving] = useState(false);
+
+  useEffect(() => {
+    if (isAppLoading) {
+      setShouldRenderLoadingIdentity(true);
+      setIsLoadingIdentityLeaving(false);
+      return undefined;
+    }
+
+    if (!shouldRenderLoadingIdentity) return undefined;
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReducedMotion) {
+      setShouldRenderLoadingIdentity(false);
+      setIsLoadingIdentityLeaving(false);
+      return undefined;
+    }
+
+    setIsLoadingIdentityLeaving(true);
+    const timeoutId = window.setTimeout(() => {
+      setShouldRenderLoadingIdentity(false);
+      setIsLoadingIdentityLeaving(false);
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isAppLoading, shouldRenderLoadingIdentity]);
 
   useEffect(() => {
     const updateOnlineStatus = () => {
@@ -2156,7 +2184,10 @@ export default function Home() {
     closeLeaveCheck();
   };
 
-  if (!isLoaded) return <LoadingIdentity t={t} />;
+  if (shouldRenderLoadingIdentity) {
+    return <LoadingIdentity t={t} isLeaving={isLoadingIdentityLeaving} />;
+  }
+
   if (!authUser) {
     return (
       <LoginScreen
@@ -2169,7 +2200,6 @@ export default function Home() {
       />
     );
   }
-  if (!workspacesLoaded || !userDataLoaded) return <LoadingIdentity t={t} />;
 
   return (
     <div className="min-h-screen bg-[#f7f6f3] pb-10 print:bg-white print:pb-0">
